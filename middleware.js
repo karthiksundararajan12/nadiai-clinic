@@ -37,7 +37,8 @@ export async function middleware(request) {
   if (
     !user &&
     pathname !== "/login" &&
-    !pathname.startsWith("/auth/")
+    !pathname.startsWith("/auth/") &&
+    !pathname.startsWith("/api/whatsapp/")
   ) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { X, Activity } from "lucide-react";
+import { X } from "lucide-react";
 import {
   LayoutDashboard,
   Mic,
@@ -12,7 +13,7 @@ import {
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, APP_NAME } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 
 const ICON_MAP = {
@@ -32,19 +33,18 @@ export function MobileNav({ open, onClose }) {
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="fixed inset-0 bg-black/50 glass" onClick={onClose} />
-      <div className="fixed inset-y-0 left-0 w-[280px] bg-sidebar-background text-sidebar-foreground shadow-xl animate-in slide-in-from-left">
-        <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
-              <Activity className="h-5 w-5 text-sidebar-primary-foreground" />
-            </div>
-            <span className="text-sm font-bold tracking-tight">
-              {APP_NAME}
-            </span>
-          </div>
+      <div className="fixed inset-y-0 left-0 w-[280px] bg-white text-gray-900 shadow-xl animate-in slide-in-from-left dark:bg-gray-950 dark:text-gray-100">
+        <div className="flex h-20 items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
+          <Image
+            src="/logo.png"
+            alt="Nadi AI"
+            width={220}
+            height={60}
+            className="h-14 w-auto object-contain"
+          />
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-sidebar-muted hover:text-sidebar-foreground"
+            className="rounded-md p-1 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-100"
           >
             <X className="h-5 w-5" />
           </button>
@@ -66,8 +66,8 @@ export function MobileNav({ open, onClose }) {
                     className={cn(
                       "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                        : "text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+                        ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+                        : "text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
                     )}
                   >
                     {Icon && (
@@ -75,8 +75,8 @@ export function MobileNav({ open, onClose }) {
                         className={cn(
                           "h-[18px] w-[18px]",
                           isActive
-                            ? "text-sidebar-primary"
-                            : "text-sidebar-muted"
+                            ? "text-primary"
+                            : "text-gray-400 dark:text-gray-500"
                         )}
                       />
                     )}

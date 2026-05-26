@@ -40,13 +40,13 @@
   --input: oklch(0.922 0.004 247.839);
   --ring: oklch(0.523 0.105 175.504);
 
-  --sidebar-background: oklch(0.145 0.017 258.804);
-  --sidebar-foreground: oklch(0.922 0.004 247.839);
+  --sidebar-background: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.145 0.017 258.804);
   --sidebar-primary: oklch(0.523 0.105 175.504);
   --sidebar-primary-foreground: oklch(0.985 0.002 247.839);
-  --sidebar-accent: oklch(0.245 0.017 258.804);
-  --sidebar-accent-foreground: oklch(0.922 0.004 247.839);
-  --sidebar-border: oklch(0.245 0.017 258.804);
+  --sidebar-accent: oklch(0.97 0.001 247.839);
+  --sidebar-accent-foreground: oklch(0.145 0.017 258.804);
+  --sidebar-border: oklch(0.922 0.004 247.839);
   --sidebar-muted: oklch(0.556 0.017 258.804);
 
   --chart-1: oklch(0.523 0.105 175.504);

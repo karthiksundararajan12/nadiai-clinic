@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import Image from "next/image";
+import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Mic,
@@ -10,15 +11,16 @@ import {
   MessageCircle,
   Settings,
   LogOut,
-  Activity,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS, APP_NAME } from "@/lib/constants";
+import { NAV_ITEMS } from "@/lib/constants";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useUser } from "@/hooks/use-user";
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -31,28 +33,44 @@ const ICON_MAP = {
 
 export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { displayName, initials, specialization } = useUser();
+
+  const handleSignOut = async () => {
+    const supabase = getSupabaseBrowserClient();
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar-background text-sidebar-foreground transition-all duration-300",
+        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-gray-200 bg-white text-gray-900 shadow-sm transition-all duration-300 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100",
         collapsed ? "w-[68px]" : "w-[260px]"
       )}
     >
       <div
         className={cn(
-          "flex h-16 items-center border-b border-sidebar-border px-4",
-          collapsed ? "justify-center" : "gap-3"
+          "flex items-center justify-center border-b border-gray-200 dark:border-gray-800",
+          collapsed ? "h-16 px-2" : "h-20 px-3"
         )}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-sidebar-primary">
-          <Activity className="h-5 w-5 text-sidebar-primary-foreground" />
-        </div>
-        {!collapsed && (
-          <div className="flex flex-col">
-            <span className="text-sm font-bold tracking-tight">{APP_NAME}</span>
-            <span className="text-[11px] text-sidebar-muted">Clinical Assistant</span>
-          </div>
+        {collapsed ? (
+          <Image
+            src="/logo.png"
+            alt="Nadi AI"
+            width={48}
+            height={48}
+            className="shrink-0 object-contain"
+          />
+        ) : (
+          <Image
+            src="/logo.png"
+            alt="Nadi AI"
+            width={220}
+            height={60}
+            className="h-14 w-auto object-contain"
+          />
         )}
       </div>
 
@@ -70,8 +88,8 @@ export function Sidebar({ collapsed, onToggle }) {
                 className={cn(
                   "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-muted hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground",
+                    ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
+                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100",
                   collapsed && "justify-center px-0"
                 )}
               >
@@ -80,8 +98,8 @@ export function Sidebar({ collapsed, onToggle }) {
                     className={cn(
                       "h-[18px] w-[18px] shrink-0",
                       isActive
-                        ? "text-sidebar-primary"
-                        : "text-sidebar-muted group-hover:text-sidebar-accent-foreground"
+                        ? "text-primary"
+                        : "text-gray-400 group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-gray-100"
                     )}
                   />
                 )}
@@ -116,36 +134,45 @@ export function Sidebar({ collapsed, onToggle }) {
         </ul>
       </nav>
 
-      <div className="border-t border-sidebar-border p-3">
-        <Separator className="mb-3 bg-sidebar-border" />
+      <div className="border-t border-gray-200 p-3 dark:border-gray-800">
+        <Separator className="mb-3 bg-gray-200 dark:bg-gray-800" />
         <div
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2",
             collapsed && "justify-center px-0"
           )}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-sidebar-primary/20 text-xs font-semibold text-sidebar-primary">
-            AM
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+            {initials}
           </div>
           {!collapsed && (
-            <div className="flex flex-1 flex-col">
-              <span className="text-sm font-medium">Dr. Ananya Mehta</span>
-              <span className="text-[11px] text-sidebar-muted">
-                Cardiologist
+            <div className="flex flex-1 flex-col min-w-0">
+              <span className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">
+                {displayName}
               </span>
+              {specialization && (
+                <span className="text-[11px] text-gray-500 truncate dark:text-gray-400">
+                  {specialization}
+                </span>
+              )}
             </div>
           )}
           {!collapsed && (
-            <button className="rounded-md p-1 text-sidebar-muted hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-              <LogOut className="h-4 w-4" />
-            </button>
+            <Tooltip content="Sign out" side="top">
+              <button
+                onClick={handleSignOut}
+                className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors dark:text-gray-500 dark:hover:bg-red-950 dark:hover:text-red-400"
+              >
+                <LogOut className="h-4 w-4" />
+              </button>
+            </Tooltip>
           )}
         </div>
       </div>
 
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full border border-sidebar-border bg-sidebar-background text-sidebar-muted shadow-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+        className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-100"
       >
         {collapsed ? (
           <ChevronRight className="h-3 w-3" />

@@ -1,44 +1,57 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { Header } from "@/components/layout/header";
 import { StatsCard } from "@/components/dashboard/stats-card";
 import { RecentPatients } from "@/components/dashboard/recent-patients";
 import { UpcomingAppointments } from "@/components/dashboard/upcoming-appointments";
 import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useUser } from "@/hooks/use-user";
 import {
   Users,
   CalendarDays,
   Mic,
   MessageCircle,
-  TrendingUp,
-  Clock,
   Sparkles,
   ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
 
 export default function DashboardPage() {
-  const today = new Date();
-  const greeting =
-    today.getHours() < 12
-      ? "Good Morning"
-      : today.getHours() < 17
-      ? "Good Afternoon"
-      : "Good Evening";
+  const { displayName } = useUser();
+  const [dateStr, setDateStr] = useState("");
+  const [greeting, setGreeting] = useState("");
 
-  return (
-    <>
-      <Header
-        title={`${greeting}, Dr. Ananya`}
-        subtitle={today.toLocaleDateString("en-IN", {
+  useEffect(() => {
+    const update = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      setGreeting(
+        hour < 12 ? "Good Morning" : hour < 17 ? "Good Afternoon" : "Good Evening"
+      );
+      setDateStr(
+        now.toLocaleDateString("en-IN", {
           weekday: "long",
           year: "numeric",
           month: "long",
           day: "numeric",
-        })}
+        })
+      );
+    };
+    update();
+    const interval = setInterval(update, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const firstName = displayName?.split(" ")[0] || "Doctor";
+
+  return (
+    <>
+      <Header
+        title={`${greeting}, ${firstName}`}
+        subtitle={dateStr}
       />
 
       <div className="flex-1 space-y-6 p-6">

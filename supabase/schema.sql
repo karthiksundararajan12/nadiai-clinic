@@ -39,6 +39,33 @@ CREATE POLICY "Users can update their own profile"
   ON public.doctor_profiles FOR UPDATE
   USING (auth.uid() = user_id);
 
+-- Clinics table (WhatsApp entry point per clinic)
+CREATE TABLE IF NOT EXISTS public.clinics (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  whatsapp_phone_number_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE public.clinics ENABLE ROW LEVEL SECURITY;
+
+-- Allow doctors to see their clinic (via doctor_profiles.clinic_id)
+DROP POLICY IF EXISTS "Doctors can view their clinic" ON public.clinics;
+CREATE POLICY "Doctors can view their clinic"
+  ON public.clinics FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.doctor_profiles dp
+      WHERE dp.user_id = auth.uid()
+      AND dp.clinic_id = clinics.id
+    )
+  );
+
+-- Link each doctor to a clinic
+ALTER TABLE public.doctor_profiles
+  ADD COLUMN IF NOT EXISTS clinic_id UUID REFERENCES public.clinics(id) ON DELETE SET NULL;
+
 -- Patients table
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -110,7 +137,8 @@ CREATE POLICY "Doctors can manage their own scribe sessions"
 -- WhatsApp Conversations (bot state machine)
 CREATE TABLE IF NOT EXISTS public.whatsapp_conversations (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  doctor_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  clinic_id UUID REFERENCES public.clinics(id) ON DELETE CASCADE,
   phone TEXT NOT NULL,
   patient_name TEXT,
   patient_age INTEGER,
@@ -130,11 +158,19 @@ CREATE POLICY "Doctors can manage their own wa conversations"
   ON public.whatsapp_conversations FOR ALL
   USING (auth.uid() = doctor_id);
 
+-- Ensure doctor_id can be null until patient chooses a doctor
+ALTER TABLE public.whatsapp_conversations
+  ALTER COLUMN doctor_id DROP NOT NULL;
+
+-- Ensure clinic_id exists for multi-doctor clinics
+ALTER TABLE public.whatsapp_conversations
+  ADD COLUMN IF NOT EXISTS clinic_id UUID REFERENCES public.clinics(id) ON DELETE CASCADE;
+
 -- WhatsApp Messages
 CREATE TABLE IF NOT EXISTS public.wa_messages (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   conversation_id UUID NOT NULL REFERENCES public.whatsapp_conversations(id) ON DELETE CASCADE,
-  doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  doctor_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
   message TEXT NOT NULL,
   message_type TEXT DEFAULT 'text',
@@ -143,9 +179,21 @@ CREATE TABLE IF NOT EXISTS public.wa_messages (
 
 ALTER TABLE public.wa_messages ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Doctors can manage their own wa messages" ON public.wa_messages;
 CREATE POLICY "Doctors can manage their own wa messages"
   ON public.wa_messages FOR ALL
-  USING (auth.uid() = doctor_id);
+  USING (
+    EXISTS (
+      SELECT 1
+      FROM public.whatsapp_conversations c
+      WHERE c.id = wa_messages.conversation_id
+      AND c.doctor_id = auth.uid()
+    )
+  );
+
+-- Ensure messages are readable even before wa_messages.doctor_id is set
+ALTER TABLE public.wa_messages
+  ALTER COLUMN doctor_id DROP NOT NULL;
 
 -- Payments table
 CREATE TABLE IF NOT EXISTS public.payments (

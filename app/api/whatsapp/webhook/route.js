@@ -51,8 +51,14 @@ export async function POST(request) {
     const body = await request.json();
 
     // Simple test format
+    if (body.phone && body.message && body.clinicId) {
+      return await handleMessage(body.phone, body.message, body.clinicId);
+    }
+
+    // Backward-compatible test format: { phone, message, doctorId }
     if (body.phone && body.message && body.doctorId) {
-      return await handleMessage(body.phone, body.message, body.doctorId);
+      const clinicId = await resolveClinicIdForDoctor(body.doctorId);
+      return await handleMessage(body.phone, body.message, clinicId);
     }
 
     // Meta WhatsApp Cloud API format
@@ -78,18 +84,23 @@ export async function POST(request) {
       const message = msg.text?.body || "";
       const messageId = msg.id;
 
-      // Map phone_number_id → doctor_id
-      const doctorId = await resolveDoctorId(phoneNumberId);
+      // Map phone_number_id → clinic_id
+      const clinicId = await resolveClinicId(phoneNumberId);
 
-      if (!doctorId) {
-        console.error(`[Webhook] No doctor found for phone_number_id: ${phoneNumberId}`);
-        return NextResponse.json({ error: "Unknown phone_number_id" }, { status: 200 });
+      if (!clinicId) {
+        console.error(
+          `[Webhook] No clinic found for phone_number_id: ${phoneNumberId}`
+        );
+        return NextResponse.json(
+          { error: "Unknown phone_number_id" },
+          { status: 200 }
+        );
       }
 
       // Mark as read in WhatsApp
-      markMessageRead(messageId, doctorId);
+      markMessageRead(messageId, null, clinicId);
 
-      return await handleMessage(phone, message, doctorId);
+      return await handleMessage(phone, message, clinicId);
     }
 
     return NextResponse.json({ error: "Unknown payload format" }, { status: 400 });
@@ -99,39 +110,50 @@ export async function POST(request) {
   }
 }
 
-async function handleMessage(phone, message, doctorId) {
-  const replies = await processMessage(phone, message, doctorId);
+async function handleMessage(phone, message, clinicId) {
+  const replies = await processMessage(phone, message, clinicId);
 
   for (const reply of replies) {
-    await sendWhatsAppMessage(phone, reply, doctorId);
+    await sendWhatsAppMessage(phone, reply, null, clinicId);
   }
 
   return NextResponse.json({ success: true, replies });
 }
 
 /**
- * Maps a Meta phone_number_id to a doctor's Supabase user ID.
- * Looks up doctor_profiles.whatsapp_phone_number_id in the DB.
- * Falls back to the first doctor if only one exists (single-doctor clinic).
+ * Maps a Meta phone_number_id to a clinic id.
+ * Looks up clinics.whatsapp_phone_number_id in the DB.
+ * Falls back to the first clinic if only one exists.
  */
-async function resolveDoctorId(phoneNumberId) {
+async function resolveClinicId(phoneNumberId) {
   const supabase = getSupabaseAdminClient();
 
   if (phoneNumberId) {
     const { data: match } = await supabase
-      .from("doctor_profiles")
-      .select("user_id")
+      .from("clinics")
+      .select("id")
       .eq("whatsapp_phone_number_id", phoneNumberId)
       .single();
 
-    if (match) return match.user_id;
+    if (match) return match.id;
   }
 
   const { data: fallback } = await supabase
-    .from("doctor_profiles")
-    .select("user_id")
+    .from("clinics")
+    .select("id")
     .limit(1)
     .single();
 
-  return fallback?.user_id || null;
+  return fallback?.id || null;
+}
+
+async function resolveClinicIdForDoctor(doctorId) {
+  if (!doctorId) return null;
+  const supabase = getSupabaseAdminClient();
+  const { data } = await supabase
+    .from("doctor_profiles")
+    .select("clinic_id")
+    .eq("user_id", doctorId)
+    .single();
+  return data?.clinic_id || null;
 }

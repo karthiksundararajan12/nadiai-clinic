@@ -45,6 +45,7 @@ import {
 const STATE_CONFIG = {
   WELCOME: { label: "New", color: "bg-slate-500/10 text-slate-600 border-slate-200" },
   CHOOSE_LANGUAGE: { label: "Language", color: "bg-cyan-500/10 text-cyan-600 border-cyan-200" },
+  CHOOSE_DOCTOR: { label: "Doctor", color: "bg-fuchsia-500/10 text-fuchsia-600 border-fuchsia-200" },
   COLLECT_NAME: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
   COLLECT_AGE: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
   COLLECT_GENDER: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
@@ -58,7 +59,7 @@ const STATE_CONFIG = {
 
 const FILTER_GROUPS = {
   all: null,
-  active: ["WELCOME", "CHOOSE_LANGUAGE", "COLLECT_NAME", "COLLECT_AGE", "COLLECT_GENDER", "SHOW_SLOTS", "CONFIRM_SLOT"],
+  active: ["WELCOME", "CHOOSE_LANGUAGE", "CHOOSE_DOCTOR", "COLLECT_NAME", "COLLECT_AGE", "COLLECT_GENDER", "SHOW_SLOTS", "CONFIRM_SLOT"],
   payment: ["AWAITING_PAYMENT"],
   completed: ["COMPLETED"],
   escalated: ["NO_REPLY"],

@@ -85,9 +85,9 @@ export default function LoginPage() {
           <Image
             src="/logo.png"
             alt="Nadi AI"
-            width={180}
-            height={50}
-            className="h-12 w-auto object-contain brightness-0 invert"
+            width={380}
+            height={450}
+            className="h-[140px] w-auto object-contain "
           />
         </div>
 

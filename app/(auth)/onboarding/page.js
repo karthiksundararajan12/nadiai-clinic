@@ -81,17 +81,18 @@ export default function OnboardingPage() {
     if (!user) return;
     setSaving(true);
     try {
-      const { error } = await supabase.from("doctor_profiles").upsert(
-        {
-          user_id: user.id,
-          email: user.email,
+      const res = await fetch("/api/onboarding/complete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           ...form,
-          consultation_duration: parseInt(form.consultation_duration),
-          onboarding_complete: true,
-        },
-        { onConflict: "user_id" }
-      );
-      if (error) throw error;
+          consultation_duration: parseInt(form.consultation_duration, 10) || 30,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save");
+
       router.push("/dashboard");
     } catch (err) {
       console.error("Failed to save profile:", err);
@@ -320,8 +321,9 @@ export default function OnboardingPage() {
                 You&apos;re all set!
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                You can always update these settings later from the Settings
-                page. Let&apos;s get you started with Nadi AI.
+                WhatsApp links automatically from your Meta app — no IDs to
+                copy. Send a test message to your clinic number after setup, or
+                we pull it from Meta when your business account is configured.
               </p>
             </div>
           </div>

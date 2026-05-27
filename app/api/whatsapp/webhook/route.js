@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { processMessage } from "@/lib/whatsapp/bot-engine";
 import { sendWhatsAppMessage, markMessageRead } from "@/lib/whatsapp/utils";
+import { resolveClinicForIncomingMessage } from "@/lib/whatsapp/clinic-whatsapp";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -84,15 +85,14 @@ export async function POST(request) {
       const message = msg.text?.body || "";
       const messageId = msg.id;
 
-      // Map phone_number_id → clinic_id
-      const clinicId = await resolveClinicId(phoneNumberId);
+      const clinicId = await resolveClinicForIncomingMessage(phoneNumberId);
 
       if (!clinicId) {
         console.error(
-          `[Webhook] No clinic found for phone_number_id: ${phoneNumberId}`
+          `[Webhook] No clinic for phone_number_id ${phoneNumberId} — complete doctor onboarding first`
         );
         return NextResponse.json(
-          { error: "Unknown phone_number_id" },
+          { error: "No clinic linked for this WhatsApp number" },
           { status: 200 }
         );
       }
@@ -118,33 +118,6 @@ async function handleMessage(phone, message, clinicId) {
   }
 
   return NextResponse.json({ success: true, replies });
-}
-
-/**
- * Maps a Meta phone_number_id to a clinic id.
- * Looks up clinics.whatsapp_phone_number_id in the DB.
- * Falls back to the first clinic if only one exists.
- */
-async function resolveClinicId(phoneNumberId) {
-  const supabase = getSupabaseAdminClient();
-
-  if (phoneNumberId) {
-    const { data: match } = await supabase
-      .from("clinics")
-      .select("id")
-      .eq("whatsapp_phone_number_id", phoneNumberId)
-      .single();
-
-    if (match) return match.id;
-  }
-
-  const { data: fallback } = await supabase
-    .from("clinics")
-    .select("id")
-    .limit(1)
-    .single();
-
-  return fallback?.id || null;
 }
 
 async function resolveClinicIdForDoctor(doctorId) {

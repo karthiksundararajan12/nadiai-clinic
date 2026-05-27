@@ -58,7 +58,7 @@ const STATE_CONFIG = {
 
 const FILTER_GROUPS = {
   all: null,
-  active: ["WELCOME", "COLLECT_NAME", "COLLECT_AGE", "COLLECT_GENDER", "SHOW_SLOTS", "CONFIRM_SLOT"],
+  active: ["WELCOME", "CHOOSE_LANGUAGE", "COLLECT_NAME", "COLLECT_AGE", "COLLECT_GENDER", "SHOW_SLOTS", "CONFIRM_SLOT"],
   payment: ["AWAITING_PAYMENT"],
   completed: ["COMPLETED"],
   escalated: ["NO_REPLY"],

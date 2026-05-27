@@ -14,11 +14,9 @@ export async function GET(request) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "nadi-ai-webhook-verify-2026";
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
 
-  console.log("[Webhook Verify]", { mode, tokenMatch: token === verifyToken, hasChallenge: !!challenge });
-
-  if (mode === "subscribe" && token === verifyToken) {
+  if (mode === "subscribe" && verifyToken && token === verifyToken) {
     return new Response(challenge, {
       status: 200,
       headers: { "Content-Type": "text/plain" },
@@ -54,7 +52,7 @@ export async function POST(request) {
 
     // Simple test format
     if (body.phone && body.message && body.doctorId) {
-      return await handleMessage(body.phone, body.message, body.doctorId, null);
+      return await handleMessage(body.phone, body.message, body.doctorId);
     }
 
     // Meta WhatsApp Cloud API format

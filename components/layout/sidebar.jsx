@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   Mic,
@@ -33,7 +33,6 @@ const ICON_MAP = {
 
 export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
-  const router = useRouter();
   const { displayName, initials, specialization } = useUser();
 
   const handleSignOut = async () => {

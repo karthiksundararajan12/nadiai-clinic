@@ -31,7 +31,10 @@ export async function POST(request) {
       );
     }
 
-    const isPaid = status === "paid" || status === "success";
+    const isPaid =
+      status === "paid" ||
+      status === "success" ||
+      status === "completed";
 
     if (isPaid && result.payment.appointment_id) {
       const supabase = getSupabaseAdminClient();

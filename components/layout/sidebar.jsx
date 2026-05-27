@@ -39,7 +39,7 @@ export function Sidebar({ collapsed, onToggle }) {
   const handleSignOut = async () => {
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (

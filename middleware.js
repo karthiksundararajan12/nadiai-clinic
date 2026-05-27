@@ -37,8 +37,7 @@ export async function middleware(request) {
   if (
     !user &&
     pathname !== "/login" &&
-    !pathname.startsWith("/auth/") &&
-    !pathname.startsWith("/api/whatsapp/")
+    !pathname.startsWith("/auth/")
   ) {
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
@@ -51,11 +50,14 @@ export async function middleware(request) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  supabaseResponse.headers.set("Cache-Control", "no-store, no-cache, must-revalidate");
+  supabaseResponse.headers.set("Pragma", "no-cache");
+
   return supabaseResponse;
 }
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|api/whatsapp|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

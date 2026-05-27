@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Activity, Shield, Mic, MessageCircle, ArrowRight, Loader2 } from "lucide-react";
+import Image from "next/image";
+import { Shield, Mic, MessageCircle, ArrowRight, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const FEATURES = [
@@ -81,15 +82,13 @@ export default function LoginPage() {
         <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
 
         <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary shadow-lg shadow-primary/30">
-              <Activity className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold tracking-tight">Nadi AI</h1>
-              <p className="text-xs text-white/50">Clinical Assistant</p>
-            </div>
-          </div>
+          <Image
+            src="/logo.png"
+            alt="Nadi AI"
+            width={180}
+            height={50}
+            className="h-12 w-auto object-contain brightness-0 invert"
+          />
         </div>
 
         <div className="relative z-10 max-w-md">
@@ -149,14 +148,14 @@ export default function LoginPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 bg-background">
         <div className="w-full max-w-[400px]">
           {/* Mobile logo */}
-          <div className="flex items-center gap-3 mb-10 lg:hidden">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-              <Activity className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold text-foreground">Nadi AI</h1>
-              <p className="text-xs text-muted-foreground">Clinical Assistant</p>
-            </div>
+          <div className="mb-10 lg:hidden">
+            <Image
+              src="/logo.png"
+              alt="Nadi AI"
+              width={160}
+              height={44}
+              className="h-11 w-auto object-contain"
+            />
           </div>
 
           <div className="mb-8">

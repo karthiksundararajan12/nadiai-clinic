@@ -22,6 +22,7 @@ import { useState, useRef, useEffect } from "react";
 
 const STATE_LABELS = {
   WELCOME: "New Chat",
+  CHOOSE_LANGUAGE: "Choosing Language",
   COLLECT_NAME: "Collecting Name",
   COLLECT_AGE: "Collecting Age",
   COLLECT_GENDER: "Collecting Gender",

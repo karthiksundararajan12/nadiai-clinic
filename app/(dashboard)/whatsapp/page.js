@@ -44,6 +44,7 @@ import {
 
 const STATE_CONFIG = {
   WELCOME: { label: "New", color: "bg-slate-500/10 text-slate-600 border-slate-200" },
+  CHOOSE_LANGUAGE: { label: "Language", color: "bg-cyan-500/10 text-cyan-600 border-cyan-200" },
   COLLECT_NAME: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
   COLLECT_AGE: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },
   COLLECT_GENDER: { label: "Collecting Info", color: "bg-blue-500/10 text-blue-600 border-blue-200" },

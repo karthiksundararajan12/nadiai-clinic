@@ -14,14 +14,18 @@ export async function GET(request) {
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
-  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+  const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN || "nadi-ai-webhook-verify-2026";
+
+  console.log("[Webhook Verify]", { mode, tokenMatch: token === verifyToken, hasChallenge: !!challenge });
 
   if (mode === "subscribe" && token === verifyToken) {
-    console.log("[Webhook] Verified successfully");
-    return new Response(challenge, { status: 200 });
+    return new Response(challenge, {
+      status: 200,
+      headers: { "Content-Type": "text/plain" },
+    });
   }
 
-  return NextResponse.json({ error: "Verification failed" }, { status: 403 });
+  return new Response("Verification failed", { status: 403 });
 }
 
 /**

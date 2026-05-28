@@ -68,7 +68,7 @@ export function Sidebar({ collapsed, onToggle }) {
             alt="Nadi AI"
             width={220}
             height={60}
-            className="h-14 w-auto object-contain"
+            className="h-[220px] w-auto object-contain"
           />
         )}
       </div>

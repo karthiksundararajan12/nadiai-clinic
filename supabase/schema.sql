@@ -44,8 +44,28 @@ CREATE TABLE IF NOT EXISTS public.clinics (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
   whatsapp_phone_number_id TEXT,
+  whatsapp_provider TEXT DEFAULT 'meta',
+  whatsapp_display_number TEXT,
+  whatsapp_business_account_id TEXT,
+  meta_business_id TEXT,
+  whatsapp_access_token_encrypted TEXT,
+  whatsapp_setup_status TEXT DEFAULT 'pending_verification',
+  whatsapp_setup_requested_at TIMESTAMPTZ,
+  whatsapp_verified_at TIMESTAMPTZ,
+  whatsapp_setup_error TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.clinics
+  ADD COLUMN IF NOT EXISTS whatsapp_provider TEXT DEFAULT 'meta',
+  ADD COLUMN IF NOT EXISTS whatsapp_display_number TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_business_account_id TEXT,
+  ADD COLUMN IF NOT EXISTS meta_business_id TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_access_token_encrypted TEXT,
+  ADD COLUMN IF NOT EXISTS whatsapp_setup_status TEXT DEFAULT 'pending_verification',
+  ADD COLUMN IF NOT EXISTS whatsapp_setup_requested_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS whatsapp_verified_at TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS whatsapp_setup_error TEXT;
 
 ALTER TABLE public.clinics ENABLE ROW LEVEL SECURITY;
 

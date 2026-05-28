@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Header } from "@/components/layout/header";
 import { ChatPreview } from "@/components/whatsapp/chat-preview";
 import { BotConfig } from "@/components/whatsapp/bot-config";
@@ -40,6 +40,7 @@ import {
   Plus,
   Trash2,
   RefreshCw,
+  CheckCircle2,
 } from "lucide-react";
 
 const STATE_CONFIG = {
@@ -103,6 +104,37 @@ export default function WhatsAppPage() {
   const [stateFilter, setStateFilter] = useState("all");
   const [addSlotOpen, setAddSlotOpen] = useState(false);
   const [newSlot, setNewSlot] = useState({ day: 1, start: "09:00", end: "13:00" });
+  const [setup, setSetup] = useState(null);
+  const [setupLoading, setSetupLoading] = useState(true);
+  const [setupNumber, setSetupNumber] = useState("");
+  const [setupSaving, setSetupSaving] = useState(false);
+  const [otpCode, setOtpCode] = useState("");
+  const [otpRequesting, setOtpRequesting] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+
+  useEffect(() => {
+    let mounted = true;
+
+    const loadSetup = async () => {
+      try {
+        const res = await fetch("/api/whatsapp/setup");
+        const data = await res.json();
+        if (mounted) {
+          setSetup(data.setup || null);
+          setSetupNumber(data.setup?.whatsapp_display_number || "");
+        }
+      } catch (err) {
+        console.error("Failed to load WhatsApp setup:", err);
+      } finally {
+        if (mounted) setSetupLoading(false);
+      }
+    };
+
+    loadSetup();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const filteredConversations = useMemo(() => {
     return conversations.filter((c) => {
@@ -129,6 +161,71 @@ export default function WhatsAppPage() {
   };
 
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const setupActive = setup?.whatsapp_setup_status === "active";
+
+  const saveSetupNumber = async () => {
+    setSetupSaving(true);
+    try {
+      const res = await fetch("/api/whatsapp/setup", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whatsapp_display_number: setupNumber }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to save WhatsApp number");
+      setSetup(data.setup);
+      setSetupNumber(data.setup?.whatsapp_display_number || "");
+    } catch (err) {
+      console.error("Failed to save WhatsApp setup:", err);
+    } finally {
+      setSetupSaving(false);
+    }
+  };
+
+  const requestOtp = async () => {
+    setOtpRequesting(true);
+    try {
+      const res = await fetch("/api/whatsapp/meta/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "request_otp",
+          whatsapp_display_number: setupNumber,
+          otpMethod: "SMS",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to request OTP");
+      setSetup(data.setup);
+      setSetupNumber(data.setup?.whatsapp_display_number || setupNumber);
+    } catch (err) {
+      console.error("Failed to request WhatsApp OTP:", err);
+    } finally {
+      setOtpRequesting(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    setOtpVerifying(true);
+    try {
+      const res = await fetch("/api/whatsapp/meta/otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "verify_otp",
+          otpCode,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to verify OTP");
+      setSetup(data.setup);
+      setOtpCode("");
+    } catch (err) {
+      console.error("Failed to verify WhatsApp OTP:", err);
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -181,6 +278,114 @@ export default function WhatsAppPage() {
             icon={Zap}
           />
         </div>
+
+        {/* WhatsApp Number Activation */}
+        <Card className={setupActive ? "border-emerald-200 bg-emerald-50/40" : "border-amber-200 bg-amber-50/40"}>
+          <CardContent className="p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-xl",
+                  setupActive ? "bg-emerald-500/10" : "bg-amber-500/10"
+                )}>
+                  {setupActive ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  ) : (
+                    <AlertCircle className="h-5 w-5 text-amber-600" />
+                  )}
+                </div>
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h2 className="text-sm font-semibold">Clinic WhatsApp Number</h2>
+                    <Badge variant={setupActive ? "secondary" : "outline"} className="text-[10px]">
+                      {setupActive ? "Bot Active" : "OTP Verification Pending"}
+                    </Badge>
+                  </div>
+                  <div className="mt-2 flex max-w-md items-center gap-2">
+                    <Input
+                      value={setupNumber}
+                      onChange={(e) => setSetupNumber(e.target.value)}
+                      placeholder="+91 XXXXX XXXXX"
+                      className="h-9 bg-background text-sm"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-9"
+                      onClick={saveSetupNumber}
+                      disabled={setupSaving || !setupNumber}
+                    >
+                      {setupSaving ? "Saving..." : "Save"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-9"
+                      onClick={requestOtp}
+                      disabled={otpRequesting || !setupNumber}
+                    >
+                      {otpRequesting ? "Sending..." : "Send OTP"}
+                    </Button>
+                  </div>
+                  {!setupActive && (
+                    <div className="mt-2 flex max-w-md items-center gap-2">
+                      <Input
+                        value={otpCode}
+                        onChange={(e) => setOtpCode(e.target.value)}
+                        placeholder="Enter OTP"
+                        className="h-9 bg-background text-sm"
+                      />
+                      <Button
+                        size="sm"
+                        className="h-9"
+                        onClick={verifyOtp}
+                        disabled={otpVerifying || otpCode.length < 4}
+                      >
+                        {otpVerifying ? "Verifying..." : "Verify"}
+                      </Button>
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {setupActive
+                      ? "Patients can message this clinic number directly and Nadi AI will reply."
+                      : "Send OTP to this clinic number, enter the code here, and Nadi AI will activate it in Meta Cloud API."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="min-w-0 lg:w-[44%]">
+                <Label className="text-[11px] text-muted-foreground">
+                  Meta Cloud API Status
+                </Label>
+                <div className="mt-1 rounded-lg border border-border bg-background p-3 text-xs">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">WABA ID</span>
+                    <span className="truncate font-medium">
+                      {setup?.whatsapp_business_account_id || "Pending"}
+                    </span>
+                  </div>
+                  <div className="mt-2 flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">Phone Number ID</span>
+                    <span className="truncate font-medium">
+                      {setup?.whatsapp_phone_number_id || "Pending"}
+                    </span>
+                  </div>
+                  {setup?.whatsapp_setup_error && (
+                    <p className="mt-2 text-[11px] text-destructive">
+                      {setup.whatsapp_setup_error}
+                    </p>
+                  )}
+                  {!setupActive && !setupLoading && (
+                    <p className="mt-2 text-[11px] text-muted-foreground">
+                      Activation is completed from Nadi AI admin after OTP
+                      verification. No Meta account login is needed from the
+                      doctor.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Main 3-Column Layout */}
         <div className="grid gap-6 lg:grid-cols-7">

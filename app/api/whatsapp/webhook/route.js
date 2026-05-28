@@ -85,6 +85,10 @@ export async function POST(request) {
       const message = msg.text?.body || "";
       const messageId = msg.id;
 
+      if (await isDuplicateIncomingMessage(messageId)) {
+        return NextResponse.json({ status: "duplicate_ignored" }, { status: 200 });
+      }
+
       const clinicId = await resolveClinicForIncomingMessage(phoneNumberId);
 
       if (!clinicId) {
@@ -100,7 +104,7 @@ export async function POST(request) {
       // Mark as read in WhatsApp
       markMessageRead(messageId, null, clinicId);
 
-      return await handleMessage(phone, message, clinicId);
+      return await handleMessage(phone, message, clinicId, messageId);
     }
 
     return NextResponse.json({ error: "Unknown payload format" }, { status: 400 });
@@ -110,8 +114,8 @@ export async function POST(request) {
   }
 }
 
-async function handleMessage(phone, message, clinicId) {
-  const replies = await processMessage(phone, message, clinicId);
+async function handleMessage(phone, message, clinicId, messageId = null) {
+  const replies = await processMessage(phone, message, clinicId, messageId);
 
   for (const reply of replies) {
     await sendWhatsAppMessage(phone, reply, null, clinicId);
@@ -129,4 +133,15 @@ async function resolveClinicIdForDoctor(doctorId) {
     .eq("user_id", doctorId)
     .single();
   return data?.clinic_id || null;
+}
+
+async function isDuplicateIncomingMessage(messageId) {
+  if (!messageId) return false;
+  const supabase = getSupabaseAdminClient();
+  const { data } = await supabase
+    .from("wa_messages")
+    .select("id")
+    .eq("external_message_id", messageId)
+    .maybeSingle();
+  return Boolean(data?.id);
 }

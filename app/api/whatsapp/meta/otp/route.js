@@ -66,9 +66,22 @@ async function requestOtp({ clinic, token, wabaId, body }) {
   );
 
   if (!phone) {
+    await logSetupAudit(admin, clinic.id, "request_otp", "failed", {
+      reason: "missing_number",
+    });
     return NextResponse.json(
       { error: "Clinic WhatsApp number is required" },
       { status: 400 }
+    );
+  }
+
+  if (await isRateLimited(admin, clinic.id, "request_otp", 1, 60)) {
+    await logSetupAudit(admin, clinic.id, "request_otp", "blocked", {
+      reason: "rate_limited",
+    });
+    return NextResponse.json(
+      { error: "Please wait 60 seconds before requesting OTP again" },
+      { status: 429 }
     );
   }
 
@@ -85,6 +98,10 @@ async function requestOtp({ clinic, token, wabaId, body }) {
 
     if (!added.success) {
       await markClinicFailed(admin, clinic.id, added.error);
+      await logSetupAudit(admin, clinic.id, "request_otp", "failed", {
+        reason: "add_phone_failed",
+        error: added.error,
+      });
       return NextResponse.json({ error: added.error }, { status: 502 });
     }
 
@@ -99,6 +116,10 @@ async function requestOtp({ clinic, token, wabaId, body }) {
 
   if (!otp.success) {
     await markClinicFailed(admin, clinic.id, otp.error);
+    await logSetupAudit(admin, clinic.id, "request_otp", "failed", {
+      reason: "otp_request_failed",
+      error: otp.error,
+    });
     return NextResponse.json({ error: otp.error }, { status: 502 });
   }
 
@@ -124,6 +145,11 @@ async function requestOtp({ clinic, token, wabaId, body }) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  await logSetupAudit(admin, clinic.id, "request_otp", "success", {
+    phone_number_id: phoneNumberId,
+    method: body.otpMethod || body.otp_method || "SMS",
+  });
+
   return NextResponse.json({ success: true, setup: data });
 }
 
@@ -133,9 +159,22 @@ async function verifyOtp({ clinic, token, wabaId, body }) {
   const otpCode = body.otpCode || body.otp_code;
 
   if (!phoneNumberId || !otpCode) {
+    await logSetupAudit(admin, clinic.id, "verify_otp", "failed", {
+      reason: "missing_otp_or_phone_id",
+    });
     return NextResponse.json(
       { error: "Phone number id and OTP code are required" },
       { status: 400 }
+    );
+  }
+
+  if (await isRateLimited(admin, clinic.id, "verify_otp", 5, 900)) {
+    await logSetupAudit(admin, clinic.id, "verify_otp", "blocked", {
+      reason: "rate_limited",
+    });
+    return NextResponse.json(
+      { error: "Too many OTP attempts. Please wait 15 minutes." },
+      { status: 429 }
     );
   }
 
@@ -146,18 +185,30 @@ async function verifyOtp({ clinic, token, wabaId, body }) {
   );
   if (verified.success === false) {
     await markClinicFailed(admin, clinic.id, verified.error);
+    await logSetupAudit(admin, clinic.id, "verify_otp", "failed", {
+      reason: "otp_verify_failed",
+      error: verified.error,
+    });
     return NextResponse.json({ error: verified.error }, { status: 502 });
   }
 
   const subscription = await subscribeWabaToWebhooks(wabaId, token);
   if (!subscription.success) {
     await markClinicFailed(admin, clinic.id, subscription.error);
+    await logSetupAudit(admin, clinic.id, "verify_otp", "failed", {
+      reason: "subscribe_failed",
+      error: subscription.error,
+    });
     return NextResponse.json({ error: subscription.error }, { status: 502 });
   }
 
   const registration = await registerPhoneNumber(phoneNumberId, token);
   if (registration.success === false) {
     await markClinicFailed(admin, clinic.id, registration.error);
+    await logSetupAudit(admin, clinic.id, "verify_otp", "failed", {
+      reason: "register_failed",
+      error: registration.error,
+    });
     return NextResponse.json({ error: registration.error }, { status: 502 });
   }
 
@@ -179,6 +230,10 @@ async function verifyOtp({ clinic, token, wabaId, body }) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  await logSetupAudit(admin, clinic.id, "verify_otp", "success", {
+    phone_number_id: phoneNumberId,
+  });
 
   return NextResponse.json({ success: true, setup: data });
 }
@@ -219,4 +274,26 @@ async function markClinicFailed(admin, clinicId, error) {
       whatsapp_setup_error: error,
     })
     .eq("id", clinicId);
+}
+
+async function isRateLimited(admin, clinicId, action, maxAttempts, windowSeconds) {
+  const since = new Date(Date.now() - windowSeconds * 1000).toISOString();
+  const { count } = await admin
+    .from("whatsapp_setup_audit_logs")
+    .select("id", { count: "exact", head: true })
+    .eq("clinic_id", clinicId)
+    .eq("action", action)
+    .gte("created_at", since);
+
+  return (count || 0) >= maxAttempts;
+}
+
+async function logSetupAudit(admin, clinicId, action, status, metadata = {}) {
+  await admin.from("whatsapp_setup_audit_logs").insert({
+    clinic_id: clinicId,
+    action,
+    status,
+    error: metadata.error || null,
+    metadata,
+  });
 }

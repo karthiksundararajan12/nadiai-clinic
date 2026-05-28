@@ -56,6 +56,10 @@ CREATE TABLE IF NOT EXISTS public.clinics (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE UNIQUE INDEX IF NOT EXISTS clinics_whatsapp_phone_number_id_uniq
+  ON public.clinics (whatsapp_phone_number_id)
+  WHERE whatsapp_phone_number_id IS NOT NULL;
+
 ALTER TABLE public.clinics
   ADD COLUMN IF NOT EXISTS whatsapp_provider TEXT DEFAULT 'meta',
   ADD COLUMN IF NOT EXISTS whatsapp_display_number TEXT,
@@ -192,10 +196,18 @@ CREATE TABLE IF NOT EXISTS public.wa_messages (
   conversation_id UUID NOT NULL REFERENCES public.whatsapp_conversations(id) ON DELETE CASCADE,
   doctor_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
   direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
+  external_message_id TEXT,
   message TEXT NOT NULL,
   message_type TEXT DEFAULT 'text',
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+ALTER TABLE public.wa_messages
+  ADD COLUMN IF NOT EXISTS external_message_id TEXT;
+
+CREATE UNIQUE INDEX IF NOT EXISTS wa_messages_external_message_id_uniq
+  ON public.wa_messages (external_message_id)
+  WHERE external_message_id IS NOT NULL;
 
 ALTER TABLE public.wa_messages ENABLE ROW LEVEL SECURITY;
 
@@ -214,6 +226,22 @@ CREATE POLICY "Doctors can manage their own wa messages"
 -- Ensure messages are readable even before wa_messages.doctor_id is set
 ALTER TABLE public.wa_messages
   ALTER COLUMN doctor_id DROP NOT NULL;
+
+-- WhatsApp setup audit logs (OTP request/verify, setup attempts)
+CREATE TABLE IF NOT EXISTS public.whatsapp_setup_audit_logs (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id UUID NOT NULL REFERENCES public.clinics(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('success', 'failed', 'blocked')),
+  error TEXT,
+  metadata JSONB DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS whatsapp_setup_audit_logs_clinic_action_created_idx
+  ON public.whatsapp_setup_audit_logs (clinic_id, action, created_at DESC);
+
+ALTER TABLE public.whatsapp_setup_audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- Payments table
 CREATE TABLE IF NOT EXISTS public.payments (

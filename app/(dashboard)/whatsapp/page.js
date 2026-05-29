@@ -111,6 +111,7 @@ export default function WhatsAppPage() {
   const [otpCode, setOtpCode] = useState("");
   const [otpRequesting, setOtpRequesting] = useState(false);
   const [otpVerifying, setOtpVerifying] = useState(false);
+  const [toast, setToast] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -163,6 +164,21 @@ export default function WhatsAppPage() {
   const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const setupActive = setup?.whatsapp_setup_status === "active";
 
+  const showToast = (type, title, description) => {
+    setToast({ type, title, description });
+    setTimeout(() => setToast(null), 4500);
+  };
+
+  useEffect(() => {
+    if (!setup?.whatsapp_setup_error) return;
+    showToast(
+      "error",
+      "WhatsApp setup requires attention",
+      setup.whatsapp_setup_error
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [setup?.whatsapp_setup_error]);
+
   const saveSetupNumber = async () => {
     setSetupSaving(true);
     try {
@@ -175,8 +191,18 @@ export default function WhatsAppPage() {
       if (!res.ok) throw new Error(data.error || "Failed to save WhatsApp number");
       setSetup(data.setup);
       setSetupNumber(data.setup?.whatsapp_display_number || "");
+      showToast(
+        "success",
+        "Clinic number saved",
+        "The WhatsApp number has been saved for activation."
+      );
     } catch (err) {
       console.error("Failed to save WhatsApp setup:", err);
+      showToast(
+        "error",
+        "Unable to save number",
+        err.message || "Please try again in a moment."
+      );
     } finally {
       setSetupSaving(false);
     }
@@ -198,8 +224,18 @@ export default function WhatsAppPage() {
       if (!res.ok) throw new Error(data.error || "Failed to request OTP");
       setSetup(data.setup);
       setSetupNumber(data.setup?.whatsapp_display_number || setupNumber);
+      showToast(
+        "success",
+        "OTP sent successfully",
+        "A verification code has been sent to the clinic WhatsApp number."
+      );
     } catch (err) {
       console.error("Failed to request WhatsApp OTP:", err);
+      showToast(
+        "error",
+        "OTP request failed",
+        err.message || "Please verify the clinic number and try again."
+      );
     } finally {
       setOtpRequesting(false);
     }
@@ -220,8 +256,26 @@ export default function WhatsAppPage() {
       if (!res.ok) throw new Error(data.error || "Failed to verify OTP");
       setSetup(data.setup);
       setOtpCode("");
+      if (data.pendingPin) {
+        showToast(
+          "warning",
+          "OTP verified. Final registration pending",
+          "Configure META_PHONE_NUMBER_PIN to complete Meta Cloud API activation."
+        );
+      } else {
+        showToast(
+          "success",
+          "Meta Cloud API connection completed",
+          "Clinic WhatsApp is now active for automated bot replies."
+        );
+      }
     } catch (err) {
       console.error("Failed to verify WhatsApp OTP:", err);
+      showToast(
+        "error",
+        "OTP verification failed",
+        err.message || "Please check the OTP and retry."
+      );
     } finally {
       setOtpVerifying(false);
     }
@@ -243,6 +297,21 @@ export default function WhatsAppPage() {
 
   return (
     <>
+      {toast && (
+        <div className="fixed right-6 top-20 z-50 max-w-sm rounded-xl border bg-card p-4 shadow-lg">
+          <p
+            className={cn(
+              "text-sm font-semibold",
+              toast.type === "success" && "text-emerald-600",
+              toast.type === "warning" && "text-amber-600",
+              toast.type === "error" && "text-destructive"
+            )}
+          >
+            {toast.title}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{toast.description}</p>
+        </div>
+      )}
       <Header
         title="WhatsApp Bot"
         subtitle="Manage appointment bookings and patient communication via WhatsApp"

@@ -212,14 +212,27 @@ async function verifyOtp({ clinic, token, wabaId, body }) {
     return NextResponse.json({ error: registration.error }, { status: 502 });
   }
 
+  const nextStatus =
+    registration.skipped === true
+      ? WHATSAPP_SETUP_STATUS.PENDING_VERIFICATION
+      : WHATSAPP_SETUP_STATUS.ACTIVE;
+  const nextError =
+    registration.skipped === true
+      ? registration.reason ||
+        "META_PHONE_NUMBER_PIN is not configured. Final registration is pending."
+      : null;
+
   const { data, error } = await admin
     .from("clinics")
     .update({
       whatsapp_provider: "meta",
       whatsapp_business_account_id: String(wabaId),
-      whatsapp_setup_status: WHATSAPP_SETUP_STATUS.ACTIVE,
-      whatsapp_verified_at: new Date().toISOString(),
-      whatsapp_setup_error: null,
+      whatsapp_setup_status: nextStatus,
+      whatsapp_verified_at:
+        nextStatus === WHATSAPP_SETUP_STATUS.ACTIVE
+          ? new Date().toISOString()
+          : null,
+      whatsapp_setup_error: nextError,
     })
     .eq("id", clinic.id)
     .select(
@@ -233,9 +246,14 @@ async function verifyOtp({ clinic, token, wabaId, body }) {
 
   await logSetupAudit(admin, clinic.id, "verify_otp", "success", {
     phone_number_id: phoneNumberId,
+    registration_skipped: registration.skipped === true,
   });
 
-  return NextResponse.json({ success: true, setup: data });
+  return NextResponse.json({
+    success: true,
+    setup: data,
+    pendingPin: registration.skipped === true,
+  });
 }
 
 async function getCurrentClinic() {

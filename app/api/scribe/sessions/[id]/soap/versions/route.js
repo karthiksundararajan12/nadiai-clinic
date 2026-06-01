@@ -1,16 +1,17 @@
 import { NextResponse } from "next/server";
-import { createScribeServices, isScribeError, scribeLogger, toApiError } from "@/features/scribe";
-import { resolveRequestContext } from "../../../../_helpers/context";
+import { isScribeError, scribeLogger, toApiError } from "@/features/scribe";
+import { resolveScribeContext } from "../../../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions/[id]/soap/versions" });
 
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
-    const { soapGenerationService } = createScribeServices();
+    const { soapGenerationService } = scribe.services;
     const result = await soapGenerationService.getSOAP(id, ctx);
     return NextResponse.json({ versions: result.versions }, { status: 200 });
   } catch (err) {

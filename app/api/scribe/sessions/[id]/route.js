@@ -15,13 +15,12 @@
 
 import { NextResponse }                         from "next/server";
 import {
-  createScribeServices,
   PatchSessionSchema,
   toApiError,
   isScribeError,
   scribeLogger,
 }                                               from "@/features/scribe";
-import { resolveRequestContext }                from "../../_helpers/context";
+import { resolveScribeContext }                from "../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions/[id]" });
 
@@ -32,10 +31,11 @@ const log = scribeLogger.child({ component: "API /api/scribe/sessions/[id]" });
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
-    const { sessionService, auditService } = createScribeServices();
+    const { sessionService, auditService } = scribe.services;
     const session = await sessionService.getSession(id, ctx);
 
     // Optionally include the audit trail (?include=audit)
@@ -62,8 +62,9 @@ export async function GET(request, { params }) {
 export async function PATCH(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
     const body = await request.json().catch(() => ({}));
 
@@ -77,7 +78,7 @@ export async function PATCH(request, { params }) {
     }
 
     const input = parsed.data;
-    const { sessionService } = createScribeServices();
+    const { sessionService } = scribe.services;
     let session;
 
     switch (input.action) {
@@ -130,10 +131,11 @@ export async function PATCH(request, { params }) {
 export async function DELETE(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
-    const { sessionService } = createScribeServices();
+    const { sessionService } = scribe.services;
     await sessionService.deleteSession(id, ctx);
 
     log.info("Session deleted", { sessionId: id, doctorId: ctx.doctorId });

@@ -3,11 +3,9 @@
  * POST /api/scribe/sessions        — create a new scribe session
  */
 
-import { NextResponse }          from "next/server";
-import { createScribeServices }  from "@/features/scribe";
-import { toApiError, isScribeError } from "@/features/scribe";
-import { resolveRequestContext } from "../_helpers/context";
-import { scribeLogger }          from "@/features/scribe";
+import { NextResponse }                    from "next/server";
+import { toApiError, isScribeError, scribeLogger } from "@/features/scribe";
+import { resolveScribeContext }            from "../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions" });
 
@@ -17,10 +15,9 @@ const log = scribeLogger.child({ component: "API /api/scribe/sessions" });
 
 export async function GET(request) {
   try {
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
     const { searchParams } = new URL(request.url);
     const rawFilters = Object.fromEntries(searchParams.entries());
@@ -29,7 +26,7 @@ export async function GET(request) {
     const statusValues = searchParams.getAll("status");
     if (statusValues.length > 1) rawFilters.status = statusValues;
 
-    const { sessionService } = createScribeServices();
+    const { sessionService } = scribe.services;
     const result = await sessionService.listSessions(rawFilters, ctx);
 
     return NextResponse.json(result, { status: 200 });
@@ -50,14 +47,13 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
     const body = await request.json().catch(() => ({}));
 
-    const { sessionService } = createScribeServices();
+    const { sessionService } = scribe.services;
     const session = await sessionService.createSession(body, ctx);
 
     log.info("Session created via API", {

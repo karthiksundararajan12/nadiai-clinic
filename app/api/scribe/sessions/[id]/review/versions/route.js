@@ -1,15 +1,16 @@
 import { NextResponse } from "next/server";
-import { createScribeServices, isScribeError, scribeLogger, toApiError } from "@/features/scribe";
-import { resolveRequestContext } from "../../../../_helpers/context";
+import { isScribeError, scribeLogger, toApiError } from "@/features/scribe";
+import { resolveScribeContext } from "../../../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API transcript versions" });
 
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    const { transcriptReviewService } = createScribeServices();
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
+    const { transcriptReviewService } = scribe.services;
     const versions = await transcriptReviewService.getVersions(id, ctx);
     return NextResponse.json({ versions }, { status: 200 });
   } catch (err) {
@@ -23,10 +24,11 @@ export async function GET(request, { params }) {
 export async function POST(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
     const body = await request.json().catch(() => ({}));
-    const { transcriptReviewService } = createScribeServices();
+    const { transcriptReviewService } = scribe.services;
     const version = await transcriptReviewService.createVersion(id, body, ctx);
     return NextResponse.json(version, { status: 201 });
   } catch (err) {

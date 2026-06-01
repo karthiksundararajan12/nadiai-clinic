@@ -5,22 +5,22 @@
 
 import { NextResponse } from "next/server";
 import {
-  createScribeServices,
   isScribeError,
   scribeLogger,
   toApiError,
 } from "@/features/scribe";
-import { resolveRequestContext } from "../../../_helpers/context";
+import { resolveScribeContext } from "../../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions/[id]/transcription" });
 
 export async function GET(request, { params }) {
   try {
     const { id } = await params;
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    const { ctx } = scribe;
 
-    const { transcriptionService } = createScribeServices();
+    const { transcriptionService } = scribe.services;
     const result = await transcriptionService.getTranscription(id, ctx);
     return NextResponse.json(result, { status: 200 });
   } catch (err) {

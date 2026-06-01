@@ -7,6 +7,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient }  from "@/lib/supabase/admin";
+import { createScribeServices }    from "@/features/scribe";
 
 /** @typedef {import("@/features/scribe/models/session.model.js").RequestContext} RequestContext */
 
@@ -26,17 +27,29 @@ export async function resolveRequestContext(request) {
   } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const admin = getSupabaseAdminClient();
-
-  const { data: profile } = await admin
+  // Use the authenticated server client (anon key + user session cookies) so
+  // the RLS policy "Users can read their own profile" (auth.uid() = user_id)
+  // applies. This avoids a dependency on the service-role key for this step.
+  const { data: profile, error: profileError } = await supabase
     .from("doctor_profiles")
     .select("user_id, clinic_id, clinic_name, clinic_address")
     .eq("user_id", user.id)
     .single();
 
-  if (!profile) return null;
+  if (profileError || !profile) return null;
 
-  const clinicId = profile.clinic_id || await backfillClinicId(admin, profile);
+  let clinicId = profile.clinic_id;
+
+  // If clinic_id is missing, try to backfill using the admin client.
+  if (!clinicId) {
+    try {
+      const admin = getSupabaseAdminClient();
+      clinicId = await backfillClinicId(admin, profile);
+    } catch {
+      // Admin client unavailable (e.g. bad service-role key) — cannot backfill.
+    }
+  }
+
   if (!clinicId) return null;
 
   return {
@@ -61,6 +74,59 @@ function extractIp(request) {
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     undefined
   );
+}
+
+/**
+ * Single-call helper for all scribe API routes.
+ *
+ * Resolves the authenticated user, their doctor profile, and wires all scribe
+ * services — all using the authenticated server client so Supabase RLS applies
+ * without requiring a valid service-role key.
+ *
+ * Returns null when the user is unauthenticated or has no doctor profile.
+ *
+ * @param {Request} request
+ * @returns {Promise<{ctx: RequestContext; services: ReturnType<typeof createScribeServices>}|null>}
+ */
+export async function resolveScribeContext(request) {
+  const supabase = await getSupabaseServerClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return null;
+
+  const { data: profile, error: profileError } = await supabase
+    .from("doctor_profiles")
+    .select("user_id, clinic_id, clinic_name, clinic_address")
+    .eq("user_id", user.id)
+    .single();
+
+  if (profileError || !profile) return null;
+
+  let clinicId = profile.clinic_id;
+
+  if (!clinicId) {
+    try {
+      const admin = getSupabaseAdminClient();
+      clinicId = await backfillClinicId(admin, profile);
+    } catch {
+      // Admin client unavailable — cannot backfill.
+    }
+  }
+
+  if (!clinicId) return null;
+
+  const ctx = {
+    actorId:   user.id,
+    doctorId:  user.id,
+    clinicId,
+    ipAddress: extractIp(request),
+    userAgent: request.headers.get("user-agent") ?? undefined,
+    requestId: request.headers.get("x-request-id") ?? undefined,
+  };
+
+  const services = createScribeServices(supabase);
+  return { ctx, services };
 }
 
 async function backfillClinicId(admin, profile) {

@@ -8,24 +8,24 @@
 
 import { NextResponse } from "next/server";
 import {
-  createScribeServices,
   isScribeError,
   scribeLogger,
   toApiError,
 } from "@/features/scribe";
-import { resolveRequestContext } from "../../_helpers/context";
+import { resolveScribeContext } from "../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/uploads/start" });
 
 export async function POST(request) {
   try {
-    const ctx = await resolveRequestContext(request);
-    if (!ctx) {
+    const scribe = await resolveScribeContext(request);
+    if (!scribe) {
+      const { ctx } = scribe;
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
     const body = await request.json().catch(() => ({}));
-    const { audioUploadService } = createScribeServices();
+    const { audioUploadService } = scribe.services;
     const result = await audioUploadService.startUpload(body, ctx);
 
     return NextResponse.json(result, { status: 201 });

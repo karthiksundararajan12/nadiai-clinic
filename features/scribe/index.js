@@ -140,13 +140,19 @@ import { SOAPGenerationService as _SOAPService } from "./services/soap-generatio
 import { SOAPReviewService as _SOAPReviewService } from "./services/soap-review.service.js";
 
 /**
- * Wires together all scribe domain services with the admin Supabase client.
+ * Wires together all scribe domain services with a Supabase client.
  * Call once per request inside API route handlers (server-side only).
  *
+ * Prefer passing the authenticated server client (from getSupabaseServerClient())
+ * so that Supabase RLS applies — this works for all scribe operations because
+ * every table has auth.uid()-based policies. Falls back to the admin client
+ * when no client is provided (requires a valid SUPABASE_SERVICE_ROLE_KEY JWT).
+ *
+ * @param {import('@supabase/supabase-js').SupabaseClient} [supabaseClient]
  * @returns {{ sessionService: ScribeSessionService; auditService: AuditService }}
  */
-export function createScribeServices() {
-  const supabase    = getSupabaseAdminClient();
+export function createScribeServices(supabaseClient) {
+  const supabase    = supabaseClient ?? getSupabaseAdminClient();
   const sessionRepo = new _SR(supabase);
   const transcriptionRepo = new _TR(supabase);
   const reviewRepo = new _RR(supabase);

@@ -2,10 +2,8 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { LoadingSpinner } from "@/components/shared/loading-spinner";
 import {
-  Sparkles,
   Copy,
   Download,
   FileText,
@@ -16,8 +14,7 @@ import { useState } from "react";
 export function ScribeNotes({
   clinicalNote,
   isGeneratingNote,
-  onGenerate,
-  hasTranscription,
+  error,
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -31,11 +28,8 @@ export function ScribeNotes({
     <Card className="flex flex-col h-full">
       <CardHeader className="flex flex-row items-center justify-between pb-3 shrink-0">
         <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-accent" />
-          <CardTitle className="text-base">AI Clinical Notes</CardTitle>
-          <Badge variant="accent" className="text-[10px]">
-            Auto-generated
-          </Badge>
+          <FileText className="h-4 w-4 text-accent" />
+          <CardTitle className="text-base">SOAP Note</CardTitle>
         </div>
         {clinicalNote && (
           <div className="flex items-center gap-1">
@@ -62,10 +56,10 @@ export function ScribeNotes({
             <LoadingSpinner />
             <div className="text-center">
               <p className="text-sm font-medium text-foreground">
-                Generating Clinical Notes...
+                Loading SOAP note...
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                AI is analyzing the transcription
+                Please wait while the clinical workspace refreshes.
               </p>
             </div>
           </div>
@@ -89,22 +83,11 @@ export function ScribeNotes({
               <FileText className="h-6 w-6 text-accent" />
             </div>
             <p className="text-sm font-medium text-foreground">
-              No clinical notes yet
+              SOAP note has not been generated.
             </p>
             <p className="text-xs text-muted-foreground mt-1 max-w-[260px]">
-              Record a consultation and generate AI-powered clinical notes
-              automatically
+              {error || "SOAP note has not been generated."}
             </p>
-            {hasTranscription && (
-              <Button
-                onClick={onGenerate}
-                size="sm"
-                className="mt-4 gap-1.5"
-              >
-                <Sparkles className="h-3.5 w-3.5" />
-                Generate Notes
-              </Button>
-            )}
           </div>
         )}
       </CardContent>

@@ -6,7 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, Languages } from "lucide-react";
 
-export function TranscriptViewer({ transcription, language, isRecording }) {
+export function TranscriptViewer({ transcription, language, isRecording, error }) {
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -35,10 +35,13 @@ export function TranscriptViewer({ transcription, language, isRecording }) {
                 <FileText className="h-6 w-6 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground">
-                {isRecording
-                  ? "Listening... Transcription will appear here"
-                  : "Start recording to see the transcription"}
+                {error || "Transcript not available."}
               </p>
+              {isRecording && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Recording is in progress. Transcript will appear after the production transcription pipeline completes.
+                </p>
+              )}
             </div>
           ) : (
             <div className="space-y-3">

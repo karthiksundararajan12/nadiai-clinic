@@ -4,13 +4,11 @@ import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { ScribeRecorder } from "@/components/scribe/scribe-recorder";
-import { TranscriptViewer } from "@/components/scribe/transcript-viewer";
-import { ScribeNotes } from "@/components/scribe/scribe-notes";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useScribe } from "@/hooks/use-scribe";
-import { FileText, RefreshCw, RotateCcw, Sparkles } from "lucide-react";
+import { ClipboardList, Mic, RefreshCw, Sparkles } from "lucide-react";
 
 const SOAP_ACTION_STATUSES = [
   "REVIEW_COMPLETED",
@@ -26,16 +24,13 @@ export default function ScribePage() {
     isPaused,
     language,
     setLanguage,
-    transcription,
-    clinicalNote,
-    transcriptionError,
     duration,
-    isGeneratingNote,
     startRecording,
     pauseRecording,
     resumeRecording,
     stopRecording,
   } = useScribe();
+
   const [sessions, setSessions] = useState([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState(null);
@@ -46,13 +41,11 @@ export default function ScribePage() {
     setSessionsError(null);
     try {
       const query = SOAP_ACTION_STATUSES
-        .map((status) => `status=${encodeURIComponent(status)}`)
+        .map((s) => `status=${encodeURIComponent(s)}`)
         .join("&");
       const res = await fetch(`/api/scribe/sessions?${query}&limit=10`);
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload?.error || `Failed to load scribe sessions (${res.status})`);
-      }
+      if (!res.ok) throw new Error(payload?.error || `Failed to load sessions (${res.status})`);
       setSessions(payload?.data ?? []);
     } catch (err) {
       setSessionsError(err);
@@ -71,9 +64,7 @@ export default function ScribePage() {
         body: JSON.stringify({}),
       });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload?.error || `SOAP generation failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(payload?.error || `SOAP generation failed (${res.status})`);
       await loadSessions();
     } catch (err) {
       setSessionsError(err);
@@ -90,29 +81,19 @@ export default function ScribePage() {
     <>
       <Header
         title="AI Scribe"
-        subtitle="Record consultations and review production transcript/SOAP outputs"
+        subtitle="Record consultations · transcription and SOAP notes generated automatically"
       />
 
       <div className="flex-1 p-6 space-y-6">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+
+        {/* ── Language selector ──────────────────────────────────────── */}
+        <div className="flex items-center justify-between">
           <LanguageToggle value={language} onChange={setLanguage} />
-          <div className="flex items-center gap-2">
-            {transcription.length > 0 && !isRecording && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => window.location.reload()}
-                className="gap-1.5"
-              >
-                <RotateCcw className="h-3.5 w-3.5" />
-                New Session
-              </Button>
-            )}
-          </div>
         </div>
 
-        <Card className="border-dashed">
-          <CardContent className="flex items-center justify-center p-8">
+        {/* ── Recorder card ─────────────────────────────────────────── */}
+        <Card className={isRecording ? "border-primary/30 shadow-md shadow-primary/5" : "border-dashed"}>
+          <CardContent className="flex items-center justify-center py-10 px-8">
             <ScribeRecorder
               isRecording={isRecording}
               isPaused={isPaused}
@@ -125,69 +106,74 @@ export default function ScribePage() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          <TranscriptViewer
-            transcription={transcription}
-            language={language}
-            isRecording={isRecording}
-            error={transcriptionError}
-          />
-          <ScribeNotes
-            clinicalNote={clinicalNote}
-            isGeneratingNote={isGeneratingNote}
-          />
-        </div>
-
+        {/* ── SOAP generation panel ──────────────────────────────────── */}
         <Card>
-          <CardHeader className="flex flex-row items-center justify-between gap-3">
+          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
             <div>
-              <CardTitle className="text-base">Production SOAP generation</CardTitle>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Generate SOAP notes only after transcript review is completed.
+              <CardTitle className="text-base">SOAP Note Generation</CardTitle>
+              <p className="mt-0.5 text-sm text-muted-foreground">
+                Sessions ready after transcript review is completed.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={loadSessions} disabled={sessionsLoading}>
-              <RefreshCw className="h-3.5 w-3.5" />
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={loadSessions}
+              disabled={sessionsLoading}
+              className="shrink-0"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${sessionsLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
           </CardHeader>
           <CardContent>
             {sessionsLoading ? (
-              <p className="text-sm text-muted-foreground">Loading reviewed scribe sessions...</p>
+              <div className="flex items-center gap-2 text-sm text-muted-foreground py-2">
+                <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                Loading sessions…
+              </div>
             ) : sessionsError ? (
               <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3">
                 <p className="text-sm font-medium text-destructive">Unable to load SOAP actions.</p>
                 <p className="mt-1 text-xs text-muted-foreground">{sessionsError.message}</p>
               </div>
             ) : sessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No reviewed transcript sessions found. Complete transcript review first, then the Generate SOAP button will appear here.
+              <p className="text-sm text-muted-foreground py-2">
+                No sessions ready yet. Complete a transcript review first.
               </p>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-2">
                 {sessions.map((session) => {
                   const canGenerate = session.status === "REVIEW_COMPLETED";
+                  const isGenerating = generatingSessionId === session.id;
+                  const date = new Date(session.created_at).toLocaleString(undefined, {
+                    month: "short", day: "numeric",
+                    hour: "2-digit", minute: "2-digit",
+                  });
                   return (
                     <div
                       key={session.id}
-                      className="flex flex-col gap-3 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+                      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                     >
                       <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-medium">Session {session.id}</p>
-                          <Badge variant={canGenerate ? "warning" : "secondary"}>{session.status}</Badge>
+                          <p className="truncate text-sm font-medium font-mono text-muted-foreground">
+                            {session.id.slice(0, 8)}…
+                          </p>
+                          <Badge variant={canGenerate ? "warning" : "secondary"} className="text-xs">
+                            {session.status.replace(/_/g, " ")}
+                          </Badge>
                         </div>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          Created {new Date(session.created_at).toLocaleString()}
-                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">{date}</p>
                       </div>
                       <Button
                         size="sm"
                         onClick={() => generateSOAP(session.id)}
-                        disabled={!canGenerate || generatingSessionId === session.id}
+                        disabled={!canGenerate || isGenerating}
+                        className="shrink-0 gap-1.5"
                       >
                         <Sparkles className="h-3.5 w-3.5" />
-                        {generatingSessionId === session.id ? "Generating..." : "Generate SOAP"}
+                        {isGenerating ? "Generating…" : "Generate SOAP"}
                       </Button>
                     </div>
                   );
@@ -197,47 +183,42 @@ export default function ScribePage() {
           </CardContent>
         </Card>
 
-        {!isRecording && transcription.length === 0 && (
-          <div className="grid gap-4 sm:grid-cols-3">
-            <Card className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <span className="text-lg">1</span>
+        {/* ── How-it-works hint (idle only) ─────────────────────────── */}
+        {!isRecording && (
+          <div className="grid gap-3 sm:grid-cols-3">
+            {[
+              {
+                icon: <Mic className="h-5 w-5 text-primary" />,
+                bg: "bg-primary/10",
+                step: "1",
+                title: "Record",
+                desc: "Tap the mic and speak naturally with your patient",
+              },
+              {
+                icon: <ClipboardList className="h-5 w-5 text-primary" />,
+                bg: "bg-primary/10",
+                step: "2",
+                title: "Review Transcript",
+                desc: "Transcription processes in the background after you stop",
+              },
+              {
+                icon: <Sparkles className="h-5 w-5 text-primary" />,
+                bg: "bg-primary/10",
+                step: "3",
+                title: "Generate SOAP",
+                desc: "Click Generate SOAP above once review is complete",
+              },
+            ].map(({ icon, bg, step, title, desc }) => (
+              <Card key={step} className="p-4">
+                <div className="flex items-start gap-3">
+                  <div className={`rounded-lg ${bg} p-2 shrink-0`}>{icon}</div>
+                  <div>
+                    <p className="text-sm font-semibold">{title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-sm font-medium">Select Language</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Choose Hinglish, Hindi, or English for transcription
-                  </p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2">
-                  <span className="text-lg">2</span>
-                </div>
-                <div>
-                  <p className="text-sm font-medium">Record Consultation</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Tap the mic button and speak naturally with your patient
-                  </p>
-                </div>
-              </div>
-            </Card>
-            <Card className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-accent/10 p-2">
-                  <FileText className="h-5 w-5 text-accent" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">SOAP Review</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    SOAP note has not been generated.
-                  </p>
-                </div>
-              </div>
-            </Card>
+              </Card>
+            ))}
           </div>
         )}
       </div>

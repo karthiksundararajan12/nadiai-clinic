@@ -5,7 +5,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 export function useScribe() {
   const [isRecording, setIsRecording] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
-  const [language, setLanguage] = useState("hinglish");
+  const [language, setLanguage] = useState("english");
   const [transcription, setTranscription] = useState([]);
   const [clinicalNote, setClinicalNote] = useState("");
   const [duration, setDuration] = useState(0);

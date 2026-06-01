@@ -30,16 +30,19 @@ export async function resolveRequestContext(request) {
 
   const { data: profile } = await admin
     .from("doctor_profiles")
-    .select("user_id, clinic_id")
+    .select("user_id, clinic_id, clinic_name, clinic_address")
     .eq("user_id", user.id)
     .single();
 
-  if (!profile?.clinic_id) return null;
+  if (!profile) return null;
+
+  const clinicId = profile.clinic_id || await backfillClinicId(admin, profile);
+  if (!clinicId) return null;
 
   return {
     actorId:   user.id,
     doctorId:  user.id,
-    clinicId:  profile.clinic_id,
+    clinicId,
     ipAddress: extractIp(request),
     userAgent: request.headers.get("user-agent") ?? undefined,
     requestId: request.headers.get("x-request-id") ?? undefined,
@@ -58,4 +61,29 @@ function extractIp(request) {
     request.headers.get("x-forwarded-for")?.split(",")[0].trim() ??
     undefined
   );
+}
+
+async function backfillClinicId(admin, profile) {
+  const clinicName = profile.clinic_name?.trim();
+  if (!clinicName) return null;
+
+  const { data: clinic, error: clinicError } = await admin
+    .from("clinics")
+    .insert({
+      name: clinicName,
+      whatsapp_provider: "meta",
+      whatsapp_setup_status: "pending_verification",
+    })
+    .select("id")
+    .single();
+
+  if (clinicError || !clinic?.id) return null;
+
+  const { error: profileError } = await admin
+    .from("doctor_profiles")
+    .update({ clinic_id: clinic.id })
+    .eq("user_id", profile.user_id);
+
+  if (profileError) return null;
+  return clinic.id;
 }

@@ -5,6 +5,7 @@ import {
   completeTranscriptReview,
   fetchTranscriptVersions,
   fetchTranscriptWorkspace,
+  generateSOAPNote,
   restoreTranscriptVersion,
   saveTranscriptVersion,
   updateTranscriptSegment,
@@ -77,6 +78,7 @@ export function useTranscriptReview(sessionId) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [generatingSOAP, setGeneratingSOAP] = useState(false);
   const [error, setError] = useState(null);
 
   const load = useCallback(async () => {
@@ -136,6 +138,24 @@ export function useTranscriptReview(sessionId) {
     return result;
   }, [saveSegments, sessionId, state]);
 
+  const generateSOAP = useCallback(async () => {
+    if (dirtyKeys.length > 0) {
+      await saveSegments();
+    }
+    setGeneratingSOAP(true);
+    setError(null);
+    try {
+      const result = await generateSOAPNote(sessionId);
+      await load();
+      return result;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setGeneratingSOAP(false);
+    }
+  }, [dirtyKeys.length, load, saveSegments, sessionId]);
+
   const restoreVersion = useCallback(async (versionId) => {
     const result = await restoreTranscriptVersion(sessionId, versionId);
     await load();
@@ -156,6 +176,7 @@ export function useTranscriptReview(sessionId) {
     ...state,
     loading,
     saving,
+    generatingSOAP,
     error,
     autosaveStatus,
     hasChanges: dirtyKeys.length > 0,
@@ -165,6 +186,7 @@ export function useTranscriptReview(sessionId) {
     updateSegment,
     manualSave,
     completeReview,
+    generateSOAP,
     restoreVersion,
     undo: () => dispatch({ type: "UNDO" }),
     redo: () => dispatch({ type: "REDO" }),

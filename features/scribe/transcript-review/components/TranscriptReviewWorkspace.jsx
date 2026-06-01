@@ -12,6 +12,12 @@ import { EmptyTranscriptState, ReviewErrorState, ReviewLoadingState } from "./Re
 
 export function TranscriptReviewWorkspace({ sessionId, className }) {
   const review = useTranscriptReview(sessionId);
+  const canCompleteReview = review.session?.status === "REVIEWING";
+  const canGenerateSOAP = [
+    "REVIEW_COMPLETED",
+    "SOAP_READY",
+    "SOAP_REVIEW_REQUIRED",
+  ].includes(review.session?.status);
 
   const stats = useMemo(() => {
     const low = review.segments.filter((segment) => segment.is_low_confidence).length;
@@ -29,10 +35,14 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
         autosaveStatus={review.autosaveStatus}
         canUndo={review.canUndo}
         canRedo={review.canRedo}
+        canComplete={canCompleteReview}
+        canGenerateSOAP={canGenerateSOAP}
+        generatingSOAP={review.generatingSOAP}
         onUndo={review.undo}
         onRedo={review.redo}
         onSave={review.manualSave}
         onComplete={review.completeReview}
+        onGenerateSOAP={review.generateSOAP}
       />
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">

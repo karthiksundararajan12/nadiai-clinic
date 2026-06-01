@@ -12,4 +12,5 @@ export {
   fetchTranscriptVersions,
   restoreTranscriptVersion,
   completeTranscriptReview,
+  generateSOAPNote,
 } from "./services/transcript-review.client.js";

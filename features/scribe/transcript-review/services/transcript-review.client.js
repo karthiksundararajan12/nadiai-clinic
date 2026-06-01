@@ -35,6 +35,13 @@ export async function completeTranscriptReview(sessionId) {
   });
 }
 
+export async function generateSOAPNote(sessionId, payload = {}) {
+  return requestJson(`/api/scribe/sessions/${sessionId}/soap/generate`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 async function requestJson(url, options = {}) {
   const res = await fetch(url, {
     method: options.method ?? "GET",

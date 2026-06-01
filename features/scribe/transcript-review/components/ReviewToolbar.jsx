@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, RotateCcw, RotateCw, Save } from "lucide-react";
+import { CheckCircle2, RotateCcw, RotateCw, Save, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -10,10 +10,14 @@ export function ReviewToolbar({
   autosaveStatus,
   canUndo,
   canRedo,
+  canComplete,
+  canGenerateSOAP,
+  generatingSOAP,
   onUndo,
   onRedo,
   onSave,
   onComplete,
+  onGenerateSOAP,
 }) {
   return (
     <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-background/95 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
@@ -39,10 +43,16 @@ export function ReviewToolbar({
           <Save className="size-4" />
           Save version
         </Button>
-        <Button size="sm" onClick={onComplete} disabled={saving || hasChanges}>
+        <Button size="sm" onClick={onComplete} disabled={!canComplete || saving || hasChanges || generatingSOAP}>
           <CheckCircle2 className="size-4" />
           Complete review
         </Button>
+        {canGenerateSOAP && (
+          <Button size="sm" onClick={onGenerateSOAP} disabled={saving || hasChanges || generatingSOAP}>
+            <Sparkles className="size-4" />
+            {generatingSOAP ? "Generating SOAP..." : "Generate SOAP"}
+          </Button>
+        )}
       </div>
     </div>
   );

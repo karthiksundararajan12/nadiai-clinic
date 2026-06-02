@@ -17,7 +17,6 @@ import { createLogger } from "../logger.js";
 import {
   AUDIT_ACTION,
   JOB_STATUS,
-  JOB_TYPE,
   SCRIBE_LIMITS,
   SCRIBE_STORAGE,
   SESSION_STATUS,
@@ -39,6 +38,11 @@ import {
   TranscriptionWorkerSchema,
 } from "../schemas.js";
 import { createTranscriptionProvider } from "./transcription-providers/provider-factory.js";
+import {
+  buildInlineTranscriptionJob,
+  failInlineTranscriptionJob,
+  isInlineTranscriptionJob,
+} from "../lib/transcription-jobs.js";
 
 export class TranscriptionService {
   /**
@@ -133,7 +137,7 @@ export class TranscriptionService {
         sessionId,
         error: err instanceof Error ? err.message : String(err),
       });
-      job = this._buildInlineJob(sessionId, input.priority, ctx);
+      job = buildInlineTranscriptionJob(sessionId, input.priority, ctx);
       created = true;
     }
 
@@ -141,7 +145,7 @@ export class TranscriptionService {
       action: AUDIT_ACTION.TRANSCRIPTION_QUEUED,
       sessionId,
       ctx,
-      metadata: { jobId: job.id, created, priority: input.priority, inline: isInlineJob(job) },
+      metadata: { jobId: job.id, created, priority: input.priority, inline: isInlineTranscriptionJob(job) },
     });
 
     return { session: nextSession, transcription, job, queued: true };
@@ -153,19 +157,6 @@ export class TranscriptionService {
    * @param {number} [priority]
    * @param {import("../models/session.model.js").RequestContext} ctx
    */
-  _buildInlineJob(sessionId, priority, ctx) {
-    return {
-      id:            `inline:${sessionId}`,
-      session_id:    sessionId,
-      job_type:      JOB_TYPE.TRANSCRIBE,
-      priority:      priority ?? 10,
-      status:        JOB_STATUS.PENDING,
-      attempt_count: 0,
-      max_attempts:  3,
-      metadata:      { inline: true, clinicId: ctx.clinicId, doctorId: ctx.doctorId },
-    };
-  }
-
   /**
    * Requeues transcription after a failed attempt.
    *
@@ -237,11 +228,11 @@ export class TranscriptionService {
 
     let job = await this._transcriptions.findActiveJob(sessionId);
     if (!job) {
-      job = this._buildInlineJob(sessionId, 10, ctx);
+      job = buildInlineTranscriptionJob(sessionId, 10, ctx);
     }
 
     const workerId = `doctor_${ctx.actorId}`;
-    if (job.status === JOB_STATUS.PENDING && !isInlineJob(job)) {
+    if (job.status === JOB_STATUS.PENDING && !isInlineTranscriptionJob(job)) {
       const claimed = await this._transcriptions.claimJobById(job.id, workerId);
       if (!claimed) {
         job = await this._transcriptions.findActiveJob(sessionId) ?? job;
@@ -591,7 +582,7 @@ export class TranscriptionService {
 
   /** @param {Record<string, unknown>} job */
   async _completeQueueJob(job) {
-    if (isInlineJob(job)) return;
+    if (isInlineTranscriptionJob(job)) return;
     await this._transcriptions.completeJob(job.id);
   }
 
@@ -601,15 +592,8 @@ export class TranscriptionService {
    * @param {boolean} retryable
    */
   async _failQueueJob(job, message, retryable) {
-    if (isInlineJob(job)) {
-      const nextAttempt = (job.attempt_count ?? 0) + 1;
-      const willRetry   = retryable && nextAttempt < (job.max_attempts ?? 3);
-      return {
-        ...job,
-        status:        willRetry ? JOB_STATUS.PENDING : JOB_STATUS.FAILED,
-        attempt_count: nextAttempt,
-        error:         message,
-      };
+    if (isInlineTranscriptionJob(job)) {
+      return failInlineTranscriptionJob(job, message, retryable);
     }
     return this._transcriptions.failJob(
       job.id,
@@ -624,14 +608,6 @@ export class TranscriptionService {
 // ─────────────────────────────────────────────────────────────
 // MODULE-LEVEL HELPERS
 // ─────────────────────────────────────────────────────────────
-
-/** @param {Record<string, unknown>|null|undefined} job */
-function isInlineJob(job) {
-  if (!job) return false;
-  const meta = job.metadata;
-  if (meta && typeof meta === "object" && "inline" in meta && meta.inline) return true;
-  return String(job.id ?? "").startsWith("inline:");
-}
 
 /** @type {Record<string, string>} File extension → MIME type */
 const MIME_TYPES = {

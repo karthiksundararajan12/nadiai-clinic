@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, RefreshCw, Sparkles } from "lucide-react";
 
-const PRESCRIPTION_GENERATE_STATUSES = ["SOAP_APPROVED"];
+const PRESCRIPTION_GENERATE_STATUSES = ["SOAP_APPROVED", "COMPLETED"];
 const PRESCRIPTION_REVIEW_STATUSES = [
   "PRESCRIPTION_DRAFT_READY",
   "PRESCRIPTION_REVIEW_REQUIRED",
@@ -97,7 +97,7 @@ export default function ScribePage() {
       <div className="flex-1 p-6 space-y-6">
         <ScribeWorkflow />
 
-        <Card>
+        <Card data-testid="prescription-panel">
           <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
             <div>
               <CardTitle className="text-base flex items-center gap-2">
@@ -108,7 +108,13 @@ export default function ScribePage() {
                 After SOAP is approved, generate and review prescription drafts.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={loadRxSessions} disabled={rxLoading}>
+            <Button
+              variant="outline"
+              size="sm"
+              data-testid="prescription-refresh"
+              onClick={loadRxSessions}
+              disabled={rxLoading}
+            >
               <RefreshCw className={`h-3.5 w-3.5 ${rxLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
@@ -127,14 +133,17 @@ export default function ScribePage() {
                 {rxSessions.map((session) => (
                   <div
                     key={session.id}
+                    data-testid="prescription-row"
+                    data-session-id={session.id}
                     className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <p className="font-mono text-sm text-muted-foreground">{session.id.slice(0, 8)}…</p>
                     <div className="flex gap-2">
-                      {session.status === "SOAP_APPROVED" && (
+                      {PRESCRIPTION_GENERATE_STATUSES.includes(session.status) && (
                         <Button
                           size="sm"
                           variant="outline"
+                          data-testid="prescription-generate"
                           disabled={rxGenerating === session.id}
                           onClick={() => generatePrescription(session.id)}
                           className="gap-1 text-xs"
@@ -146,6 +155,7 @@ export default function ScribePage() {
                       {PRESCRIPTION_REVIEW_STATUSES.includes(session.status) && (
                         <Button
                           size="sm"
+                          data-testid="prescription-review-open"
                           onClick={() => setRxReviewSessionId(session.id)}
                           className="text-xs"
                         >

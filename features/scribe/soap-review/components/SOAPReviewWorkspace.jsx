@@ -35,7 +35,7 @@ export function SOAPReviewWorkspace({ sessionId, className, onApproved, onBack }
     review.session?.status === "READY_FOR_PRESCRIPTION";
 
   return (
-    <section className={className} aria-label="SOAP review workspace">
+    <section className={className} aria-label="SOAP review workspace" data-testid="soap-review-workspace">
       <SOAPReviewToolbar
         status={review.session?.status}
         hasChanges={review.hasChanges}

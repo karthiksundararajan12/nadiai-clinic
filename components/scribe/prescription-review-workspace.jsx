@@ -656,7 +656,7 @@ export function PrescriptionReviewWorkspace({ sessionId, onApproved }) {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="prescription-review-workspace">
       {/* ── Toolbar ──────────────────────────────────────────── */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card px-4 py-3">
         <div className="flex items-center gap-3 flex-wrap">
@@ -719,6 +719,7 @@ export function PrescriptionReviewWorkspace({ sessionId, onApproved }) {
               {/* Approve */}
               <Button
                 size="sm"
+                data-testid="prescription-approve"
                 onClick={approve}
                 disabled={isApproving || isRejecting || isSaving}
                 className="gap-1.5 text-xs"

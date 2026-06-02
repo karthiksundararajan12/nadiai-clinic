@@ -78,6 +78,7 @@ function reducer(state, action) {
 
 export function useTranscriptReview(sessionId) {
   const [state, dispatch] = useReducer(reducer, initialState);
+  const [readOnly, setReadOnly] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [generatingSOAP, setGeneratingSOAP] = useState(false);
@@ -98,6 +99,7 @@ export function useTranscriptReview(sessionId) {
     try {
       const data = await fetchTranscriptWorkspace(sessionId);
       if (requestId !== loadRequestRef.current) return;
+      setReadOnly(Boolean(data?.readOnly));
       dispatch({ type: "LOAD", payload: data });
     } catch (err) {
       if (requestId !== loadRequestRef.current) return;
@@ -126,7 +128,7 @@ export function useTranscriptReview(sessionId) {
 
   const dirtyKeys = useMemo(() => Object.keys(state.dirty), [state.dirty]);
   const { autosaveStatus } = useAutosave({
-    enabled: Boolean(sessionId),
+    enabled: Boolean(sessionId) && !readOnly,
     dirtyKeys,
     onSave: saveSegments,
   });
@@ -186,6 +188,7 @@ export function useTranscriptReview(sessionId) {
 
   return {
     ...state,
+    readOnly,
     loading,
     saving,
     generatingSOAP,

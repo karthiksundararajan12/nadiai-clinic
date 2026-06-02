@@ -15,10 +15,10 @@
 
 import { SessionRepository } from "../repository/session.repository.js";
 import { AuditService }      from "./audit.service.js";
+import { assertValidSessionTransition } from "../lib/session-transitions.js";
 import { createLogger }      from "../logger.js";
 import {
   SESSION_STATUS,
-  VALID_TRANSITIONS,
   TERMINAL_STATUSES,
   RECORDING_BLOCKING_STATUSES,
   PROCESSING_STATUSES,
@@ -466,10 +466,7 @@ export class ScribeSessionService {
    * @param {string} toStatus
    */
   _assertValidTransition(fromStatus, toStatus) {
-    const allowed = VALID_TRANSITIONS[fromStatus] ?? [];
-    if (!allowed.includes(toStatus)) {
-      throw new InvalidStateTransitionError(fromStatus, toStatus);
-    }
+    assertValidSessionTransition(fromStatus, toStatus);
   }
 
   /**

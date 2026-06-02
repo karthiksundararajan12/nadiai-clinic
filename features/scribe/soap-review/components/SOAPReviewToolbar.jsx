@@ -53,7 +53,12 @@ export function SOAPReviewToolbar({
           <XCircle className="size-4" />
           Reject
         </Button>
-        <Button size="sm" onClick={onApprove} disabled={saving || hasChanges || approved}>
+        <Button
+          size="sm"
+          data-testid="soap-approve"
+          onClick={onApprove}
+          disabled={saving || hasChanges || approved}
+        >
           <CheckCircle2 className="size-4" />
           Approve
         </Button>

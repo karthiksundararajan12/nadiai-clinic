@@ -12,8 +12,9 @@ import { EmptyTranscriptState, ReviewErrorState, ReviewLoadingState } from "./Re
 
 export function TranscriptReviewWorkspace({ sessionId, className }) {
   const review = useTranscriptReview(sessionId);
-  const canCompleteReview = review.session?.status === "REVIEWING";
-  const canGenerateSOAP = [
+  const readOnly = review.readOnly;
+  const canCompleteReview = !readOnly && review.session?.status === "REVIEWING";
+  const canGenerateSOAP = !readOnly && [
     "REVIEW_COMPLETED",
     "SOAP_READY",
     "SOAP_REVIEW_REQUIRED",
@@ -28,22 +29,29 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
   if (review.error) return <ReviewErrorState error={review.error} onRetry={review.load} />;
 
   return (
-    <section className={className} aria-label="Transcript review workspace">
-      <ReviewToolbar
-        hasChanges={review.hasChanges}
-        saving={review.saving}
-        autosaveStatus={review.autosaveStatus}
-        canUndo={review.canUndo}
-        canRedo={review.canRedo}
-        canComplete={canCompleteReview}
-        canGenerateSOAP={canGenerateSOAP}
-        generatingSOAP={review.generatingSOAP}
-        onUndo={review.undo}
-        onRedo={review.redo}
-        onSave={review.manualSave}
-        onComplete={review.completeReview}
-        onGenerateSOAP={review.generateSOAP}
-      />
+    <section className={className} aria-label="Transcript review workspace" data-testid="transcript-review-workspace">
+      {readOnly && (
+        <p className="mb-3 text-sm text-muted-foreground rounded-lg border bg-muted/30 px-3 py-2">
+          Archived consultation — transcript is read-only.
+        </p>
+      )}
+      {!readOnly && (
+        <ReviewToolbar
+          hasChanges={review.hasChanges}
+          saving={review.saving}
+          autosaveStatus={review.autosaveStatus}
+          canUndo={review.canUndo}
+          canRedo={review.canRedo}
+          canComplete={canCompleteReview}
+          canGenerateSOAP={canGenerateSOAP}
+          generatingSOAP={review.generatingSOAP}
+          onUndo={review.undo}
+          onRedo={review.redo}
+          onSave={review.manualSave}
+          onComplete={review.completeReview}
+          onGenerateSOAP={review.generateSOAP}
+        />
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0">
@@ -71,7 +79,7 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
                         key={segment.id}
                         segment={segment}
                         dirty={Boolean(review.dirty[segment.id])}
-                        disabled={review.saving || review.session?.status === "REVIEW_COMPLETED"}
+                        disabled={readOnly || review.saving || review.session?.status === "REVIEW_COMPLETED"}
                         onChange={review.updateSegment}
                       />
                     ))}
@@ -91,7 +99,7 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
         <VersionHistoryPanel
           versions={review.versions}
           onRestore={review.restoreVersion}
-          disabled={review.saving || review.session?.status === "REVIEW_COMPLETED"}
+          disabled={readOnly || review.saving || review.session?.status === "REVIEW_COMPLETED"}
         />
       </div>
     </section>

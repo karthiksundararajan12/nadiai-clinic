@@ -151,6 +151,20 @@ export const SOAP_VIEWABLE_SESSION_STATUSES = Object.freeze([
   SESSION_STATUS.COMPLETED,
 ]);
 
+/** Transcript may be viewed read-only (no status change to REVIEWING). */
+export const TRANSCRIPT_READONLY_SESSION_STATUSES = Object.freeze([
+  SESSION_STATUS.READY_FOR_SOAP,
+  SESSION_STATUS.GENERATING_SOAP,
+  ...SOAP_VIEWABLE_SESSION_STATUSES,
+]);
+
+/** Transcript review workspace allows editing (may enter REVIEWING from TRANSCRIBED). */
+export const TRANSCRIPT_EDITABLE_SESSION_STATUSES = Object.freeze([
+  SESSION_STATUS.TRANSCRIBED,
+  SESSION_STATUS.REVIEWING,
+  SESSION_STATUS.REVIEW_COMPLETED,
+]);
+
 /** States where the system is actively processing (no doctor action expected). */
 export const PROCESSING_STATUSES = Object.freeze([
   SESSION_STATUS.UPLOADING,

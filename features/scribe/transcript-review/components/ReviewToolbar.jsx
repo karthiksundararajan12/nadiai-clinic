@@ -43,7 +43,12 @@ export function ReviewToolbar({
           <Save className="size-4" />
           Save version
         </Button>
-        <Button size="sm" onClick={onComplete} disabled={!canComplete || saving || hasChanges || generatingSOAP}>
+        <Button
+          size="sm"
+          data-testid="scribe-complete-review"
+          onClick={onComplete}
+          disabled={!canComplete || saving || hasChanges || generatingSOAP}
+        >
           <CheckCircle2 className="size-4" />
           Complete review
         </Button>

@@ -245,7 +245,7 @@ export function ScribeWorkflow() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6" data-testid="scribe-workflow">
       <LanguageToggle value={language} onChange={setLanguage} />
 
       <Card className={cn(pipelineBusy && "border-primary/30")}>
@@ -295,6 +295,7 @@ export function ScribeWorkflow() {
             <Button
               variant="outline"
               size="sm"
+              data-testid="consultations-refresh"
               onClick={() => loadConsultations(true)}
               disabled={refreshing}
             >
@@ -440,7 +441,11 @@ function ActiveConsultationRow({
   const statusLabel = status.replace(/_/g, " ");
 
   return (
-    <div className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between">
+    <div
+      className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
+      data-testid="consultation-row"
+      data-session-id={session.id}
+    >
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">{session.id.slice(0, 8)}…</span>
@@ -456,18 +461,36 @@ function ActiveConsultationRow({
           </Button>
         )}
         {canReviewTranscript && (
-          <Button size="sm" variant="outline" onClick={onReviewTranscript} className="text-xs">
+          <Button
+            size="sm"
+            variant="outline"
+            data-testid="review-transcript"
+            onClick={onReviewTranscript}
+            className="text-xs"
+          >
             Review transcript
           </Button>
         )}
         {canGenerateSOAP && (
-          <Button size="sm" disabled={busy} onClick={onGenerateSOAP} className="text-xs gap-1">
+          <Button
+            size="sm"
+            disabled={busy}
+            data-testid="scribe-generate-soap"
+            onClick={onGenerateSOAP}
+            className="text-xs gap-1"
+          >
             <Sparkles className="h-3.5 w-3.5" />
             {busy ? "Generating…" : "Generate SOAP"}
           </Button>
         )}
         {canReviewSOAP && (
-          <Button size="sm" variant="secondary" onClick={onReviewSOAP} className="text-xs">
+          <Button
+            size="sm"
+            variant="secondary"
+            data-testid="review-soap"
+            onClick={onReviewSOAP}
+            className="text-xs"
+          >
             Review SOAP
           </Button>
         )}

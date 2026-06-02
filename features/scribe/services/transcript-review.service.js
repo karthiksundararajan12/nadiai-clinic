@@ -3,11 +3,18 @@
  * and correction before SOAP generation.
  */
 
-import { AUDIT_ACTION, SESSION_STATUS } from "../constants.js";
+import {
+  AUDIT_ACTION,
+  SESSION_STATUS,
+  TRANSCRIPT_READONLY_SESSION_STATUSES,
+} from "../constants.js";
+import { resolveTranscriptWorkspaceAccess } from "../lib/transcript-workspace-policy.js";
 import {
   InvalidStateTransitionError,
+  SessionFinalizedError,
   SessionNotFoundError,
   SessionValidationError,
+  TranscriptionNotReadyError,
 } from "../errors.js";
 import {
   CompleteReviewSchema,
@@ -35,7 +42,14 @@ export class TranscriptReviewService {
     const session = await this._sessions.findById(sessionId, ctx.doctorId);
     if (!session) throw new SessionNotFoundError(sessionId);
 
-    if (session.status === SESSION_STATUS.TRANSCRIBED) {
+    const access = resolveTranscriptWorkspaceAccess(session.status);
+    if (access.mode === "unavailable") {
+      throw new TranscriptionNotReadyError(
+        `Transcript is not available for session status '${session.status}'`,
+      );
+    }
+
+    if (access.transitionToReviewing) {
       await this._sessions.transitionStatus(
         session.id,
         ctx.doctorId,
@@ -48,16 +62,11 @@ export class TranscriptReviewService {
         ctx,
         metadata: {},
       });
-    } else if (
-      session.status !== SESSION_STATUS.REVIEWING &&
-      session.status !== SESSION_STATUS.REVIEW_COMPLETED
-    ) {
-      throw new InvalidStateTransitionError(session.status, SESSION_STATUS.REVIEWING);
     }
 
     const nextSession = await this._sessions.findById(sessionId, ctx.doctorId);
     const workspace = await this._review.getWorkspace(sessionId);
-    return { session: nextSession, ...workspace };
+    return { session: nextSession, ...workspace, readOnly: access.readOnly };
   }
 
   /**
@@ -232,13 +241,13 @@ export class TranscriptReviewService {
     return { session: updated, version };
   }
 
-  async _assertReviewable(sessionId, ctx, allowCompleted = false) {
+  async _assertReviewable(sessionId, ctx) {
     const session = await this._sessions.findById(sessionId, ctx.doctorId);
     if (!session) throw new SessionNotFoundError(sessionId);
-    const allowed = allowCompleted
-      ? [SESSION_STATUS.REVIEWING, SESSION_STATUS.REVIEW_COMPLETED]
-      : [SESSION_STATUS.REVIEWING];
-    if (!allowed.includes(session.status)) {
+    if (TRANSCRIPT_READONLY_SESSION_STATUSES.includes(session.status)) {
+      throw new SessionFinalizedError();
+    }
+    if (![SESSION_STATUS.REVIEWING, SESSION_STATUS.REVIEW_COMPLETED].includes(session.status)) {
       throw new InvalidStateTransitionError(session.status, SESSION_STATUS.REVIEWING);
     }
     return session;

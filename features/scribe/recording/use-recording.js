@@ -148,6 +148,8 @@ export function useRecording(options = {}) {
   // Stable service ref — persists across renders without causing re-renders
   const serviceRef     = useRef(null);
   const chunkIndexRef  = useRef(0);
+  /** Sync mirror of chunks — stopRecording must not read stale reducer state. */
+  const chunksRef      = useRef(/** @type {Blob[]} */ ([]));
 
   // Stable callback refs — prevents stale closures in the service callbacks
   const onChunkReadyRef = useRef(onChunkReady);
@@ -170,22 +172,25 @@ export function useRecording(options = {}) {
 
   // ── Auto-stop at max duration ──────────────────────────────
   const stopRecording = useCallback(async () => {
-    if (!serviceRef.current) return chunks;
+    if (!serviceRef.current) return chunksRef.current;
     if (
       recordingState !== RECORDING_STATE.RECORDING &&
       recordingState !== RECORDING_STATE.PAUSED
-    ) return chunks;
+    ) {
+      return chunksRef.current;
+    }
 
     dispatch({ type: "STOPPING" });
 
     try {
       await serviceRef.current.stop();
+      // Final ondataavailable runs before onstop; flush React dispatches.
+      await new Promise((resolve) => queueMicrotask(resolve));
     } catch {
       /* already inactive — ignore */
     }
 
-    // Capture chunks before cleanup resets the service
-    const finalChunks = state.chunks;
+    const finalChunks = [...chunksRef.current];
 
     serviceRef.current.cleanup();
     serviceRef.current = null;
@@ -196,7 +201,7 @@ export function useRecording(options = {}) {
 
     return finalChunks;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [recordingState]); // intentionally minimal deps — reads state.chunks via closure
+  }, [recordingState]);
 
   useEffect(() => {
     if (isRecording && duration >= maxDurationSeconds) {
@@ -220,6 +225,7 @@ export function useRecording(options = {}) {
     }
 
     dispatch({ type: "REQUEST_PERMISSION" });
+    chunksRef.current = [];
 
     const service = new RecordingService();
     serviceRef.current = service;
@@ -228,6 +234,7 @@ export function useRecording(options = {}) {
       await service.requestStream(deviceId);
 
       const resolvedMimeType = service.startRecording((blob) => {
+        chunksRef.current = [...chunksRef.current, blob];
         dispatch({ type: "CHUNK_RECEIVED", blob });
         onChunkReadyRef.current?.(blob, chunkIndexRef.current++);
       }, chunkIntervalMs);
@@ -265,6 +272,7 @@ export function useRecording(options = {}) {
     serviceRef.current?.cleanup();
     serviceRef.current    = null;
     chunkIndexRef.current = 0;
+    chunksRef.current     = [];
     dispatch({ type: "RESET" });
   }, []);
 

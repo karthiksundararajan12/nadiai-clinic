@@ -17,15 +17,23 @@ import { useRecording } from "@/features/scribe/recording/use-recording.js";
  */
 export function ScribeRecordingPanel({ disabled, onRecordingComplete, onError }) {
   const recording = useRecording({
+    // 5s chunks so short test recordings still capture audio before stop
+    chunkIntervalMs: 5_000,
     onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
   });
 
   const handleStop = useCallback(async () => {
-    const chunks = await recording.stopRecording();
-    if (chunks?.length) {
+    try {
+      const chunks = await recording.stopRecording();
+      if (!chunks?.length) {
+        onError?.(new Error("No audio captured. Record for a few seconds, then stop."));
+        return;
+      }
       await onRecordingComplete(chunks, recording.mimeType, recording.duration);
+    } catch (err) {
+      onError?.(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [recording, onRecordingComplete]);
+  }, [recording, onRecordingComplete, onError]);
 
   const isRecording = recording.isRecording || recording.isPaused;
 

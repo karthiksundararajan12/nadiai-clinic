@@ -85,9 +85,9 @@ export class ScribeSessionService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
     const input = parsed.data;
 
-    // 2. Release zombie sessions, then guard concurrent in-flight work
+    // 2. Clear any stuck pipeline sessions so a new consultation can always start
     await this._releaseStaleBlockingSessions(ctx.doctorId);
-    await this._assertNoActiveSession(ctx.doctorId);
+    await this.releaseBlockingSessions(ctx);
 
     // 3. Build storage prefix
     const storagePrefix = SCRIBE_STORAGE.buildPrefix(

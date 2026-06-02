@@ -297,9 +297,7 @@ export class SessionRepository extends BaseRepository {
           .from(this._table)
           .update({ status: SESSION_STATUS.FAILED, error_message: errorMessage })
           .eq("id", sessionId)
-          .not("status", "in", `(${SESSION_STATUS.COMPLETED})`)
-          .select("id")
-          .single(),
+          .neq("status", SESSION_STATUS.COMPLETED),
       "markFailed",
     );
   }

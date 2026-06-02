@@ -22,7 +22,6 @@ export default function ScribePage() {
   const [rxError, setRxError] = useState(null);
   const [rxGenerating, setRxGenerating] = useState(null);
   const [rxReviewSessionId, setRxReviewSessionId] = useState(null);
-  const [workflowKey, setWorkflowKey] = useState(0);
 
   const loadRxSessions = useCallback(async () => {
     setRxLoading(true);
@@ -96,10 +95,7 @@ export default function ScribePage() {
       />
 
       <div className="flex-1 p-6 space-y-6">
-        <ScribeWorkflow
-          key={workflowKey}
-          onSessionsChange={() => setWorkflowKey((k) => k + 1)}
-        />
+        <ScribeWorkflow />
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">

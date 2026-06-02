@@ -48,13 +48,16 @@ export function ScribeRecorder({
   isRecording,
   isPaused,
   duration,
+  disabled = false,
   onStart,
   onPause,
   onResume,
   onStop,
 }) {
+  const canStart = !disabled && !isRecording && typeof onStart === "function";
+
   return (
-    <div className="flex flex-col items-center gap-6 py-2 w-full">
+    <div className={cn("flex flex-col items-center gap-6 py-2 w-full", disabled && !isRecording && "opacity-60")}>
       {/* ── Mic button ──────────────────────────────────────────────── */}
       <div className="relative flex items-center justify-center">
         {/* Pulse rings — only when actively recording */}
@@ -66,16 +69,19 @@ export function ScribeRecorder({
         )}
 
         <button
-          onClick={isRecording ? undefined : onStart}
+          type="button"
+          onClick={canStart ? onStart : undefined}
           aria-label={isRecording ? "Recording in progress" : "Start recording"}
-          disabled={isRecording}
+          disabled={isRecording || (!canStart && !isRecording)}
           className={cn(
             "relative z-10 flex h-24 w-24 items-center justify-center rounded-full transition-all duration-300 shadow-lg",
             isRecording && !isPaused
               ? "bg-primary text-primary-foreground cursor-default shadow-primary/30"
               : isRecording && isPaused
               ? "bg-muted text-muted-foreground cursor-default"
-              : "bg-primary/10 text-primary hover:bg-primary/20 hover:scale-105 cursor-pointer"
+              : canStart
+              ? "bg-primary/10 text-primary hover:bg-primary/20 hover:scale-105 cursor-pointer"
+              : "bg-primary/10 text-primary cursor-not-allowed"
           )}
         >
           <Mic className={cn("h-9 w-9 transition-transform duration-300", isRecording && !isPaused && "scale-110")} />

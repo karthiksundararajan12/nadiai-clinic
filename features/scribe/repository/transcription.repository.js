@@ -61,6 +61,48 @@ export class TranscriptionRepository extends BaseRepository {
   }
 
   /**
+   * Claims a specific pending job by id (used for doctor-triggered processing).
+   *
+   * @param {string} jobId
+   * @param {string} workerId
+   */
+  async claimJobById(jobId, workerId) {
+    const now = new Date().toISOString();
+    const candidate = await this._runNullable(
+      () =>
+        this._db
+          .from("scribe_processing_queue")
+          .select("*")
+          .eq("id", jobId)
+          .single(),
+      "findTranscriptionJobById",
+    );
+
+    if (!candidate || candidate.status !== JOB_STATUS.PENDING) {
+      return candidate?.status === JOB_STATUS.PROCESSING ? candidate : null;
+    }
+
+    return this._runNullable(
+      () =>
+        this._db
+          .from("scribe_processing_queue")
+          .update({
+            status: JOB_STATUS.PROCESSING,
+            started_at: now,
+            locked_at: now,
+            locked_by: workerId,
+            last_heartbeat_at: now,
+            attempt_count: (candidate.attempt_count ?? 0) + 1,
+          })
+          .eq("id", jobId)
+          .eq("status", JOB_STATUS.PENDING)
+          .select("*")
+          .single(),
+      "claimTranscriptionJobById",
+    );
+  }
+
+  /**
    * Claims one pending transcription job with optimistic concurrency.
    *
    * @param {string} workerId

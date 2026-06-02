@@ -34,7 +34,7 @@ import { formatBytes }         from "./utils.js";
 
 /**
  * @param {{
- *   onRecordingComplete?: (chunks: Blob[], mimeType: string) => void;
+ *   onRecordingComplete?: (chunks: Blob[], mimeType: string, durationSeconds: number) => void;
  *   onError?:             (err: import("../../recording/errors.js").RecordingError) => void;
  *   sessionId?:           string;
  *   disabled?:            boolean;
@@ -71,7 +71,7 @@ export function RecordingControls({
 
   const handleStop = useCallback(async () => {
     const chunks = await recording.stopRecording();
-    onRecordingComplete?.(chunks, recording.mimeType);
+    onRecordingComplete?.(chunks, recording.mimeType, recording.duration);
   }, [recording, onRecordingComplete]);
 
   // ── Audio level ─────────────────────────────────────────

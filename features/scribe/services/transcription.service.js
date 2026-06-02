@@ -168,6 +168,64 @@ export class TranscriptionService {
   }
 
   /**
+   * Queues (if needed) and processes transcription for a single session.
+   * Used from the doctor UI so local dev does not require a separate worker cron.
+   *
+   * @param {string} sessionId
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  async runForSession(sessionId, ctx) {
+    let session = await this._sessions.findById(sessionId, ctx.doctorId);
+    if (!session) throw new SessionNotFoundError(sessionId);
+
+    if (session.status === SESSION_STATUS.TRANSCRIBED) {
+      return {
+        session,
+        result: { sessionId, status: "already_transcribed" },
+      };
+    }
+
+    if (
+      session.status === SESSION_STATUS.UPLOADED ||
+      session.status === SESSION_STATUS.TRANSCRIPTION_FAILED
+    ) {
+      await this.queueSession(sessionId, { priority: 10, force: true }, ctx);
+      session = await this._sessions.findById(sessionId, ctx.doctorId);
+    }
+
+    if (
+      session.status !== SESSION_STATUS.TRANSCRIPTION_QUEUED &&
+      session.status !== SESSION_STATUS.TRANSCRIBING
+    ) {
+      throw new TranscriptionNotReadyError(
+        `Session status '${session.status}' is not ready for transcription`,
+      );
+    }
+
+    let job = await this._transcriptions.findActiveJob(sessionId);
+    if (!job) {
+      throw new TranscriptionNotReadyError("No active transcription job found for this session");
+    }
+
+    const workerId = `doctor_${ctx.actorId}`;
+    if (job.status === JOB_STATUS.PENDING) {
+      const claimed = await this._transcriptions.claimJobById(job.id, workerId);
+      if (!claimed) {
+        job = await this._transcriptions.findActiveJob(sessionId);
+        if (!job) {
+          throw new TranscriptionNotReadyError("Could not claim transcription job");
+        }
+      } else {
+        job = claimed;
+      }
+    }
+
+    const result = await this._processJob(job, workerId);
+    const updatedSession = await this._sessions.findById(sessionId, ctx.doctorId);
+    return { session: updatedSession, result };
+  }
+
+  /**
    * Worker entry-point. Claims and processes up to batch_size pending jobs.
    *
    * @param {Record<string,unknown>} rawInput

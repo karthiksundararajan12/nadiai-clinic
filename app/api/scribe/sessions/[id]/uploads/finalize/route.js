@@ -22,9 +22,9 @@ export async function POST(request, { params }) {
     const { id } = await params;
     const scribe = await resolveScribeContext(request);
     if (!scribe) {
-      const { ctx } = scribe;
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const { ctx } = scribe;
 
     const body = await request.json().catch(() => ({}));
     const { audioUploadService } = scribe.services;

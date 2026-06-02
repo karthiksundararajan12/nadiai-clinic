@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { isScribeError, scribeLogger, toApiError } from "@/features/scribe";
+import { describeActiveSOAPAIProvider } from "@/features/scribe/services/ai-providers/provider-factory.js";
 import { resolveScribeContext } from "../../../../_helpers/context";
 
 export const maxDuration = 120;
@@ -14,6 +15,9 @@ export async function POST(request, { params }) {
     const { ctx } = scribe;
 
     const body = await request.json().catch(() => ({}));
+    const aiConfig = describeActiveSOAPAIProvider();
+    log.info("SOAP generation requested", { sessionId: id, ...aiConfig });
+
     const { soapGenerationService } = scribe.services;
     const result = await soapGenerationService.generate(id, body, ctx);
     return NextResponse.json(result, { status: 201 });

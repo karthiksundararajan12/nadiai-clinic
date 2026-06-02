@@ -29,6 +29,9 @@ export {
   SOAP_NOTE_STATUS,
   SOAP_SECTION,
   SOAP_GENERATION_CONFIG,
+  PRESCRIPTION_DRAFT_STATUS,
+  PRESCRIPTION_REVIEW_STATUS,
+  PRESCRIPTION_GENERATION_CONFIG,
   AUDIT_ACTION,
   SCRIBE_LIMITS,
   SCRIBE_STORAGE,
@@ -58,6 +61,10 @@ export {
   SOAPValidationError,
   SOAPNotReadyError,
   QuotaExceededError,
+  PrescriptionNotReadyError,
+  PrescriptionGenerationError,
+  PrescriptionReviewError,
+  PrescriptionValidationError,
   isScribeError,
   toApiError,
 } from "./errors.js";
@@ -93,6 +100,14 @@ export {
   SessionFilterSchema,
   PatchSessionSchema,
   TranscriptSegmentSchema,
+  PrescriptionDraftSchema,
+  PrescriptionMedicationSchema,
+  GeneratePrescriptionSchema,
+  RetryPrescriptionGenerationSchema,
+  UpdatePrescriptionDraftSchema,
+  SavePrescriptionVersionSchema,
+  ApprovePrescriptionSchema,
+  RejectPrescriptionSchema,
 } from "./schemas.js";
 
 export { createLogger, scribeLogger } from "./logger.js";
@@ -115,11 +130,23 @@ export { SOAPGenerationService } from "./services/soap-generation.service.js";
 export { SOAPReviewService } from "./services/soap-review.service.js";
 export { AIProvider } from "./services/ai-providers/ai-provider.js";
 export { AnthropicProvider } from "./services/ai-providers/anthropic.provider.js";
+export { GeminiProvider } from "./services/ai-providers/gemini.provider.js";
 export { OpenAIProvider } from "./services/ai-providers/openai.provider.js";
 export {
   createSOAPAIProvider,
   resolveSOAPProviderName,
 } from "./services/ai-providers/provider-factory.js";
+
+export { TranscriptionProvider } from "./services/transcription-providers/transcription-provider.js";
+export { DeepgramProvider } from "./services/transcription-providers/deepgram.provider.js";
+export {
+  createTranscriptionProvider,
+  resolveTranscriptionProviderName,
+} from "./services/transcription-providers/provider-factory.js";
+
+export { PrescriptionRepository }      from "./repository/prescription.repository.js";
+export { PrescriptionService }         from "./services/prescription.service.js";
+export { PrescriptionReviewService }   from "./services/prescription-review.service.js";
 
 // ─────────────────────────────────────────────────────────────
 // FACTORY
@@ -138,6 +165,9 @@ import { TranscriptionService as _TS }    from "./services/transcription.service
 import { TranscriptReviewService as _RS } from "./services/transcript-review.service.js";
 import { SOAPGenerationService as _SOAPService } from "./services/soap-generation.service.js";
 import { SOAPReviewService as _SOAPReviewService } from "./services/soap-review.service.js";
+import { PrescriptionRepository as _PrescRepo }     from "./repository/prescription.repository.js";
+import { PrescriptionService as _PrescService }       from "./services/prescription.service.js";
+import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescription-review.service.js";
 
 /**
  * Wires together all scribe domain services with a Supabase client.
@@ -157,6 +187,7 @@ export function createScribeServices(supabaseClient) {
   const transcriptionRepo = new _TR(supabase);
   const reviewRepo = new _RR(supabase);
   const soapRepo = new _SOAPRepo(supabase);
+  const prescriptionRepo = new _PrescRepo(supabase);
   const auditRepo   = new _AR(supabase);
   const auditSvc    = new _AS(auditRepo);
   const sessionSvc  = new _SSS(sessionRepo, auditSvc);
@@ -165,13 +196,17 @@ export function createScribeServices(supabaseClient) {
   const reviewSvc = new _RS(sessionRepo, reviewRepo, auditSvc);
   const soapSvc = new _SOAPService(sessionRepo, soapRepo, auditSvc);
   const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc);
+  const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
+  const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
   return {
-    sessionService: sessionSvc,
-    auditService: auditSvc,
-    audioUploadService: uploadSvc,
-    transcriptionService: transcriptionSvc,
-    transcriptReviewService: reviewSvc,
-    soapGenerationService: soapSvc,
-    soapReviewService: soapReviewSvc,
+    sessionService:              sessionSvc,
+    auditService:                auditSvc,
+    audioUploadService:          uploadSvc,
+    transcriptionService:        transcriptionSvc,
+    transcriptReviewService:     reviewSvc,
+    soapGenerationService:       soapSvc,
+    soapReviewService:           soapReviewSvc,
+    prescriptionService:         prescriptionSvc,
+    prescriptionReviewService:   prescriptionReviewSvc,
   };
 }

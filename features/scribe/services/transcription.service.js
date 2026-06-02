@@ -1,8 +1,16 @@
 /**
- * @fileoverview Production transcription service.
+ * @fileoverview TranscriptionService — orchestrates the transcription pipeline.
  *
- * Owns UPLOADED → TRANSCRIPTION_QUEUED → TRANSCRIBING →
- * TRANSCRIBED / TRANSCRIPTION_FAILED.
+ * State machine owned here:
+ *   UPLOADED / TRANSCRIPTION_FAILED → TRANSCRIPTION_QUEUED → TRANSCRIBING
+ *   → TRANSCRIBED  (success)
+ *   → TRANSCRIPTION_FAILED  (all retries exhausted)
+ *
+ * Provider strategy:
+ *   All speech-to-text work is delegated to a TranscriptionProvider instance.
+ *   The default provider is DeepgramProvider (nova-2-medical).
+ *   Swap the provider via the TRANSCRIPTION_PROVIDER env var without touching
+ *   this service.
  */
 
 import { createLogger } from "../logger.js";
@@ -29,7 +37,7 @@ import {
   RetryTranscriptionSchema,
   TranscriptionWorkerSchema,
 } from "../schemas.js";
-import { OpenAITranscriptionClient } from "./openai-transcription.client.js";
+import { createTranscriptionProvider } from "./transcription-providers/provider-factory.js";
 
 export class TranscriptionService {
   /**
@@ -37,22 +45,26 @@ export class TranscriptionService {
    * @param {import("../repository/session.repository.js").SessionRepository} sessionRepository
    * @param {import("../repository/transcription.repository.js").TranscriptionRepository} transcriptionRepository
    * @param {import("./audit.service.js").AuditService} auditService
-   * @param {OpenAITranscriptionClient} [openaiClient]
+   * @param {import("./transcription-providers/transcription-provider.js").TranscriptionProvider} [provider]
    */
-  constructor(supabase, sessionRepository, transcriptionRepository, auditService, openaiClient) {
-    this._db = supabase;
-    this._sessions = sessionRepository;
+  constructor(supabase, sessionRepository, transcriptionRepository, auditService, provider) {
+    this._db             = supabase;
+    this._sessions       = sessionRepository;
     this._transcriptions = transcriptionRepository;
-    this._audit = auditService;
-    this._openai = openaiClient ?? new OpenAITranscriptionClient();
-    this._log = createLogger({ component: "TranscriptionService" });
+    this._audit          = auditService;
+    this._provider       = provider ?? createTranscriptionProvider();
+    this._log            = createLogger({ component: "TranscriptionService" });
   }
 
+  // ─────────────────────────────────────────────────────────────
+  // PUBLIC API
+  // ─────────────────────────────────────────────────────────────
+
   /**
-   * Queues transcription for a doctor-owned uploaded session.
+   * Validates state and enqueues a transcription job for a doctor-owned session.
    *
-   * @param {string} sessionId
-   * @param {Record<string, unknown>} rawInput
+   * @param {string}                 sessionId
+   * @param {Record<string,unknown>} rawInput
    * @param {import("../models/session.model.js").RequestContext} ctx
    */
   async queueSession(sessionId, rawInput, ctx) {
@@ -88,26 +100,26 @@ export class TranscriptionService {
 
     const now = new Date().toISOString();
     const transcription = await this._transcriptions.upsertTranscription({
-      session_id: sessionId,
-      clinic_id: ctx.clinicId,
-      doctor_id: ctx.doctorId,
-      provider: TRANSCRIPTION_CONFIG.PROVIDER,
-      model: process.env.OPENAI_TRANSCRIPTION_MODEL || TRANSCRIPTION_CONFIG.DEFAULT_MODEL,
-      language: session.language,
-      status: TRANSCRIPTION_STATUS.QUEUED,
+      session_id:    sessionId,
+      clinic_id:     ctx.clinicId,
+      doctor_id:     ctx.doctorId,
+      provider:      this._provider.name,
+      model:         this._provider.model,
+      language:      session.language,
+      status:        TRANSCRIPTION_STATUS.QUEUED,
       attempt_count: 0,
-      queued_at: now,
-      error: null,
+      queued_at:     now,
+      error:         null,
     });
 
     const { job, created } = await this._transcriptions.enqueue({
       sessionId,
       priority: input.priority,
       metadata: {
-        clinicId: ctx.clinicId,
-        doctorId: ctx.doctorId,
-        queuedBy: ctx.actorId,
-        force: input.force,
+        clinicId:  ctx.clinicId,
+        doctorId:  ctx.doctorId,
+        queuedBy:  ctx.actorId,
+        force:     input.force,
       },
     });
 
@@ -115,21 +127,17 @@ export class TranscriptionService {
       action: AUDIT_ACTION.TRANSCRIPTION_QUEUED,
       sessionId,
       ctx,
-      metadata: {
-        jobId: job.id,
-        created,
-        priority: input.priority,
-      },
+      metadata: { jobId: job.id, created, priority: input.priority },
     });
 
     return { session: nextSession, transcription, job, queued: true };
   }
 
   /**
-   * Retries transcription after a failed attempt.
+   * Requeues transcription after a failed attempt.
    *
-   * @param {string} sessionId
-   * @param {Record<string, unknown>} rawInput
+   * @param {string}                 sessionId
+   * @param {Record<string,unknown>} rawInput
    * @param {import("../models/session.model.js").RequestContext} ctx
    */
   async retrySession(sessionId, rawInput, ctx) {
@@ -146,7 +154,7 @@ export class TranscriptionService {
   }
 
   /**
-   * Fetches transcription summary and segments.
+   * Returns the current transcription summary and all segments for a session.
    *
    * @param {string} sessionId
    * @param {import("../models/session.model.js").RequestContext} ctx
@@ -155,14 +163,14 @@ export class TranscriptionService {
     const session = await this._sessions.findByIdForClinic(sessionId, ctx.clinicId);
     if (!session) throw new SessionNotFoundError(sessionId);
     const transcription = await this._transcriptions.findBySession(sessionId);
-    const segments = await this._transcriptions.getSegments(sessionId);
+    const segments      = await this._transcriptions.getSegments(sessionId);
     return { session, transcription, segments };
   }
 
   /**
-   * Worker entrypoint. Processes up to batch_size jobs.
+   * Worker entry-point. Claims and processes up to batch_size pending jobs.
    *
-   * @param {Record<string, unknown>} rawInput
+   * @param {Record<string,unknown>} rawInput
    */
   async processQueue(rawInput) {
     const parsed = TranscriptionWorkerSchema.safeParse(rawInput);
@@ -180,14 +188,15 @@ export class TranscriptionService {
   }
 
   /**
-   * Requeues stale processing jobs and marks their sessions as queued again.
+   * Finds and requeues stale processing jobs, resetting their sessions.
    *
-   * @param {Record<string, unknown>} rawInput
+   * @param {Record<string,unknown>} rawInput
    */
   async recoverStaleJobs(rawInput) {
     const parsed = RecoverTranscriptionJobsSchema.safeParse(rawInput);
     if (!parsed.success) throw new SessionValidationError(parsed.error);
-    const jobs = await this._transcriptions.findStaleProcessingJobs(parsed.data.stale_minutes);
+
+    const jobs      = await this._transcriptions.findStaleProcessingJobs(parsed.data.stale_minutes);
     const recovered = [];
 
     for (const job of jobs) {
@@ -208,10 +217,20 @@ export class TranscriptionService {
     return { recovered };
   }
 
-  /** @param {Record<string, unknown>} job */
+  // ─────────────────────────────────────────────────────────────
+  // PRIVATE — JOB PROCESSING
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Processes a single claimed job end-to-end.
+   *
+   * @param {Record<string,unknown>} job
+   * @param {string}                 workerId
+   */
   async _processJob(job, workerId) {
     const startedAt = Date.now();
-    const session = await this._sessions.findByIdForWorker(job.session_id);
+    const session   = await this._sessions.findByIdForWorker(job.session_id);
+
     if (!session) {
       await this._transcriptions.failJob(job.id, "Session not found", false, job.attempt_count, job.max_attempts);
       return { jobId: job.id, status: JOB_STATUS.FAILED, error: "Session not found" };
@@ -229,9 +248,12 @@ export class TranscriptionService {
         session.status !== SESSION_STATUS.TRANSCRIPTION_QUEUED &&
         session.status !== SESSION_STATUS.UPLOADED
       ) {
-        throw new TranscriptionNotReadyError(`Session status ${session.status} is not ready for transcription`);
+        throw new TranscriptionNotReadyError(
+          `Session status '${session.status}' is not ready for transcription`,
+        );
       }
 
+      // TRANSCRIPTION_QUEUED → TRANSCRIBING
       const fromStatus = session.status;
       await this._sessions.transitionStatus(
         session.id,
@@ -242,72 +264,75 @@ export class TranscriptionService {
       );
 
       await this._transcriptions.upsertTranscription({
-        session_id: session.id,
-        clinic_id: session.clinic_id,
-        doctor_id: session.doctor_id,
-        provider: TRANSCRIPTION_CONFIG.PROVIDER,
-        model: process.env.OPENAI_TRANSCRIPTION_MODEL || TRANSCRIPTION_CONFIG.DEFAULT_MODEL,
-        language: session.language,
-        status: TRANSCRIPTION_STATUS.PROCESSING,
+        session_id:    session.id,
+        clinic_id:     session.clinic_id,
+        doctor_id:     session.doctor_id,
+        provider:      this._provider.name,
+        model:         this._provider.model,
+        language:      session.language,
+        status:        TRANSCRIPTION_STATUS.PROCESSING,
         attempt_count: job.attempt_count,
-        started_at: new Date().toISOString(),
-        error: null,
+        started_at:    new Date().toISOString(),
+        error:         null,
       });
 
       await this._audit.log({
-        action: AUDIT_ACTION.TRANSCRIPTION_STARTED,
+        action:    AUDIT_ACTION.TRANSCRIPTION_STARTED,
         sessionId: session.id,
         ctx,
-        metadata: { jobId: job.id, attempt: job.attempt_count },
+        metadata:  { jobId: job.id, attempt: job.attempt_count, provider: this._provider.name },
       });
 
-      const result = await this._transcribeSessionAudio(session);
-      const completedAt = new Date().toISOString();
+      // ── Core transcription call ──────────────────────────────────────────
+      const result            = await this._transcribeSessionAudio(session);
+      const completedAt       = new Date().toISOString();
       const processingDurationMs = Date.now() - startedAt;
 
+      // ── Persist transcription summary row ────────────────────────────────
       const transcription = await this._transcriptions.upsertTranscription({
-        session_id: session.id,
-        clinic_id: session.clinic_id,
-        doctor_id: session.doctor_id,
-        provider: TRANSCRIPTION_CONFIG.PROVIDER,
-        model: result.model,
-        language: result.language,
-        full_text: result.text,
-        text: result.text,
-        segments: result.segments,
-        speaker_map: result.speakerMap,
+        session_id:              session.id,
+        clinic_id:               session.clinic_id,
+        doctor_id:               session.doctor_id,
+        provider:                this._provider.name,
+        model:                   result.model,
+        language:                result.language,
+        full_text:               result.text,
+        text:                    result.text,
+        segments:                result.segments,
+        speaker_map:             result.speakerMap,
         low_confidence_segments: result.lowConfidenceSegments,
-        low_confidence_count: result.lowConfidenceSegments.length,
-        average_confidence: result.averageConfidence,
-        confidence_summary: result.confidenceSummary,
-        provider_response: result.providerResponse,
-        transcription_model: result.model,
-        whisper_detected_language: result.language,
-        chunk_count: result.chunkCount,
-        cost_cents: result.costCents,
-        processing_duration_ms: processingDurationMs,
-        status: TRANSCRIPTION_STATUS.COMPLETED,
-        attempt_count: job.attempt_count,
-        completed_at: completedAt,
-        error: null,
+        low_confidence_count:    result.lowConfidenceSegments.length,
+        average_confidence:      result.averageConfidence,
+        confidence_summary:      result.confidenceSummary,
+        provider_response:       result.providerResponse,
+        transcription_model:     result.model,
+        chunk_count:             result.chunkCount,
+        cost_cents:              result.costCents,
+        processing_duration_ms:  processingDurationMs,
+        status:                  TRANSCRIPTION_STATUS.COMPLETED,
+        attempt_count:           job.attempt_count,
+        completed_at:            completedAt,
+        error:                   null,
       });
 
+      // ── Persist normalised segments ───────────────────────────────────────
       await this._transcriptions.replaceSegments(
         transcription.id,
         session.id,
-        result.segments.map((segment) => ({
-          segment_index: segment.index,
-          start_seconds: segment.start,
-          end_seconds: segment.end,
-          text: segment.text,
-          speaker: segment.speaker,
-          speaker_label: segment.speaker_label,
-          confidence: segment.confidence,
-          is_low_confidence: segment.is_low_confidence,
-          provider_metadata: segment.provider_metadata,
+        result.segments.map((seg) => ({
+          segment_index:     seg.index,
+          start_seconds:     seg.start,
+          end_seconds:       seg.end,
+          text:              seg.text,
+          speaker:           seg.speaker,
+          speaker_label:     seg.speaker_label,
+          confidence:        seg.confidence,
+          is_low_confidence: seg.is_low_confidence,
+          provider_metadata: seg.provider_metadata,
         })),
       );
 
+      // ── TRANSCRIBING → TRANSCRIBED ───────────────────────────────────────
       await this._sessions.transitionStatus(
         session.id,
         session.doctor_id,
@@ -318,144 +343,77 @@ export class TranscriptionService {
       await this._transcriptions.completeJob(job.id);
 
       await this._audit.log({
-        action: AUDIT_ACTION.TRANSCRIPTION_COMPLETED,
+        action:    AUDIT_ACTION.TRANSCRIPTION_COMPLETED,
         sessionId: session.id,
         ctx,
-        metadata: {
-          jobId: job.id,
-          segmentCount: result.segments.length,
+        metadata:  {
+          jobId:              job.id,
+          provider:           this._provider.name,
+          model:              result.model,
+          segmentCount:       result.segments.length,
           lowConfidenceCount: result.lowConfidenceSegments.length,
-          costCents: result.costCents,
-          durationMs: processingDurationMs,
+          costCents:          result.costCents,
+          durationMs:         processingDurationMs,
         },
       });
 
       return { jobId: job.id, sessionId: session.id, status: JOB_STATUS.COMPLETED };
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      const retryable = isRetryable(err);
-      const updatedJob = await this._transcriptions.failJob(
-        job.id,
-        message,
-        retryable,
-        job.attempt_count,
-        job.max_attempts,
-      );
-
-      await this._transcriptions.upsertTranscription({
-        session_id: session.id,
-        clinic_id: session.clinic_id,
-        doctor_id: session.doctor_id,
-        provider: TRANSCRIPTION_CONFIG.PROVIDER,
-        model: process.env.OPENAI_TRANSCRIPTION_MODEL || TRANSCRIPTION_CONFIG.DEFAULT_MODEL,
-        language: session.language,
-        status: updatedJob.status === JOB_STATUS.PENDING
-          ? TRANSCRIPTION_STATUS.QUEUED
-          : TRANSCRIPTION_STATUS.FAILED,
-        attempt_count: job.attempt_count,
-        failed_at: updatedJob.status === JOB_STATUS.FAILED ? new Date().toISOString() : null,
-        error: message,
-      });
-
-      const current = await this._sessions.findByIdForWorker(session.id);
-      if (current?.status === SESSION_STATUS.TRANSCRIBING) {
-        await this._sessions.transitionStatus(
-          session.id,
-          session.doctor_id,
-          SESSION_STATUS.TRANSCRIBING,
-          updatedJob.status === JOB_STATUS.PENDING
-            ? SESSION_STATUS.TRANSCRIPTION_QUEUED
-            : SESSION_STATUS.TRANSCRIPTION_FAILED,
-          { error_message: message },
-        );
-      }
-
-      await this._audit.log({
-        action: updatedJob.status === JOB_STATUS.PENDING ? AUDIT_ACTION.JOB_RETRY : AUDIT_ACTION.TRANSCRIPTION_FAILED,
-        sessionId: session.id,
-        ctx,
-        metadata: {
-          jobId: job.id,
-          attempt: job.attempt_count,
-          retryable,
-          final: updatedJob.status === JOB_STATUS.FAILED,
-        },
-      });
-
-      this._log.error("Transcription job failed", {
-        sessionId: session.id,
-        jobId: job.id,
-        retryable,
-        error: message,
-      });
-
-      if (updatedJob.status === JOB_STATUS.FAILED && job.attempt_count >= job.max_attempts) {
-        return { jobId: job.id, sessionId: session.id, status: JOB_STATUS.FAILED, error: new TranscriptionRetryExhaustedError().message };
-      }
-      return { jobId: job.id, sessionId: session.id, status: updatedJob.status, error: message };
+      return this._handleJobError(err, job, session, ctx);
     }
   }
 
-  /** @param {Record<string, unknown>} session */
+  /**
+   * Downloads audio chunks from storage, then calls the provider.
+   *
+   * @param {Record<string,unknown>} session
+   * @returns {Promise<import('./transcription-providers/transcription-provider.js').TranscriptionResult & { chunkCount: number }>}
+   */
   async _transcribeSessionAudio(session) {
     const chunks = await this._sessions.getConfirmedChunks(session.id);
-    if (!chunks.length) throw new TranscriptionNotReadyError("No confirmed audio chunks found");
-
-    const allSegments = [];
-    const providerChunks = [];
-    let text = "";
-    let offsetSeconds = 0;
-    let detectedLanguage = null;
-
-    for (const chunk of chunks) {
-      const blob = await this._downloadChunk(chunk.storage_path);
-      const response = await this._openai.transcribe({
-        blob,
-        filename: filenameFromPath(chunk.storage_path),
-        language: session.language,
-        prompt: "Medical consultation audio. Preserve medicine names, symptoms, dosage terms, Hindi, English, and Hinglish words accurately.",
-      });
-
-      providerChunks.push({
-        chunk_index: chunk.chunk_index,
-        language: response.language ?? null,
-        duration: response.duration ?? null,
-      });
-      detectedLanguage = detectedLanguage ?? response.language ?? null;
-      text = joinText(text, response.text ?? "");
-
-      const normalized = normalizeSegments(response.segments ?? [], offsetSeconds, allSegments.length);
-      allSegments.push(...normalized);
-      offsetSeconds += Math.max(chunk.duration_ms / 1000, Number(response.duration ?? 0));
+    if (!chunks.length) {
+      throw new TranscriptionNotReadyError(
+        "No confirmed audio chunks found for this session",
+      );
     }
 
-    const diarized = applyHeuristicDiarization(allSegments);
-    const lowConfidenceSegments = diarized.filter((segment) => segment.is_low_confidence);
-    const averageConfidence = average(
-      diarized.map((segment) => segment.confidence).filter((v) => typeof v === "number"),
+    if (session.audio_size_bytes > SCRIBE_LIMITS.MAX_AUDIO_SIZE_BYTES) {
+      throw new TranscriptionNotReadyError(
+        `Audio size ${session.audio_size_bytes} bytes exceeds the ${SCRIBE_LIMITS.MAX_AUDIO_SIZE_BYTES}-byte limit`,
+      );
+    }
+
+    this._log.info("Downloading audio chunks for transcription", {
+      sessionId:  session.id,
+      chunkCount: chunks.length,
+    });
+
+    // Download all chunks in order
+    const audioBlobs = await Promise.all(
+      chunks.map((chunk) => this._downloadChunk(chunk.storage_path)),
     );
 
-    return {
-      text,
-      language: detectedLanguage ?? session.language ?? null,
-      model: process.env.OPENAI_TRANSCRIPTION_MODEL || TRANSCRIPTION_CONFIG.DEFAULT_MODEL,
-      segments: diarized,
-      lowConfidenceSegments,
-      speakerMap: { A: "Doctor", B: "Patient", C: "Attendant", U: "Unknown" },
-      averageConfidence,
-      confidenceSummary: {
-        average: averageConfidence,
-        lowConfidenceThreshold: TRANSCRIPTION_CONFIG.LOW_CONFIDENCE_THRESHOLD,
-        lowConfidenceCount: lowConfidenceSegments.length,
-        segmentCount: diarized.length,
-      },
-      providerResponse: { chunks: providerChunks },
-      chunkCount: chunks.length,
-      costCents: estimateCostCents(session.audio_duration_seconds),
-    };
+    // Infer MIME type from storage path extension
+    const ext      = chunks[0].storage_path.slice(chunks[0].storage_path.lastIndexOf(".") + 1);
+    const mimeType = MIME_TYPES[ext] ?? "audio/webm";
+
+    const result = await this._provider.transcribe({
+      audioBlobs,
+      mimeType,
+      language:        session.language,
+      sessionId:       session.id,
+      durationSeconds: session.audio_duration_seconds ?? null,
+    });
+
+    return { ...result, chunkCount: chunks.length };
   }
 
-  /** @param {string} storagePath */
+  /**
+   * Downloads one audio chunk blob from Supabase Storage.
+   *
+   * @param {string} storagePath
+   * @returns {Promise<Blob>}
+   */
   async _downloadChunk(storagePath) {
     const { data, error } = await this._db.storage
       .from(SCRIBE_STORAGE.BUCKET)
@@ -463,120 +421,133 @@ export class TranscriptionService {
     if (error || !data) throw new StorageError("download audio chunk", error);
     return data;
   }
+
+  /**
+   * Handles a job failure: marks job as failed or pending-retry, updates
+   * transcription row, rolls back session status, and emits audit event.
+   *
+   * @param {unknown}                err
+   * @param {Record<string,unknown>} job
+   * @param {Record<string,unknown>} session
+   * @param {Record<string,unknown>} ctx
+   */
+  async _handleJobError(err, job, session, ctx) {
+    const message  = err instanceof Error ? err.message : String(err);
+    const retryable = isRetryable(err);
+
+    const updatedJob = await this._transcriptions.failJob(
+      job.id,
+      message,
+      retryable,
+      job.attempt_count,
+      job.max_attempts,
+    );
+
+    const nextTranscriptionStatus =
+      updatedJob.status === JOB_STATUS.PENDING
+        ? TRANSCRIPTION_STATUS.QUEUED
+        : TRANSCRIPTION_STATUS.FAILED;
+
+    await this._transcriptions.upsertTranscription({
+      session_id:    session.id,
+      clinic_id:     session.clinic_id,
+      doctor_id:     session.doctor_id,
+      provider:      this._provider.name,
+      model:         this._provider.model,
+      language:      session.language,
+      status:        nextTranscriptionStatus,
+      attempt_count: job.attempt_count,
+      failed_at:     updatedJob.status === JOB_STATUS.FAILED ? new Date().toISOString() : null,
+      error:         message,
+    });
+
+    const current = await this._sessions.findByIdForWorker(session.id);
+    if (current?.status === SESSION_STATUS.TRANSCRIBING) {
+      await this._sessions.transitionStatus(
+        session.id,
+        session.doctor_id,
+        SESSION_STATUS.TRANSCRIBING,
+        updatedJob.status === JOB_STATUS.PENDING
+          ? SESSION_STATUS.TRANSCRIPTION_QUEUED
+          : SESSION_STATUS.TRANSCRIPTION_FAILED,
+        { error_message: message },
+      );
+    }
+
+    await this._audit.log({
+      action: updatedJob.status === JOB_STATUS.PENDING
+        ? AUDIT_ACTION.JOB_RETRY
+        : AUDIT_ACTION.TRANSCRIPTION_FAILED,
+      sessionId: session.id,
+      ctx,
+      metadata: {
+        jobId:    job.id,
+        attempt:  job.attempt_count,
+        retryable,
+        final:    updatedJob.status === JOB_STATUS.FAILED,
+        error:    message,
+      },
+    });
+
+    this._log.error("Transcription job failed", {
+      sessionId: session.id,
+      jobId:     job.id,
+      retryable,
+      error:     message,
+    });
+
+    if (updatedJob.status === JOB_STATUS.FAILED && job.attempt_count >= job.max_attempts) {
+      return {
+        jobId:     job.id,
+        sessionId: session.id,
+        status:    JOB_STATUS.FAILED,
+        error:     new TranscriptionRetryExhaustedError().message,
+      };
+    }
+    return { jobId: job.id, sessionId: session.id, status: updatedJob.status, error: message };
+  }
 }
 
-/** @param {Record<string, unknown>} session @param {string} workerId */
+// ─────────────────────────────────────────────────────────────
+// MODULE-LEVEL HELPERS
+// ─────────────────────────────────────────────────────────────
+
+/** @type {Record<string, string>} File extension → MIME type */
+const MIME_TYPES = {
+  webm: "audio/webm",
+  ogg:  "audio/ogg",
+  mp4:  "audio/mp4",
+  m4a:  "audio/mp4",
+  wav:  "audio/wav",
+  mp3:  "audio/mpeg",
+};
+
+/**
+ * Builds a RequestContext-shaped object from a session row for worker use.
+ *
+ * @param {Record<string,unknown>} session
+ * @param {string}                 workerId
+ * @returns {Record<string,string>}
+ */
 function contextFromSession(session, workerId) {
   return {
-    actorId: session.doctor_id,
-    doctorId: session.doctor_id,
-    clinicId: session.clinic_id,
+    actorId:   session.doctor_id,
+    doctorId:  session.doctor_id,
+    clinicId:  session.clinic_id,
     requestId: workerId,
   };
 }
 
-function normalizeSegments(rawSegments, offsetSeconds, startingIndex) {
-  if (!rawSegments.length) return [];
-  return rawSegments.map((segment, i) => {
-    const confidence = confidenceFromSegment(segment);
-    return {
-      id: String(segment.id ?? startingIndex + i),
-      index: startingIndex + i,
-      start: roundSeconds(Number(segment.start ?? 0) + offsetSeconds),
-      end: roundSeconds(Number(segment.end ?? 0) + offsetSeconds),
-      text: String(segment.text ?? "").trim(),
-      speaker: "U",
-      speaker_label: "Unknown",
-      confidence,
-      is_low_confidence: confidence < TRANSCRIPTION_CONFIG.LOW_CONFIDENCE_THRESHOLD,
-      provider_metadata: {
-        avg_logprob: segment.avg_logprob ?? null,
-        no_speech_prob: segment.no_speech_prob ?? null,
-        compression_ratio: segment.compression_ratio ?? null,
-      },
-    };
-  });
-}
-
-function confidenceFromSegment(segment) {
-  if (typeof segment.avg_logprob === "number") {
-    const noSpeech = typeof segment.no_speech_prob === "number" ? segment.no_speech_prob : 0;
-    return clamp(Number(Math.exp(segment.avg_logprob) * (1 - noSpeech)).toFixed(4));
-  }
-  return 0.85;
-}
-
-function applyHeuristicDiarization(segments) {
-  let lastSpeaker = "A";
-  return segments.map((segment, index) => {
-    const text = segment.text.toLowerCase();
-    let speaker = lastSpeaker;
-
-    if (index === 0) {
-      speaker = "A";
-    } else if (text.includes("?") || startsWithDoctorCue(text)) {
-      speaker = "A";
-    } else if (startsWithPatientCue(text) || segment.text.length > 80) {
-      speaker = "B";
-    } else if (index > 0 && shortBackchannel(text)) {
-      speaker = lastSpeaker === "A" ? "B" : "A";
-    }
-
-    lastSpeaker = speaker;
-    return {
-      ...segment,
-      speaker,
-      speaker_label: speaker === "A" ? "Doctor" : "Patient",
-    };
-  });
-}
-
-function startsWithDoctorCue(text) {
-  return /^(कब|क्या|कैसा|कितना|how|what|when|any|do you|are you|tell me)/i.test(text);
-}
-
-function startsWithPatientCue(text) {
-  return /^(हाँ|हा|नहीं|no|yes|doctor|sir|madam|mujhe|मेरे|मुझे|i have|i am)/i.test(text);
-}
-
-function shortBackchannel(text) {
-  return /^(yes|no|haan|nahi|okay|ok|हाँ|नहीं)[\\s.]*$/i.test(text.trim());
-}
-
-function estimateCostCents(durationSeconds) {
-  const centsPerMinute = Number(
-    process.env.OPENAI_TRANSCRIPTION_CENTS_PER_MINUTE ||
-      TRANSCRIPTION_CONFIG.DEFAULT_COST_PER_AUDIO_MINUTE_CENTS,
-  );
-  return Math.ceil(((durationSeconds ?? 0) / 60) * centsPerMinute);
-}
-
+/**
+ * Returns true when the error is transient and worth retrying.
+ * Storage and provider network errors are retryable; bad-state errors are not.
+ *
+ * @param {unknown} err
+ * @returns {boolean}
+ */
 function isRetryable(err) {
   if (err?.code === "TRANSCRIPTION_NOT_READY") return false;
-  if (err?.code === "STORAGE_ERROR") return true;
-  if (err?.code === "TRANSCRIPTION_PROVIDER_ERROR") return true;
+  if (err?.code === "VALIDATION_ERROR")        return false;
+  if (err?.code === "SESSION_NOT_FOUND")       return false;
   return true;
-}
-
-function filenameFromPath(path) {
-  return path.slice(path.lastIndexOf("/") + 1) || "audio.webm";
-}
-
-function joinText(a, b) {
-  if (!a) return b.trim();
-  if (!b) return a.trim();
-  return `${a.trim()} ${b.trim()}`.trim();
-}
-
-function average(values) {
-  if (!values.length) return null;
-  return Number((values.reduce((sum, v) => sum + v, 0) / values.length).toFixed(4));
-}
-
-function roundSeconds(value) {
-  return Number(value.toFixed(3));
-}
-
-function clamp(value) {
-  return Math.max(0, Math.min(1, Number(value)));
 }

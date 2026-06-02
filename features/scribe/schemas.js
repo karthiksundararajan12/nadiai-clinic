@@ -409,6 +409,77 @@ export const RejectSOAPNoteSchema = z.object({
 /** @typedef {z.infer<typeof RejectSOAPNoteSchema>} RejectSOAPNoteInput */
 
 // ─────────────────────────────────────────────────────────────
+// PRESCRIPTION DRAFT GENERATION
+// ─────────────────────────────────────────────────────────────
+
+export const PrescriptionMedicationSchema = z.object({
+  name:         z.string().min(1).max(200),
+  dosage:       z.string().min(1).max(200),
+  frequency:    z.string().min(1).max(200),
+  duration:     z.string().min(1).max(200),
+  instructions: z.string().max(1000).default(""),
+  confidence:   z.number().min(0).max(1),
+});
+
+/** @typedef {z.infer<typeof PrescriptionMedicationSchema>} PrescriptionMedication */
+
+/**
+ * Output schema for the AI-generated prescription draft.
+ * Matches exactly what Claude returns via the tool-use call.
+ */
+export const PrescriptionDraftSchema = z.object({
+  diagnosis:            z.array(z.string().min(1).max(500)).min(0),
+  medications:          z.array(PrescriptionMedicationSchema),
+  investigations:       z.array(z.string().min(1).max(500)),
+  advice:               z.array(z.string().min(1).max(1000)),
+  followUpInstructions: z.string().max(2000).default(""),
+  warnings:             z.array(z.string().min(1).max(1000)),
+}).strict();
+
+/** @typedef {z.infer<typeof PrescriptionDraftSchema>} PrescriptionDraft */
+
+export const GeneratePrescriptionSchema = z.object({
+  force:           z.boolean().optional().default(false),
+  soap_note_id:    z.string().uuid().optional().nullable(),
+});
+
+/** @typedef {z.infer<typeof GeneratePrescriptionSchema>} GeneratePrescriptionInput */
+
+export const RetryPrescriptionGenerationSchema = z.object({
+  reason: z.string().max(500).optional(),
+  force:  z.boolean().optional().default(true),
+});
+
+/** @typedef {z.infer<typeof RetryPrescriptionGenerationSchema>} RetryPrescriptionGenerationInput */
+
+export const UpdatePrescriptionDraftSchema = z.object({
+  draft:  PrescriptionDraftSchema,
+  source: z.enum(["autosave", "manual_edit"]).default("autosave"),
+});
+
+/** @typedef {z.infer<typeof UpdatePrescriptionDraftSchema>} UpdatePrescriptionDraftInput */
+
+export const SavePrescriptionVersionSchema = z.object({
+  source: z.enum(["autosave", "manual_save"]).default("manual_save"),
+  label:  z.string().min(1).max(120).optional(),
+});
+
+/** @typedef {z.infer<typeof SavePrescriptionVersionSchema>} SavePrescriptionVersionInput */
+
+export const ApprovePrescriptionSchema = z.object({
+  create_version: z.boolean().optional().default(true),
+});
+
+/** @typedef {z.infer<typeof ApprovePrescriptionSchema>} ApprovePrescriptionInput */
+
+export const RejectPrescriptionSchema = z.object({
+  reason:      z.string().min(1).max(1000),
+  regenerate:  z.boolean().optional().default(false),
+});
+
+/** @typedef {z.infer<typeof RejectPrescriptionSchema>} RejectPrescriptionInput */
+
+// ─────────────────────────────────────────────────────────────
 // SESSION FILTER (list endpoint)
 // GET /api/scribe/sessions?status=UPLOADED&page=2
 // ─────────────────────────────────────────────────────────────

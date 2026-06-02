@@ -5,6 +5,7 @@
 import { AI_PROVIDER, SOAP_GENERATION_CONFIG } from "../../constants.js";
 import { SOAPGenerationError } from "../../errors.js";
 import { AnthropicProvider } from "./anthropic.provider.js";
+import { GeminiProvider } from "./gemini.provider.js";
 import { OpenAIProvider } from "./openai.provider.js";
 
 export function createSOAPAIProvider(env = process.env) {
@@ -24,6 +25,13 @@ export function createSOAPAIProvider(env = process.env) {
     });
   }
 
+  if (provider === AI_PROVIDER.GEMINI) {
+    return new GeminiProvider({
+      apiKey: env.GEMINI_API_KEY,
+      model: env.GEMINI_SOAP_MODEL || SOAP_GENERATION_CONFIG.DEFAULT_GEMINI_MODEL,
+    });
+  }
+
   throw new SOAPGenerationError(`Unsupported SOAP AI provider: ${provider}`);
 }
 
@@ -31,6 +39,7 @@ export function resolveSOAPProviderName(env = process.env) {
   const configured = env.SOAP_AI_PROVIDER || env.AI_SOAP_PROVIDER;
   if (!configured) {
     if (env.ANTHROPIC_API_KEY) return AI_PROVIDER.ANTHROPIC;
+    if (env.GEMINI_API_KEY) return AI_PROVIDER.GEMINI;
     if (env.OPENAI_API_KEY) return AI_PROVIDER.OPENAI;
     return SOAP_GENERATION_CONFIG.DEFAULT_PROVIDER;
   }
@@ -42,6 +51,9 @@ export function resolveSOAPProviderName(env = process.env) {
   }
   if (normalized === AI_PROVIDER.OPENAI) {
     return AI_PROVIDER.OPENAI;
+  }
+  if (normalized === AI_PROVIDER.GEMINI || normalized === "google") {
+    return AI_PROVIDER.GEMINI;
   }
 
   return normalized;

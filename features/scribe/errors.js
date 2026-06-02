@@ -240,6 +240,45 @@ export class QuotaExceededError extends ScribeError {
   }
 }
 
+export class PrescriptionNotReadyError extends ScribeError {
+  /** @param {string} message */
+  constructor(message) {
+    super(message, "PRESCRIPTION_NOT_READY", 409);
+  }
+}
+
+export class PrescriptionGenerationError extends ScribeError {
+  /**
+   * @param {string}  message
+   * @param {unknown} [details=null]
+   */
+  constructor(message, details = null) {
+    super(message, "PRESCRIPTION_GENERATION_ERROR", 502, details);
+  }
+}
+
+export class PrescriptionReviewError extends ScribeError {
+  /**
+   * @param {string}  message
+   * @param {unknown} [details=null]
+   */
+  constructor(message, details = null) {
+    super(message, "PRESCRIPTION_REVIEW_ERROR", 409, details);
+  }
+}
+
+export class PrescriptionValidationError extends ScribeError {
+  /** @param {unknown} details */
+  constructor(details) {
+    super(
+      "Generated prescription draft failed schema validation",
+      "PRESCRIPTION_VALIDATION_ERROR",
+      422,
+      details,
+    );
+  }
+}
+
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────

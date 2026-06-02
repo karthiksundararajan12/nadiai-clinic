@@ -26,10 +26,14 @@ export const SESSION_STATUS = Object.freeze({
   SOAP_REVIEW_REQUIRED:    "SOAP_REVIEW_REQUIRED",
   SOAP_REVIEWING:          "SOAP_REVIEWING",
   SOAP_APPROVED:           "SOAP_APPROVED",
-  READY_FOR_PRESCRIPTION:  "READY_FOR_PRESCRIPTION",
-  GENERATING_PRESCRIPTION: "GENERATING_PRESCRIPTION",
-  COMPLETED:               "COMPLETED",
-  FAILED:                  "FAILED",
+  READY_FOR_PRESCRIPTION:    "READY_FOR_PRESCRIPTION",
+  GENERATING_PRESCRIPTION:   "GENERATING_PRESCRIPTION",
+  PRESCRIPTION_DRAFT_READY:       "PRESCRIPTION_DRAFT_READY",
+  PRESCRIPTION_REVIEW_REQUIRED:   "PRESCRIPTION_REVIEW_REQUIRED",
+  PRESCRIPTION_REVIEWING:         "PRESCRIPTION_REVIEWING",
+  PRESCRIPTION_APPROVED:          "PRESCRIPTION_APPROVED",
+  COMPLETED:                      "COMPLETED",
+  FAILED:                         "FAILED",
 });
 
 /**
@@ -57,12 +61,18 @@ export const VALID_TRANSITIONS = Object.freeze({
   [SESSION_STATUS.SOAP_READY]:              [SESSION_STATUS.SOAP_REVIEW_REQUIRED, SESSION_STATUS.GENERATING_SOAP, SESSION_STATUS.GENERATING_PRESCRIPTION, SESSION_STATUS.COMPLETED],
   [SESSION_STATUS.SOAP_REVIEW_REQUIRED]:    [SESSION_STATUS.SOAP_REVIEWING, SESSION_STATUS.GENERATING_SOAP, SESSION_STATUS.COMPLETED],
   [SESSION_STATUS.SOAP_REVIEWING]:          [SESSION_STATUS.SOAP_APPROVED, SESSION_STATUS.SOAP_REVIEW_REQUIRED, SESSION_STATUS.GENERATING_SOAP, SESSION_STATUS.FAILED],
-  [SESSION_STATUS.SOAP_APPROVED]:           [SESSION_STATUS.READY_FOR_PRESCRIPTION],
+  [SESSION_STATUS.SOAP_APPROVED]:           [SESSION_STATUS.READY_FOR_PRESCRIPTION, SESSION_STATUS.GENERATING_PRESCRIPTION],
   [SESSION_STATUS.READY_FOR_PRESCRIPTION]:  [SESSION_STATUS.GENERATING_PRESCRIPTION, SESSION_STATUS.COMPLETED],
   // SOAP_READY → COMPLETED: when no prescription is needed
-  [SESSION_STATUS.GENERATING_PRESCRIPTION]: [SESSION_STATUS.COMPLETED, SESSION_STATUS.SOAP_READY, SESSION_STATUS.FAILED],
-  // GENERATING_PRESCRIPTION → SOAP_READY: retry path
-  [SESSION_STATUS.COMPLETED]:               [],
+  [SESSION_STATUS.GENERATING_PRESCRIPTION]: [SESSION_STATUS.PRESCRIPTION_DRAFT_READY, SESSION_STATUS.SOAP_APPROVED, SESSION_STATUS.COMPLETED, SESSION_STATUS.FAILED],
+  // GENERATING_PRESCRIPTION → SOAP_APPROVED: roll-back on failure
+  [SESSION_STATUS.PRESCRIPTION_DRAFT_READY]:      [SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED],
+  [SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED]:  [SESSION_STATUS.PRESCRIPTION_REVIEWING, SESSION_STATUS.SOAP_APPROVED],
+  // PRESCRIPTION_REVIEW_REQUIRED → SOAP_APPROVED: doctor requests regeneration
+  [SESSION_STATUS.PRESCRIPTION_REVIEWING]:        [SESSION_STATUS.PRESCRIPTION_APPROVED, SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED, SESSION_STATUS.SOAP_APPROVED],
+  // PRESCRIPTION_REVIEWING → SOAP_APPROVED: reject + regenerate path
+  [SESSION_STATUS.PRESCRIPTION_APPROVED]:         [SESSION_STATUS.COMPLETED],
+  [SESSION_STATUS.COMPLETED]:                     [],
   // COMPLETED is terminal — amendments go through scribe_documents versioning
   [SESSION_STATUS.FAILED]:                  [SESSION_STATUS.UPLOADED, SESSION_STATUS.TRANSCRIPTION_QUEUED],
   // FAILED → UPLOADED/TRANSCRIPTION_QUEUED: manual recovery path
@@ -92,6 +102,9 @@ export const ACTIONABLE_STATUSES = Object.freeze([
   SESSION_STATUS.SOAP_REVIEWING,
   SESSION_STATUS.SOAP_APPROVED,
   SESSION_STATUS.READY_FOR_PRESCRIPTION,
+  SESSION_STATUS.PRESCRIPTION_DRAFT_READY,
+  SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED,
+  SESSION_STATUS.PRESCRIPTION_REVIEWING,
   SESSION_STATUS.FAILED,
 ]);
 
@@ -152,15 +165,20 @@ export const TRANSCRIPTION_STATUS = Object.freeze({
 });
 
 export const TRANSCRIPTION_CONFIG = Object.freeze({
-  PROVIDER: "openai",
-  DEFAULT_MODEL: "whisper-1",
-  RESPONSE_FORMAT: "verbose_json",
+  /** Active provider — overridden by TRANSCRIPTION_PROVIDER env var. */
+  PROVIDER: "deepgram",
+  /** Default Deepgram model for English medical audio. */
+  DEFAULT_MODEL: "nova-2-medical",
+  /** Confidence score below which a segment is flagged as low-confidence. */
   LOW_CONFIDENCE_THRESHOLD: 0.75,
   MAX_ATTEMPTS: 3,
   WORKER_BATCH_SIZE: 1,
   STALE_JOB_MINUTES: 15,
-  /** Default Whisper pricing estimate. Override in service with env if needed. */
-  DEFAULT_COST_PER_AUDIO_MINUTE_CENTS: 0.6,
+  /**
+   * Deepgram Nova-2 Medical pricing estimate (USD cents per audio minute).
+   * Actual billed cost comes from result.costCents in the provider response.
+   */
+  DEFAULT_COST_PER_AUDIO_MINUTE_CENTS: 0.59,
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -171,6 +189,7 @@ export const TRANSCRIPTION_CONFIG = Object.freeze({
 export const AI_PROVIDER = Object.freeze({
   ANTHROPIC: "anthropic",
   OPENAI:    "openai",
+  GEMINI:    "gemini",
 });
 
 /** @enum {string} */
@@ -198,10 +217,42 @@ export const SOAP_GENERATION_CONFIG = Object.freeze({
   DEFAULT_PROVIDER: AI_PROVIDER.ANTHROPIC,
   DEFAULT_CLAUDE_MODEL: "claude-3-5-sonnet-latest",
   DEFAULT_OPENAI_MODEL: "gpt-4.1-mini",
+  DEFAULT_GEMINI_MODEL: "gemini-2.5-flash",
   PROMPT_VERSION: "soap_indian_gp_v1",
   MAX_ATTEMPTS: 3,
   TEMPERATURE: 0.1,
   MAX_OUTPUT_TOKENS: 1800,
+});
+
+/** @enum {string} */
+export const PRESCRIPTION_DRAFT_STATUS = Object.freeze({
+  GENERATING:       "generating",
+  DRAFT_READY:      "draft_ready",
+  REVIEW_REQUIRED:  "review_required",
+  REVIEWING:        "reviewing",
+  APPROVED:         "approved",
+  REJECTED:         "rejected",
+  FAILED:           "failed",
+});
+
+/** @enum {string} */
+export const PRESCRIPTION_REVIEW_STATUS = Object.freeze({
+  REVIEWING: "reviewing",
+  APPROVED:  "approved",
+  REJECTED:  "rejected",
+});
+
+export const PRESCRIPTION_GENERATION_CONFIG = Object.freeze({
+  /** Prompt template identifier stored in every draft row for reproducibility. */
+  PROMPT_VERSION: "prescription_indian_gp_v1",
+  MAX_ATTEMPTS:   3,
+  TEMPERATURE:    0.05,
+  MAX_OUTPUT_TOKENS: 1200,
+  /**
+   * Minimum confidence score below which a medication is flagged in warnings.
+   * Range 0.0 – 1.0.
+   */
+  LOW_CONFIDENCE_THRESHOLD: 0.7,
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -244,8 +295,16 @@ export const AUDIT_ACTION = Object.freeze({
   SOAP_MANUAL_SAVE:          "soap_manual_save",
   SOAP_APPROVED:             "soap_approved",
   SOAP_REJECTED:             "soap_rejected",
-  PRESCRIPTION_GENERATED:    "prescription_generated",
-  SESSION_REVIEWED:          "session_reviewed",
+  PRESCRIPTION_GENERATION_STARTED:  "prescription_generation_started",
+  PRESCRIPTION_GENERATED:           "prescription_generated",
+  PRESCRIPTION_GENERATION_FAILED:   "prescription_generation_failed",
+  PRESCRIPTION_VERSION_CREATED:     "prescription_version_created",
+  PRESCRIPTION_REVIEW_STARTED:      "prescription_review_started",
+  PRESCRIPTION_FIELD_EDITED:        "prescription_field_edited",
+  PRESCRIPTION_SAVED:               "prescription_saved",
+  PRESCRIPTION_APPROVED:            "prescription_approved",
+  PRESCRIPTION_REJECTED:            "prescription_rejected",
+  SESSION_REVIEWED:                 "session_reviewed",
   SESSION_SIGNED:            "session_signed",
   SESSION_EXPORTED:          "session_exported",
   JOB_TIMEOUT:               "job_timeout",

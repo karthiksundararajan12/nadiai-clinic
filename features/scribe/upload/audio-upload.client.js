@@ -62,7 +62,7 @@ export async function uploadCompletedRecording(options) {
 
   onProgress?.(progressEvent("starting", 0, 0, chunks.length));
 
-  const start = await postJson("/api/scribe/uploads/start", {
+  const manifest = {
     patient_id: patientId ?? null,
     appointment_id: appointmentId ?? null,
     language,
@@ -75,7 +75,9 @@ export async function uploadCompletedRecording(options) {
       mime_type: chunk.type || "audio/webm",
       checksum: null,
     })),
-  });
+  };
+
+  const start = await startUploadWithRetry(manifest);
 
   const sessionId = start.session.id;
   let uploadMap = new Map(start.uploads.map((upload) => [upload.chunk_index, upload]));
@@ -188,4 +190,19 @@ async function postJson(url, body) {
 /** @param {number} ms */
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
+ * Starts upload; on SESSION_ALREADY_ACTIVE releases blocking sessions and retries once.
+ */
+async function startUploadWithRetry(manifest) {
+  try {
+    return await postJson("/api/scribe/uploads/start", manifest);
+  } catch (err) {
+    if (err?.code === "SESSION_ALREADY_ACTIVE") {
+      await postJson("/api/scribe/sessions/release-blocking", {});
+      return await postJson("/api/scribe/uploads/start", manifest);
+    }
+    throw err;
+  }
 }

@@ -168,7 +168,10 @@ export function ScribeWorkflow() {
       setPipelineMessage("Transcribing conversation…");
       await runTranscription(sessionId);
     } catch (err) {
-      setUploadError(err instanceof Error ? err : new Error(String(err)));
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
+      if (err && typeof err === "object" && "details" in err) wrapped.details = err.details;
+      setUploadError(wrapped);
     } finally {
       setPipelineBusy(false);
       setPipelineMessage(null);
@@ -259,9 +262,17 @@ export function ScribeWorkflow() {
             </p>
           )}
           {uploadError && (
-            <div className="mt-4 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center">
-              <p className="text-sm text-destructive">{uploadError.message}</p>
-            </div>
+            <UploadErrorBanner
+              error={uploadError}
+              onRelease={async () => {
+                try {
+                  await fetch("/api/scribe/sessions/release-blocking", { method: "POST" });
+                  setUploadError(null);
+                } catch (e) {
+                  setUploadError(e instanceof Error ? e : new Error(String(e)));
+                }
+              }}
+            />
           )}
         </CardContent>
       </Card>
@@ -386,6 +397,22 @@ function WorkflowHeader({ title, subtitle, onBack }) {
         <ArrowLeft className="h-3.5 w-3.5" />
         Back
       </Button>
+    </div>
+  );
+}
+
+function UploadErrorBanner({ error, onRelease }) {
+  const isBlocked = error?.code === "SESSION_ALREADY_ACTIVE" ||
+    /already active/i.test(error?.message ?? "");
+
+  return (
+    <div className="mt-4 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center space-y-2">
+      <p className="text-sm text-destructive">{error.message}</p>
+      {isBlocked && (
+        <Button type="button" variant="outline" size="sm" onClick={onRelease}>
+          Clear stuck session and try again
+        </Button>
+      )}
     </div>
   );
 }

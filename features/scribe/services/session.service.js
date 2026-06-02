@@ -85,8 +85,9 @@ export class ScribeSessionService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
     const input = parsed.data;
 
-    // 2. Guard: no concurrent active session for this doctor
-    await this._assertNoActiveSession(ctx.doctorId, ctx.clinicId);
+    // 2. Release zombie sessions, then guard concurrent in-flight work
+    await this._releaseStaleBlockingSessions(ctx.doctorId);
+    await this._assertNoActiveSession(ctx.doctorId);
 
     // 3. Build storage prefix
     const storagePrefix = SCRIBE_STORAGE.buildPrefix(
@@ -479,13 +480,60 @@ export class ScribeSessionService {
    * @param {string} clinicId
    * @returns {Promise<void>}
    */
-  async _assertNoActiveSession(doctorId, clinicId) {
-    // Lean query — only fetches ID
+  /**
+   * Clears blocking sessions so a new recording can start.
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  async releaseBlockingSessions(ctx) {
+    const active = await this._repo.findMany(ctx.doctorId, {
+      status: [...RECORDING_BLOCKING_STATUSES],
+      page: 1,
+      limit: 20,
+      sort_by: "updated_at",
+      sort_order: "desc",
+    });
+
+    for (const session of active.data ?? []) {
+      await this._repo.markFailed(
+        session.id,
+        "Released by doctor to start a new recording",
+      );
+    }
+
+    return { released: active.data?.length ?? 0 };
+  }
+
+  /**
+   * Auto-fail sessions stuck in pipeline states (crashed tab, hung transcription, etc.).
+   * @param {string} doctorId
+   */
+  async _releaseStaleBlockingSessions(doctorId) {
+    const STALE_MS = 10 * 60 * 1000;
+    const cutoff = new Date(Date.now() - STALE_MS).toISOString();
+
+    const candidates = await this._repo.findMany(doctorId, {
+      status: [...RECORDING_BLOCKING_STATUSES],
+      page: 1,
+      limit: 20,
+      sort_by: "updated_at",
+      sort_order: "asc",
+    });
+
+    for (const session of candidates.data ?? []) {
+      if (session.updated_at && session.updated_at > cutoff) continue;
+      await this._repo.markFailed(
+        session.id,
+        "Stale session cleared automatically to allow new recording",
+      );
+    }
+  }
+
+  async _assertNoActiveSession(doctorId) {
     const active = await this._repo.findMany(doctorId, {
-      status:  [...RECORDING_BLOCKING_STATUSES],
-      page:    1,
-      limit:   1,
-      sort_by: "created_at",
+      status: [...RECORDING_BLOCKING_STATUSES],
+      page: 1,
+      limit: 1,
+      sort_by: "updated_at",
       sort_order: "desc",
     });
 

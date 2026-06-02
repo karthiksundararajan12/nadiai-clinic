@@ -87,11 +87,14 @@ export const TERMINAL_STATUSES = Object.freeze([
  * Only these statuses block starting a new recording.
  * Review/SOAP-approved sessions stay in the DB but must not prevent Consultation N+1.
  */
+/**
+ * Only in-flight work blocks a new recording.
+ * UPLOADED / failed transcription do NOT block — start Consultation N+1 anytime.
+ */
 export const RECORDING_BLOCKING_STATUSES = Object.freeze([
   SESSION_STATUS.CREATED,
   SESSION_STATUS.RECORDING,
   SESSION_STATUS.UPLOADING,
-  SESSION_STATUS.UPLOADED,
   SESSION_STATUS.TRANSCRIPTION_QUEUED,
   SESSION_STATUS.TRANSCRIBING,
   SESSION_STATUS.GENERATING_SOAP,

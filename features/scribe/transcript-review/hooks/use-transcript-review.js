@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import {
   completeTranscriptReview,
   fetchTranscriptVersions,
@@ -25,6 +25,8 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
+    case "RESET":
+      return initialState;
     case "LOAD":
       return { ...state, ...action.payload, dirty: {}, undoStack: [], redoStack: [] };
     case "UPDATE_SEGMENT": {
@@ -80,18 +82,28 @@ export function useTranscriptReview(sessionId) {
   const [saving, setSaving] = useState(false);
   const [generatingSOAP, setGeneratingSOAP] = useState(false);
   const [error, setError] = useState(null);
+  const loadRequestRef = useRef(0);
+
+  useEffect(() => {
+    dispatch({ type: "RESET" });
+    setLoading(Boolean(sessionId));
+    setError(null);
+  }, [sessionId]);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const data = await fetchTranscriptWorkspace(sessionId);
+      if (requestId !== loadRequestRef.current) return;
       dispatch({ type: "LOAD", payload: data });
     } catch (err) {
+      if (requestId !== loadRequestRef.current) return;
       setError(err);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [sessionId]);
 

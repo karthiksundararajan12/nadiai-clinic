@@ -50,6 +50,17 @@ export class SOAPReviewService {
     let note = await this._soap.getNoteBySession(sessionId);
     if (!note) throw new SOAPNotReadyError("SOAP note must be generated before review");
 
+    const readOnlyStatuses = [
+      SESSION_STATUS.SOAP_APPROVED,
+      SESSION_STATUS.READY_FOR_PRESCRIPTION,
+      SESSION_STATUS.GENERATING_PRESCRIPTION,
+      SESSION_STATUS.PRESCRIPTION_DRAFT_READY,
+      SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED,
+      SESSION_STATUS.PRESCRIPTION_REVIEWING,
+      SESSION_STATUS.PRESCRIPTION_APPROVED,
+      SESSION_STATUS.COMPLETED,
+    ];
+
     if (session.status === SESSION_STATUS.SOAP_REVIEW_REQUIRED) {
       session = await this._sessions.transitionStatus(
         sessionId,
@@ -69,11 +80,30 @@ export class SOAPReviewService {
         ctx,
         metadata: { soapNoteId: note.id },
       });
-    } else if (![
-      SESSION_STATUS.SOAP_REVIEWING,
-      SESSION_STATUS.SOAP_APPROVED,
-      SESSION_STATUS.READY_FOR_PRESCRIPTION,
-    ].includes(session.status)) {
+    } else if (session.status === SESSION_STATUS.SOAP_READY) {
+      await this._sessions.transitionStatus(
+        sessionId,
+        ctx.doctorId,
+        SESSION_STATUS.SOAP_READY,
+        SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+      );
+      session = await this._sessions.transitionStatus(
+        sessionId,
+        ctx.doctorId,
+        SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+        SESSION_STATUS.SOAP_REVIEWING,
+      );
+      note = await this._soap.updateNote(note.id, {
+        status: SOAP_NOTE_STATUS.REVIEWING,
+        reviewer_id: ctx.actorId,
+        review_started_at: new Date().toISOString(),
+        original_note: note.original_note ?? note.note,
+      });
+    } else if (session.status === SESSION_STATUS.SOAP_REVIEWING) {
+      // already editing
+    } else if (readOnlyStatuses.includes(session.status)) {
+      // history / approved — return workspace read-only
+    } else {
       throw new InvalidStateTransitionError(session.status, SESSION_STATUS.SOAP_REVIEWING);
     }
 
@@ -138,9 +168,10 @@ export class SOAPReviewService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
 
     const { session, note } = await this._assertReviewing(sessionId, ctx);
-    const version = await this._createVersion(note, ctx, parsed.data.source, {
+    const freshNote = await this._soap.getNoteBySession(sessionId);
+    const version = await this._createVersion(freshNote ?? note, ctx, parsed.data.source, {
       label: parsed.data.label ?? null,
-      diff: summarizeDiff(note.original_note ?? note.note, note.note),
+      diff: summarizeDiff(freshNote?.original_note ?? note.original_note ?? note.note, freshNote?.note ?? note.note),
     });
 
     await this._soap.insertEdit({
@@ -157,10 +188,16 @@ export class SOAPReviewService {
     });
 
     await this._audit.log({
-      action: AUDIT_ACTION.SOAP_MANUAL_SAVE,
+      action: parsed.data.source === "autosave" ? AUDIT_ACTION.SOAP_MANUAL_SAVE : AUDIT_ACTION.SOAP_MANUAL_SAVE,
       sessionId,
       ctx,
       metadata: { soapNoteId: note.id, versionId: version.id, source: parsed.data.source },
+    });
+    await this._audit.log({
+      action: AUDIT_ACTION.SOAP_VERSION_CREATED,
+      sessionId,
+      ctx,
+      metadata: { soapNoteId: note.id, versionId: version.id, versionNumber: version.version_number, source: parsed.data.source },
     });
 
     return version;
@@ -193,31 +230,61 @@ export class SOAPReviewService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
     const { session, note } = await this._assertReviewing(sessionId, ctx);
 
+    const freshNote = (await this._soap.getNoteBySession(sessionId)) ?? note;
+
     let version = null;
     if (parsed.data.create_version) {
-      version = await this._createVersion(note, ctx, "approved", {
+      version = await this._createVersion(freshNote, ctx, "approved", {
         approvedAt: new Date().toISOString(),
-        diff: summarizeDiff(note.original_note ?? note.note, note.note),
+        isApprovedVersion: true,
+        diff: summarizeDiff(freshNote.original_note ?? freshNote.note, freshNote.note),
+      });
+      await this._audit.log({
+        action: AUDIT_ACTION.SOAP_VERSION_CREATED,
+        sessionId,
+        ctx,
+        metadata: {
+          soapNoteId: freshNote.id,
+          versionId: version.id,
+          versionNumber: version.version_number,
+          source: "approved",
+          isApprovedVersion: true,
+        },
       });
     }
 
     const approvedAt = new Date().toISOString();
-    const updatedNote = await this._soap.updateNote(note.id, {
+    const updatedNote = await this._soap.updateNote(freshNote.id, {
       status: SOAP_NOTE_STATUS.APPROVED,
       reviewer_id: ctx.actorId,
       approved_at: approvedAt,
       reviewed_at: approvedAt,
-      modification_summary: summarizeDiff(note.original_note ?? note.note, note.note),
+      modification_summary: summarizeDiff(freshNote.original_note ?? freshNote.note, freshNote.note),
     });
-    const updatedSession = await this._sessions.transitionStatus(
+    let updatedSession = await this._sessions.transitionStatus(
       sessionId,
       ctx.doctorId,
       session.status,
       SESSION_STATUS.SOAP_APPROVED,
     );
 
+    updatedSession = await this._sessions.transitionStatus(
+      sessionId,
+      ctx.doctorId,
+      SESSION_STATUS.SOAP_APPROVED,
+      SESSION_STATUS.COMPLETED,
+      { error_message: null },
+    );
+
+    await this._audit.log({
+      action: AUDIT_ACTION.STATE_TRANSITIONED,
+      sessionId,
+      ctx,
+      metadata: { from: SESSION_STATUS.SOAP_APPROVED, to: SESSION_STATUS.COMPLETED },
+    });
+
     await this._soap.insertEdit({
-      soap_note_id: note.id,
+      soap_note_id: freshNote.id,
       session_id: session.id,
       clinic_id: ctx.clinicId,
       doctor_id: ctx.doctorId,
@@ -301,13 +368,42 @@ export class SOAPReviewService {
       diff_metadata: metadata.diff ?? {},
       reviewer_id: ctx.actorId,
       approved_at: metadata.approvedAt ?? null,
+      is_approved_version: metadata.isApprovedVersion ?? source === "approved",
       created_by: ctx.actorId,
     });
   }
 
   async _assertReviewing(sessionId, ctx) {
     const data = await this._assertAccessible(sessionId, ctx);
-    if (data.session.status !== SESSION_STATUS.SOAP_REVIEWING) {
+    const editable = [
+      SESSION_STATUS.SOAP_REVIEWING,
+      SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+      SESSION_STATUS.SOAP_READY,
+    ];
+    if (!editable.includes(data.session.status)) {
+      throw new InvalidStateTransitionError(data.session.status, SESSION_STATUS.SOAP_REVIEWING);
+    }
+    if (data.session.status === SESSION_STATUS.SOAP_READY) {
+      await this._sessions.transitionStatus(
+        sessionId,
+        ctx.doctorId,
+        SESSION_STATUS.SOAP_READY,
+        SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+      );
+      data.session = await this._sessions.transitionStatus(
+        sessionId,
+        ctx.doctorId,
+        SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+        SESSION_STATUS.SOAP_REVIEWING,
+      );
+    } else if (data.session.status === SESSION_STATUS.SOAP_REVIEW_REQUIRED) {
+      data.session = await this._sessions.transitionStatus(
+        sessionId,
+        ctx.doctorId,
+        SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+        SESSION_STATUS.SOAP_REVIEWING,
+      );
+    } else if (data.session.status !== SESSION_STATUS.SOAP_REVIEWING) {
       throw new InvalidStateTransitionError(data.session.status, SESSION_STATUS.SOAP_REVIEWING);
     }
     return data;

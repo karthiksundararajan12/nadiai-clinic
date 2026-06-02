@@ -40,7 +40,12 @@ export function SOAPReviewToolbar({
           <RotateCw className="size-4" />
           Redo
         </Button>
-        <Button variant="secondary" size="sm" onClick={onSave} disabled={saving || approved}>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={onSave}
+          disabled={saving || approved || !hasChanges}
+        >
           <Save className="size-4" />
           Save version
         </Button>

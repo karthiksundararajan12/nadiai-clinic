@@ -20,6 +20,7 @@ import {
   SESSION_STATUS,
   VALID_TRANSITIONS,
   TERMINAL_STATUSES,
+  RECORDING_BLOCKING_STATUSES,
   PROCESSING_STATUSES,
   SCRIBE_STORAGE,
   JOB_TYPE,
@@ -479,13 +480,9 @@ export class ScribeSessionService {
    * @returns {Promise<void>}
    */
   async _assertNoActiveSession(doctorId, clinicId) {
-    const activeStatuses = Object.values(SESSION_STATUS).filter(
-      (s) => !TERMINAL_STATUSES.includes(s) && s !== SESSION_STATUS.FAILED,
-    );
-
     // Lean query — only fetches ID
     const active = await this._repo.findMany(doctorId, {
-      status:  activeStatuses,
+      status:  [...RECORDING_BLOCKING_STATUSES],
       page:    1,
       limit:   1,
       sort_by: "created_at",

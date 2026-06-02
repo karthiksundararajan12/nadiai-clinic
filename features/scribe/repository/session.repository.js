@@ -708,4 +708,31 @@ export class SessionRepository extends BaseRepository {
       "findJob",
     );
   }
+
+  /** @param {string} patientId @param {string} doctorId */
+  async getPatientName(patientId, doctorId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from("patients")
+          .select("id, name")
+          .eq("id", patientId)
+          .eq("doctor_id", doctorId)
+          .single(),
+      "getPatientName",
+    );
+  }
+
+  /** @param {string} doctorId */
+  async getDoctorName(doctorId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from("doctor_profiles")
+          .select("user_id, full_name")
+          .eq("user_id", doctorId)
+          .single(),
+      "getDoctorName",
+    );
+  }
 }

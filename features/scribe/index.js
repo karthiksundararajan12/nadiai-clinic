@@ -17,6 +17,10 @@ export {
   SESSION_STATUS,
   VALID_TRANSITIONS,
   TERMINAL_STATUSES,
+  RECORDING_BLOCKING_STATUSES,
+  ACTIVE_CONSULTATION_STATUSES,
+  HISTORY_CONSULTATION_STATUSES,
+  SOAP_VIEWABLE_SESSION_STATUSES,
   PROCESSING_STATUSES,
   ACTIONABLE_STATUSES,
   SCRIBE_LANGUAGE,
@@ -168,6 +172,7 @@ import { SOAPReviewService as _SOAPReviewService } from "./services/soap-review.
 import { PrescriptionRepository as _PrescRepo }     from "./repository/prescription.repository.js";
 import { PrescriptionService as _PrescService }       from "./services/prescription.service.js";
 import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescription-review.service.js";
+import { ConsultationHistoryService as _HistorySvc } from "./services/consultation-history.service.js";
 
 /**
  * Wires together all scribe domain services with a Supabase client.
@@ -198,6 +203,7 @@ export function createScribeServices(supabaseClient) {
   const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc);
   const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
   const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
+  const consultationHistorySvc = new _HistorySvc(sessionRepo, soapRepo, prescriptionRepo, auditSvc);
   return {
     sessionService:              sessionSvc,
     auditService:                auditSvc,
@@ -208,5 +214,6 @@ export function createScribeServices(supabaseClient) {
     soapReviewService:           soapReviewSvc,
     prescriptionService:         prescriptionSvc,
     prescriptionReviewService:   prescriptionReviewSvc,
+    consultationHistoryService:  consultationHistorySvc,
   };
 }

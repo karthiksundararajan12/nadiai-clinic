@@ -11,7 +11,7 @@ import { SOAPSectionEditor } from "./SOAPSectionEditor.jsx";
 import { SOAPVersionHistoryPanel } from "./SOAPVersionHistoryPanel.jsx";
 import { EmptySOAPState, SOAPReviewErrorState, SOAPReviewLoadingState } from "./SOAPReviewStateViews.jsx";
 
-export function SOAPReviewWorkspace({ sessionId, className }) {
+export function SOAPReviewWorkspace({ sessionId, className, onApproved, onBack }) {
   const review = useSOAPReview(sessionId);
 
   const handleReject = useCallback(async () => {
@@ -20,11 +20,19 @@ export function SOAPReviewWorkspace({ sessionId, className }) {
     await review.reject(reason.trim());
   }, [review]);
 
+  const handleApprove = useCallback(async () => {
+    await review.approve();
+    onApproved?.();
+  }, [onApproved, review]);
+
   if (review.loading) return <SOAPReviewLoadingState />;
   if (review.error) return <SOAPReviewErrorState error={review.error} onRetry={review.load} />;
   if (!review.note) return <EmptySOAPState />;
 
-  const approved = review.session?.status === "SOAP_APPROVED" || review.session?.status === "READY_FOR_PRESCRIPTION";
+  const approved = review.readOnly ||
+    review.session?.status === "SOAP_APPROVED" ||
+    review.session?.status === "COMPLETED" ||
+    review.session?.status === "READY_FOR_PRESCRIPTION";
 
   return (
     <section className={className} aria-label="SOAP review workspace">
@@ -38,13 +46,25 @@ export function SOAPReviewWorkspace({ sessionId, className }) {
         onUndo={review.undo}
         onRedo={review.redo}
         onSave={review.manualSave}
-        onApprove={review.approve}
+        onApprove={handleApprove}
         onReject={handleReject}
       />
+
+      {approved && onBack && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          This consultation is archived.{" "}
+          <button type="button" className="underline text-primary" onClick={onBack}>
+            Return to consultations
+          </button>
+        </p>
+      )}
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="font-mono text-xs">
+              Session {sessionId.slice(0, 8)}…
+            </Badge>
             <Badge variant="secondary">SOAP note #{review.note?.id?.slice(0, 8)}</Badge>
             <Badge variant={approved ? "success" : "warning"}>
               {review.note?.status}

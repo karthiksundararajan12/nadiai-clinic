@@ -99,7 +99,11 @@ export class PrescriptionService {
     }
 
     // ── Gate: session status ───────────────────────────────────────────────
-    const allowedFromStatuses = [SESSION_STATUS.SOAP_APPROVED, SESSION_STATUS.READY_FOR_PRESCRIPTION];
+    const allowedFromStatuses = [
+      SESSION_STATUS.SOAP_APPROVED,
+      SESSION_STATUS.READY_FOR_PRESCRIPTION,
+      SESSION_STATUS.COMPLETED,
+    ];
     if (!allowedFromStatuses.includes(session.status)) {
       throw new InvalidStateTransitionError(session.status, SESSION_STATUS.GENERATING_PRESCRIPTION);
     }

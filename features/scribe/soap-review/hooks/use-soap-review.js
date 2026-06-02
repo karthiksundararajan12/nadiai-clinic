@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useReducer, useState } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAutosave } from "../../transcript-review/hooks/use-autosave.js";
 import {
   approveSOAPNote,
@@ -38,6 +38,8 @@ const initialState = {
 
 function reducer(state, action) {
   switch (action.type) {
+    case "RESET":
+      return initialState;
     case "LOAD":
       return {
         ...state,
@@ -100,45 +102,66 @@ export function useSOAPReview(sessionId) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
+  const loadRequestRef = useRef(0);
+  const dirtyRef = useRef({});
+
+  useEffect(() => {
+    dirtyRef.current = state.dirty;
+  }, [state.dirty]);
+
+  useEffect(() => {
+    dispatch({ type: "RESET" });
+    setLoading(Boolean(sessionId));
+    setError(null);
+  }, [sessionId]);
 
   const load = useCallback(async () => {
     if (!sessionId) return;
+    const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
     try {
       const data = await fetchSOAPReviewWorkspace(sessionId);
+      if (requestId !== loadRequestRef.current) return;
       dispatch({ type: "LOAD", payload: data });
     } catch (err) {
+      if (requestId !== loadRequestRef.current) return;
       setError(err);
     } finally {
-      setLoading(false);
+      if (requestId === loadRequestRef.current) setLoading(false);
     }
   }, [sessionId]);
 
-  const saveSections = useCallback(async (sectionKeys = Object.keys(state.dirty), source = "autosave") => {
-    if (!sectionKeys.length) return;
+  const saveSections = useCallback(async (sectionKeys, source = "autosave") => {
+    const dirty = dirtyRef.current;
+    const keys = sectionKeys?.length ? sectionKeys : Object.keys(dirty);
+    if (!keys.length) return;
+
     setSaving(true);
     let latestNote = null;
     try {
-      for (const sectionKey of sectionKeys) {
+      for (const sectionKey of keys) {
         latestNote = await updateSOAPSection(sessionId, {
           section_key: sectionKey,
-          value: state.dirty[sectionKey],
+          value: dirty[sectionKey] ?? "",
           source,
         });
       }
-      dispatch({ type: "MARK_SAVED", sectionKeys, note: latestNote });
+      dispatch({ type: "MARK_SAVED", sectionKeys: keys, note: latestNote });
     } catch (err) {
       setError(err);
       throw err;
     } finally {
       setSaving(false);
     }
-  }, [sessionId, state.dirty]);
+  }, [sessionId]);
 
   const dirtyKeys = useMemo(() => Object.keys(state.dirty), [state.dirty]);
+  const readOnly = state.session?.status === "COMPLETED" ||
+    state.note?.status === "approved";
+
   const { autosaveStatus } = useAutosave({
-    enabled: Boolean(sessionId) && state.session?.status === "SOAP_REVIEWING",
+    enabled: Boolean(sessionId) && state.session?.status === "SOAP_REVIEWING" && !readOnly,
     dirtyKeys,
     onSave: (keys) => saveSections(keys, "autosave"),
   });
@@ -148,26 +171,32 @@ export function useSOAPReview(sessionId) {
   }, []);
 
   const manualSave = useCallback(async () => {
-    await saveSections(undefined, "manual");
+    if (!dirtyKeys.length) return null;
+    await saveSections(dirtyKeys, "manual");
     const version = await saveSOAPVersion(sessionId, { source: "manual_save" });
     const versions = await fetchSOAPVersions(sessionId);
     dispatch({ type: "VERSIONS", versions: versions.versions ?? [] });
+    await load();
     return version;
-  }, [saveSections, sessionId]);
+  }, [dirtyKeys, load, saveSections, sessionId]);
 
   const approve = useCallback(async () => {
-    await saveSections(undefined, "manual");
+    if (dirtyKeys.length > 0) {
+      await saveSections(dirtyKeys, "manual");
+    }
     const result = await approveSOAPNote(sessionId);
-    dispatch({ type: "LOAD", payload: { ...state, session: result.session, note: result.note } });
+    await load();
     return result;
-  }, [saveSections, sessionId, state]);
+  }, [dirtyKeys, load, saveSections, sessionId]);
 
   const reject = useCallback(async (reason) => {
-    await saveSections(undefined, "manual");
+    if (dirtyKeys.length > 0) {
+      await saveSections(dirtyKeys, "manual");
+    }
     const result = await rejectSOAPNote(sessionId, reason);
-    dispatch({ type: "LOAD", payload: { ...state, session: result.session, note: result.note } });
+    await load();
     return result;
-  }, [saveSections, sessionId, state]);
+  }, [dirtyKeys, load, saveSections, sessionId]);
 
   const compare = useCallback(async (fromVersionId, toVersionId) => {
     const comparison = await compareSOAPVersions(sessionId, fromVersionId, toVersionId);
@@ -190,7 +219,7 @@ export function useSOAPReview(sessionId) {
         event.preventDefault();
         manualSave();
       }
-      if (meta && event.key === "Enter" && dirtyKeys.length === 0) {
+      if (meta && event.key === "Enter" && dirtyKeys.length === 0 && !readOnly) {
         event.preventDefault();
         approve();
       }
@@ -201,13 +230,14 @@ export function useSOAPReview(sessionId) {
     };
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [approve, dirtyKeys.length, manualSave]);
+  }, [approve, dirtyKeys.length, manualSave, readOnly]);
 
   return {
     ...state,
     loading,
     saving,
     error,
+    readOnly,
     autosaveStatus,
     hasChanges: dirtyKeys.length > 0,
     canUndo: state.undoStack.length > 0,

@@ -88,7 +88,10 @@ export class SOAPGenerationService {
 
     if (!input.force) {
       const reusable = await this._soap.findReusableNote(sessionId, inputHash);
-      if (reusable) {
+      if (
+        reusable &&
+        (!transcriptVersion?.id || reusable.transcript_version_id === transcriptVersion.id)
+      ) {
         return { note: reusable, reused: true };
       }
     }
@@ -292,8 +295,12 @@ export class SOAPGenerationService {
 }
 
 function buildGenerationContext(context, transcriptVersion) {
-  const transcriptText = transcriptVersion.full_text ||
-    context.segments.map((segment) => `${segment.speaker_label}: ${segment.text}`).join("\n");
+  // Prefer live segments — transcript_versions.full_text can lag after edits/restores.
+  const segmentText = (context.segments ?? [])
+    .map((segment) => `${segment.speaker_label}: ${segment.text}`)
+    .join("\n")
+    .trim();
+  const transcriptText = segmentText || transcriptVersion?.full_text?.trim() || "";
 
   return {
     patient: context.patient ? {

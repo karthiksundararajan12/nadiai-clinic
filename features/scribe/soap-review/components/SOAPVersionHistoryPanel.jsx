@@ -53,6 +53,7 @@ export function SOAPVersionHistoryPanel({ versions, onCompare }) {
                     <span>
                       <span className="block text-sm font-medium">
                         Version {version.version_number} · {version.source ?? "ai_generated"}
+                        {version.is_approved_version ? " · Approved snapshot" : ""}
                       </span>
                       <span className="block text-xs text-muted-foreground">
                         {new Date(version.created_at).toLocaleString()}

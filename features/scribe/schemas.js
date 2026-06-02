@@ -374,9 +374,12 @@ export const SOAPSectionKeySchema = z.enum([
   "clinicalSummary",
 ]);
 
+/** Section updates allow empty strings while the doctor is still editing. */
+const soapSectionUpdateValue = z.string().trim().max(6000);
+
 export const UpdateSOAPSectionSchema = z.object({
   section_key: SOAPSectionKeySchema,
-  value: soapField,
+  value: soapSectionUpdateValue,
   source: z.enum(["autosave", "manual"]).optional().default("manual"),
 });
 

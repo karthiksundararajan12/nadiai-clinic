@@ -1,40 +1,39 @@
 "use client";
 
 /**
- * ScribeWorkflow — Record → Upload → Transcribe → Review → SOAP
+ * ScribeWorkflow — Record → Transcript → SOAP → Archive to history
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { ScribeRecordingPanel } from "@/components/scribe/scribe-recording-panel";
+import { ConsultationHistoryTable } from "@/components/scribe/consultation-history-table";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
 import { TranscriptReviewWorkspace } from "@/features/scribe/transcript-review";
 import { SOAPReviewWorkspace } from "@/features/scribe/soap-review";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import {
   ArrowLeft,
-  ClipboardList,
+  History,
   Loader2,
   RefreshCw,
   Sparkles,
 } from "lucide-react";
 
-const CONSULTATION_STATUSES = [
-  "CREATED", "RECORDING", "UPLOADING", "UPLOADED",
-  "TRANSCRIPTION_QUEUED", "TRANSCRIBING", "TRANSCRIBED", "TRANSCRIPTION_FAILED",
-  "REVIEWING", "REVIEW_COMPLETED",
-  "GENERATING_SOAP", "SOAP_READY", "SOAP_REVIEW_REQUIRED", "SOAP_REVIEWING", "SOAP_APPROVED",
-];
-
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
-/**
- * @param {string} sessionId
- * @param {AbortSignal} signal
- */
+const ACTIVE_SOAP_STATUSES = new Set([
+  "SOAP_READY",
+  "SOAP_REVIEW_REQUIRED",
+  "SOAP_REVIEWING",
+  "GENERATING_SOAP",
+]);
+
 async function fetchTranscriptionRun(sessionId, signal) {
   const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
     method: "POST",
@@ -47,12 +46,23 @@ async function fetchTranscriptionRun(sessionId, signal) {
   return payload;
 }
 
+async function fetchConsultations(bucket) {
+  const res = await fetch(
+    `/api/scribe/consultations/history?bucket=${bucket}&limit=50&sort_order=desc`,
+  );
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(payload?.error || `Failed to load consultations (${res.status})`);
+  return payload?.data ?? [];
+}
+
 export function ScribeWorkflow() {
   const [language, setLanguage] = useState("english");
   const [view, setView] = useState("home");
+  const [listTab, setListTab] = useState("active");
   const [activeSessionId, setActiveSessionId] = useState(null);
 
-  const [sessions, setSessions] = useState([]);
+  const [activeSessions, setActiveSessions] = useState([]);
+  const [historySessions, setHistorySessions] = useState([]);
   const [initialLoad, setInitialLoad] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [listError, setListError] = useState(null);
@@ -62,6 +72,7 @@ export function ScribeWorkflow() {
   const [uploadError, setUploadError] = useState(null);
   const [busySessionId, setBusySessionId] = useState(null);
   const [actionError, setActionError] = useState(null);
+  const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -75,13 +86,14 @@ export function ScribeWorkflow() {
     setListError(null);
 
     try {
-      const query = CONSULTATION_STATUSES
-        .map((s) => `status=${encodeURIComponent(s)}`)
-        .join("&");
-      const res = await fetch(`/api/scribe/sessions?${query}&limit=20&sort_order=desc`);
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || `Failed to load consultations (${res.status})`);
-      if (mountedRef.current) setSessions(payload?.data ?? []);
+      const [active, history] = await Promise.all([
+        fetchConsultations("active"),
+        fetchConsultations("history"),
+      ]);
+      if (mountedRef.current) {
+        setActiveSessions(active);
+        setHistorySessions(history);
+      }
     } catch (err) {
       if (mountedRef.current) setListError(err);
     } finally {
@@ -136,7 +148,6 @@ export function ScribeWorkflow() {
 
     try {
       const audioDurationSeconds = Math.max(1, durationSeconds || 30);
-
       const finalized = await uploadCompletedRecording({
         chunks,
         audioDurationSeconds,
@@ -153,6 +164,7 @@ export function ScribeWorkflow() {
       const sessionId = finalized?.session?.id ?? finalized?.id;
       if (!sessionId) throw new Error("Upload finished but no session id was returned");
 
+      setLastRecordedSessionId(sessionId);
       setPipelineMessage("Transcribing conversation…");
       await runTranscription(sessionId);
     } catch (err) {
@@ -170,7 +182,7 @@ export function ScribeWorkflow() {
       const res = await fetch(`/api/scribe/sessions/${sessionId}/soap/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify({ force: true }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -193,15 +205,20 @@ export function ScribeWorkflow() {
     loadConsultations(true);
   }, [loadConsultations]);
 
+  const handleSOAPApproved = useCallback(() => {
+    goHome();
+    setListTab("history");
+  }, [goHome]);
+
   if (view === "transcript" && activeSessionId) {
     return (
       <div className="space-y-4">
         <WorkflowHeader
           title="Transcript review"
-          subtitle="Review the doctor–patient conversation, then complete review to enable SOAP"
+          subtitle="Review the conversation, then complete review to enable SOAP"
           onBack={goHome}
         />
-        <TranscriptReviewWorkspace sessionId={activeSessionId} />
+        <TranscriptReviewWorkspace key={activeSessionId} sessionId={activeSessionId} />
       </div>
     );
   }
@@ -211,10 +228,15 @@ export function ScribeWorkflow() {
       <div className="space-y-4">
         <WorkflowHeader
           title="SOAP review"
-          subtitle="Review and approve the generated SOAP note"
+          subtitle="Edit, save versions, and approve — moves to history when approved"
           onBack={goHome}
         />
-        <SOAPReviewWorkspace sessionId={activeSessionId} />
+        <SOAPReviewWorkspace
+          key={activeSessionId}
+          sessionId={activeSessionId}
+          onApproved={handleSOAPApproved}
+          onBack={goHome}
+        />
       </div>
     );
   }
@@ -230,14 +252,12 @@ export function ScribeWorkflow() {
             onRecordingComplete={handleRecordingComplete}
             onError={(err) => setUploadError(err)}
           />
-
           {pipelineBusy && pipelineMessage && (
             <p className="mt-4 text-sm text-muted-foreground flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin shrink-0" />
               {pipelineMessage}
             </p>
           )}
-
           {uploadError && (
             <div className="mt-4 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center">
               <p className="text-sm text-destructive">{uploadError.message}</p>
@@ -249,21 +269,35 @@ export function ScribeWorkflow() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
           <div>
-            <CardTitle className="text-base">Your consultations</CardTitle>
+            <CardTitle className="text-base">Consultations</CardTitle>
             <p className="mt-0.5 text-sm text-muted-foreground">
-              Review transcript, then generate SOAP when status is review completed.
+              Active pipeline vs archived history after SOAP approval.
             </p>
           </div>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => loadConsultations(true)}
-            disabled={refreshing}
-          >
-            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <Link href="/scribe/history" className="gap-1.5">
+                <History className="h-3.5 w-3.5" />
+                Full history
+              </Link>
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => loadConsultations(true)}
+              disabled={refreshing}
+            >
+              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+            </Button>
+          </div>
         </CardHeader>
         <CardContent>
+          {actionError && (
+            <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+              {actionError.message}
+            </div>
+          )}
+
           {initialLoad ? (
             <p className="text-sm text-muted-foreground py-2">Loading consultations…</p>
           ) : listError ? (
@@ -273,35 +307,67 @@ export function ScribeWorkflow() {
                 Retry
               </Button>
             </div>
-          ) : sessions.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-2">
-              No consultations yet. Tap the mic above to record.
-            </p>
           ) : (
-            <div className="space-y-2">
-              {actionError && (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
-                  {actionError.message}
-                </div>
-              )}
-              {sessions.map((session) => (
-                <ConsultationRow
-                  key={session.id}
-                  session={session}
-                  busy={busySessionId === session.id}
-                  onTranscribe={() => runTranscription(session.id)}
-                  onReviewTranscript={() => {
-                    setActiveSessionId(session.id);
+            <Tabs value={listTab} onValueChange={setListTab}>
+              <TabsList>
+                <TabsTrigger value="active">
+                  Active ({activeSessions.length})
+                </TabsTrigger>
+                <TabsTrigger value="history">
+                  History ({historySessions.length})
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="active" className="mt-4 space-y-2">
+                {activeSessions.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-2">
+                    No active consultations. Record above to start.
+                  </p>
+                ) : (
+                  activeSessions.map((session) => (
+                    <ActiveConsultationRow
+                      key={session.id}
+                      session={session}
+                      isLatestRecording={session.id === lastRecordedSessionId}
+                      busy={busySessionId === session.id}
+                      onTranscribe={() => runTranscription(session.id)}
+                      onReviewTranscript={() => {
+                        setActiveSessionId(session.id);
+                        setView("transcript");
+                      }}
+                      onGenerateSOAP={() => generateSOAP(session.id)}
+                      onReviewSOAP={() => {
+                        setActiveSessionId(session.id);
+                        setView("soap");
+                      }}
+                    />
+                  ))
+                )}
+              </TabsContent>
+
+              <TabsContent value="history" className="mt-4">
+                <ConsultationHistoryTable
+                  consultations={historySessions}
+                  busySessionId={busySessionId}
+                  onViewTranscript={(id) => {
+                    setActiveSessionId(id);
                     setView("transcript");
                   }}
-                  onGenerateSOAP={() => generateSOAP(session.id)}
-                  onReviewSOAP={() => {
-                    setActiveSessionId(session.id);
+                  onViewSOAP={(id) => {
+                    setActiveSessionId(id);
                     setView("soap");
                   }}
+                  onViewVersions={(id) => {
+                    setActiveSessionId(id);
+                    setView("soap");
+                  }}
+                  onViewAudit={async (id) => {
+                    window.open(`/scribe/history`, "_self");
+                  }}
+                  onViewPrescription={() => {}}
                 />
-              ))}
-            </div>
+              </TabsContent>
+            </Tabs>
           )}
         </CardContent>
       </Card>
@@ -324,8 +390,9 @@ function WorkflowHeader({ title, subtitle, onBack }) {
   );
 }
 
-function ConsultationRow({
+function ActiveConsultationRow({
   session,
+  isLatestRecording,
   busy,
   onTranscribe,
   onReviewTranscript,
@@ -341,7 +408,7 @@ function ConsultationRow({
   const canRetryTranscribe = ["TRANSCRIPTION_QUEUED", "TRANSCRIBING"].includes(status);
   const canReviewTranscript = ["TRANSCRIBED", "REVIEWING", "REVIEW_COMPLETED"].includes(status);
   const canGenerateSOAP = status === "REVIEW_COMPLETED";
-  const canReviewSOAP = ["SOAP_READY", "SOAP_REVIEW_REQUIRED", "SOAP_REVIEWING", "SOAP_APPROVED"].includes(status);
+  const canReviewSOAP = ACTIVE_SOAP_STATUSES.has(status);
 
   const statusLabel = status.replace(/_/g, " ");
 
@@ -350,49 +417,31 @@ function ConsultationRow({
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-xs text-muted-foreground">{session.id.slice(0, 8)}…</span>
+          {isLatestRecording && <Badge className="text-xs">Latest recording</Badge>}
           <Badge variant="outline" className="text-xs">{statusLabel}</Badge>
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">{date}</p>
       </div>
-
       <div className="flex flex-wrap items-center gap-2 shrink-0">
         {(needsTranscribe || canRetryTranscribe) && (
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={onTranscribe}
-            className="text-xs min-w-[88px]"
-          >
-            {busy ? (
-              <span className="flex items-center gap-1">
-                <Loader2 className="h-3 w-3 animate-spin" />
-                Working…
-              </span>
-            ) : canRetryTranscribe ? (
-              "Retry"
-            ) : (
-              "Transcribe"
-            )}
+          <Button size="sm" variant="outline" disabled={busy} onClick={onTranscribe} className="text-xs">
+            {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : canRetryTranscribe ? "Retry" : "Transcribe"}
           </Button>
         )}
-
         {canReviewTranscript && (
           <Button size="sm" variant="outline" onClick={onReviewTranscript} className="text-xs">
             Review transcript
           </Button>
         )}
-
         {canGenerateSOAP && (
           <Button size="sm" disabled={busy} onClick={onGenerateSOAP} className="text-xs gap-1">
             <Sparkles className="h-3.5 w-3.5" />
             {busy ? "Generating…" : "Generate SOAP"}
           </Button>
         )}
-
         {canReviewSOAP && (
           <Button size="sm" variant="secondary" onClick={onReviewSOAP} className="text-xs">
-            View SOAP
+            Review SOAP
           </Button>
         )}
       </div>

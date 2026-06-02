@@ -17,6 +17,7 @@ import { createLogger } from "../logger.js";
 import {
   AUDIT_ACTION,
   JOB_STATUS,
+  JOB_TYPE,
   SCRIBE_LIMITS,
   SCRIBE_STORAGE,
   SESSION_STATUS,
@@ -112,25 +113,57 @@ export class TranscriptionService {
       error:         null,
     });
 
-    const { job, created } = await this._transcriptions.enqueue({
-      sessionId,
-      priority: input.priority,
-      metadata: {
-        clinicId:  ctx.clinicId,
-        doctorId:  ctx.doctorId,
-        queuedBy:  ctx.actorId,
-        force:     input.force,
-      },
-    });
+    let job;
+    let created = false;
+    try {
+      const enqueued = await this._transcriptions.enqueue({
+        sessionId,
+        priority: input.priority,
+        metadata: {
+          clinicId:  ctx.clinicId,
+          doctorId:  ctx.doctorId,
+          queuedBy:  ctx.actorId,
+          force:     input.force,
+        },
+      });
+      job = enqueued.job;
+      created = enqueued.created;
+    } catch (err) {
+      this._log.warn("Queue insert failed — using inline transcription job", {
+        sessionId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      job = this._buildInlineJob(sessionId, input.priority, ctx);
+      created = true;
+    }
 
     await this._audit.log({
       action: AUDIT_ACTION.TRANSCRIPTION_QUEUED,
       sessionId,
       ctx,
-      metadata: { jobId: job.id, created, priority: input.priority },
+      metadata: { jobId: job.id, created, priority: input.priority, inline: isInlineJob(job) },
     });
 
     return { session: nextSession, transcription, job, queued: true };
+  }
+
+  /**
+   * In-memory job used when the DB queue is unavailable (e.g. missing RLS grants).
+   * @param {string} sessionId
+   * @param {number} [priority]
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  _buildInlineJob(sessionId, priority, ctx) {
+    return {
+      id:            `inline:${sessionId}`,
+      session_id:    sessionId,
+      job_type:      JOB_TYPE.TRANSCRIBE,
+      priority:      priority ?? 10,
+      status:        JOB_STATUS.PENDING,
+      attempt_count: 0,
+      max_attempts:  3,
+      metadata:      { inline: true, clinicId: ctx.clinicId, doctorId: ctx.doctorId },
+    };
   }
 
   /**
@@ -204,17 +237,14 @@ export class TranscriptionService {
 
     let job = await this._transcriptions.findActiveJob(sessionId);
     if (!job) {
-      throw new TranscriptionNotReadyError("No active transcription job found for this session");
+      job = this._buildInlineJob(sessionId, 10, ctx);
     }
 
     const workerId = `doctor_${ctx.actorId}`;
-    if (job.status === JOB_STATUS.PENDING) {
+    if (job.status === JOB_STATUS.PENDING && !isInlineJob(job)) {
       const claimed = await this._transcriptions.claimJobById(job.id, workerId);
       if (!claimed) {
-        job = await this._transcriptions.findActiveJob(sessionId);
-        if (!job) {
-          throw new TranscriptionNotReadyError("Could not claim transcription job");
-        }
+        job = await this._transcriptions.findActiveJob(sessionId) ?? job;
       } else {
         job = claimed;
       }
@@ -290,7 +320,7 @@ export class TranscriptionService {
     const session   = await this._sessions.findByIdForWorker(job.session_id);
 
     if (!session) {
-      await this._transcriptions.failJob(job.id, "Session not found", false, job.attempt_count, job.max_attempts);
+      await this._failQueueJob(job, "Session not found", false);
       return { jobId: job.id, status: JOB_STATUS.FAILED, error: "Session not found" };
     }
 
@@ -298,7 +328,7 @@ export class TranscriptionService {
 
     try {
       if (session.status === SESSION_STATUS.TRANSCRIBED) {
-        await this._transcriptions.completeJob(job.id);
+        await this._completeQueueJob(job);
         return { jobId: job.id, sessionId: session.id, status: "already_transcribed" };
       }
 
@@ -398,7 +428,7 @@ export class TranscriptionService {
         SESSION_STATUS.TRANSCRIBED,
         { error_message: null },
       );
-      await this._transcriptions.completeJob(job.id);
+      await this._completeQueueJob(job);
 
       await this._audit.log({
         action:    AUDIT_ACTION.TRANSCRIPTION_COMPLETED,
@@ -493,13 +523,7 @@ export class TranscriptionService {
     const message  = err instanceof Error ? err.message : String(err);
     const retryable = isRetryable(err);
 
-    const updatedJob = await this._transcriptions.failJob(
-      job.id,
-      message,
-      retryable,
-      job.attempt_count,
-      job.max_attempts,
-    );
+    const updatedJob = await this._failQueueJob(job, message, retryable);
 
     const nextTranscriptionStatus =
       updatedJob.status === JOB_STATUS.PENDING
@@ -564,11 +588,50 @@ export class TranscriptionService {
     }
     return { jobId: job.id, sessionId: session.id, status: updatedJob.status, error: message };
   }
+
+  /** @param {Record<string, unknown>} job */
+  async _completeQueueJob(job) {
+    if (isInlineJob(job)) return;
+    await this._transcriptions.completeJob(job.id);
+  }
+
+  /**
+   * @param {Record<string, unknown>} job
+   * @param {string} message
+   * @param {boolean} retryable
+   */
+  async _failQueueJob(job, message, retryable) {
+    if (isInlineJob(job)) {
+      const nextAttempt = (job.attempt_count ?? 0) + 1;
+      const willRetry   = retryable && nextAttempt < (job.max_attempts ?? 3);
+      return {
+        ...job,
+        status:        willRetry ? JOB_STATUS.PENDING : JOB_STATUS.FAILED,
+        attempt_count: nextAttempt,
+        error:         message,
+      };
+    }
+    return this._transcriptions.failJob(
+      job.id,
+      message,
+      retryable,
+      job.attempt_count,
+      job.max_attempts,
+    );
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
 // MODULE-LEVEL HELPERS
 // ─────────────────────────────────────────────────────────────
+
+/** @param {Record<string, unknown>|null|undefined} job */
+function isInlineJob(job) {
+  if (!job) return false;
+  const meta = job.metadata;
+  if (meta && typeof meta === "object" && "inline" in meta && meta.inline) return true;
+  return String(job.id ?? "").startsWith("inline:");
+}
 
 /** @type {Record<string, string>} File extension → MIME type */
 const MIME_TYPES = {

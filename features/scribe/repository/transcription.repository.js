@@ -5,6 +5,7 @@
 
 import { BaseRepository } from "./base.repository.js";
 import { JOB_STATUS, JOB_TYPE, TRANSCRIPTION_STATUS } from "../constants.js";
+import { DatabaseError } from "../errors.js";
 
 export class TranscriptionRepository extends BaseRepository {
   /** @param {import("@supabase/supabase-js").SupabaseClient} supabase */
@@ -18,29 +19,65 @@ export class TranscriptionRepository extends BaseRepository {
    * @param {{ sessionId: string; priority?: number; metadata?: Record<string, unknown> }} input
    */
   async enqueue(input) {
+    await this.resetStuckProcessingJobs(input.sessionId);
+
     const existing = await this.findActiveJob(input.sessionId);
     if (existing) return { job: existing, created: false };
 
-    const job = await this._run(
-      () =>
-        this._db
-          .from("scribe_processing_queue")
-          .insert({
-            session_id: input.sessionId,
-            job_type: JOB_TYPE.TRANSCRIBE,
-            priority: input.priority ?? 5,
-            status: JOB_STATUS.PENDING,
-            attempt_count: 0,
-            max_attempts: 3,
-            metadata: input.metadata ?? {},
-            scheduled_at: new Date().toISOString(),
-          })
-          .select("*")
-          .single(),
-      "enqueueTranscription",
-    );
+    const { data, error } = await this._db
+      .from("scribe_processing_queue")
+      .insert({
+        session_id: input.sessionId,
+        job_type: JOB_TYPE.TRANSCRIBE,
+        priority: input.priority ?? 5,
+        status: JOB_STATUS.PENDING,
+        attempt_count: 0,
+        max_attempts: 3,
+        metadata: input.metadata ?? {},
+        scheduled_at: new Date().toISOString(),
+      })
+      .select("*")
+      .single();
 
-    return { job, created: true };
+    if (!error) {
+      return { job: data, created: true };
+    }
+
+    // Duplicate pending job — return the existing row instead of failing the upload.
+    if (error.code === "23505") {
+      const duplicate = await this.findActiveJob(input.sessionId);
+      if (duplicate) return { job: duplicate, created: false };
+    }
+
+    this._log.error("DB error during enqueueTranscription", {
+      operation: "enqueueTranscription",
+      table: this._table,
+      code: error.code,
+      details: error.details,
+      hint: error.hint,
+    });
+    throw new DatabaseError("enqueueTranscription", error);
+  }
+
+  /**
+   * Clears jobs stuck in `processing` so a new pending job can be enqueued.
+   * @param {string} sessionId
+   */
+  async resetStuckProcessingJobs(sessionId) {
+    const staleBefore = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    await this._db
+      .from("scribe_processing_queue")
+      .update({
+        status: JOB_STATUS.FAILED,
+        error: "Stale processing job cleared",
+        completed_at: new Date().toISOString(),
+        locked_at: null,
+        locked_by: null,
+      })
+      .eq("session_id", sessionId)
+      .eq("job_type", JOB_TYPE.TRANSCRIBE)
+      .eq("status", JOB_STATUS.PROCESSING)
+      .lt("started_at", staleBefore);
   }
 
   /** @param {string} sessionId */

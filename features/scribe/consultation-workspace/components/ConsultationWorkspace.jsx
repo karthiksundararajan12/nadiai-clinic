@@ -3,23 +3,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranscriptReview } from "../../transcript-review/hooks/use-transcript-review.js";
 import { useSOAPReview } from "../../soap-review/hooks/use-soap-review.js";
-import { usePatientForSession } from "../hooks/use-patient-for-session.js";
 import { ScribeShell, ScribeColumns } from "./ScribeShell.jsx";
-import { ScribeSessionHeader, ScribeSessionFooter } from "./ScribeSessionHeader.jsx";
-import { PatientSidebar } from "./PatientSidebar.jsx";
+import { ScribeSessionHeader } from "./ScribeSessionHeader.jsx";
 import { TranscriptPanel } from "./TranscriptPanel.jsx";
 import {
   SOAPEditorPanel,
   SOAPEmptyPanel,
   SOAP_AVAILABLE_STATUSES,
-  computeTranscriptConfidence,
 } from "./SOAPPanel.jsx";
+import { isPoorTranscription } from "../lib/transcription-quality.js";
 
 export function ConsultationWorkspace({
   sessionId,
   onApproved,
   onEndSession,
   onOpenSessions,
+  onDelete,
+  deleting = false,
   toolbarLeft,
   readOnly: readOnlyProp,
   pipelineBusy = false,
@@ -30,7 +30,6 @@ export function ConsultationWorkspace({
   const sessionStatus = transcript.session?.status ?? "";
   const hasSoap = SOAP_AVAILABLE_STATUSES.has(sessionStatus);
   const soap = useSOAPReview(sessionId, { enabled: hasSoap && !transcript.loading && !pipelineBusy });
-  const { patient } = usePatientForSession(transcript.session?.patient_id);
 
   const readOnly = readOnlyProp ?? transcript.readOnly;
   const soapApproved =
@@ -39,39 +38,32 @@ export function ConsultationWorkspace({
     sessionStatus === "COMPLETED" ||
     sessionStatus === "READY_FOR_PRESCRIPTION";
 
-  const canCompleteReview = !readOnly && sessionStatus === "REVIEWING";
-  const canGenerateSOAP =
-    !readOnly &&
-    ["REVIEW_COMPLETED", "SOAP_READY", "SOAP_REVIEW_REQUIRED"].includes(sessionStatus);
   const canApproveSOAP = !soapApproved && sessionStatus === "SOAP_REVIEWING";
   const generatingSOAP =
     transcript.generatingSOAP || sessionStatus === "GENERATING_SOAP";
 
   const [autoPipelineRunning, setAutoPipelineRunning] = useState(false);
-  const [autoPipelineFailed, setAutoPipelineFailed] = useState(false);
   const autoPipelineAttemptedRef = useRef(false);
 
-  const confidence = useMemo(
-    () => computeTranscriptConfidence(transcript.segments),
-    [transcript.segments],
+  const poorTranscription = useMemo(
+    () =>
+      isPoorTranscription({
+        sessionStatus,
+        segments: transcript.segments,
+        loadError: transcript.error,
+        pipelineBusy,
+        loading: transcript.loading,
+      }),
+    [
+      sessionStatus,
+      transcript.segments,
+      transcript.error,
+      pipelineBusy,
+      transcript.loading,
+    ],
   );
 
-  const statusLabel = soapApproved ? "Approved" : hasSoap ? "Draft" : pipelineBusy ? "Processing" : "In review";
-
-  const handleSave = useCallback(async () => {
-    if (transcript.hasChanges) await transcript.manualSave();
-    if (soap.hasChanges) await soap.manualSave();
-  }, [soap, transcript]);
-
-  const handleCompleteReview = useCallback(async () => {
-    await transcript.completeReview();
-    await transcript.load();
-  }, [transcript]);
-
-  const handleGenerateSOAP = useCallback(async () => {
-    await transcript.generateSOAP();
-    await transcript.load();
-  }, [transcript]);
+  const showDelete = Boolean(onDelete) && !readOnly && poorTranscription;
 
   const handleApproveSOAP = useCallback(async () => {
     await soap.approve();
@@ -81,11 +73,10 @@ export function ConsultationWorkspace({
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
     setAutoPipelineRunning(false);
-    setAutoPipelineFailed(false);
   }, [sessionId]);
 
   useEffect(() => {
-    if (!autoGenerateNote || readOnly || pipelineBusy || transcript.loading) return;
+    if (!autoGenerateNote || readOnly || pipelineBusy || transcript.loading || poorTranscription) return;
     if (autoPipelineAttemptedRef.current || autoPipelineRunning || generatingSOAP) return;
 
     const shouldCompleteAndGenerate =
@@ -107,7 +98,6 @@ export function ConsultationWorkspace({
         await transcript.generateSOAP();
       } catch {
         autoPipelineAttemptedRef.current = false;
-        setAutoPipelineFailed(true);
       } finally {
         setAutoPipelineRunning(false);
       }
@@ -124,6 +114,7 @@ export function ConsultationWorkspace({
     transcript.load,
     autoPipelineRunning,
     generatingSOAP,
+    poorTranscription,
   ]);
 
   const transcriptPipelineMessage = pipelineBusy
@@ -134,42 +125,24 @@ export function ConsultationWorkspace({
 
   const noteGenerating = pipelineBusy || autoPipelineRunning || generatingSOAP;
 
-  const lastSaved = transcript.session?.updated_at
-    ? new Date(transcript.session.updated_at).toLocaleTimeString(undefined, {
-        hour: "2-digit",
-        minute: "2-digit",
-      })
-    : null;
-
   const soapReady = hasSoap && !soap.loading && !soap.error;
-  const notePanel = soapReady ? (
+  const soapPanel = soapReady ? (
     <SOAPEditorPanel
       draft={soap.draft}
       dirty={soap.dirty}
       readOnly={soapApproved}
       saving={soap.saving}
-      loading={false}
       error={soap.error}
       onChange={soap.updateSection}
       onRetry={soap.load}
-      confidence={confidence}
-      onRegenerate={handleGenerateSOAP}
       onApprove={handleApproveSOAP}
-      onSave={handleSave}
       canApprove={canApproveSOAP}
       generating={noteGenerating}
       hasChanges={soap.hasChanges || transcript.hasChanges}
     />
   ) : (
     <SOAPEmptyPanel
-      sessionStatus={sessionStatus}
       generating={noteGenerating || (hasSoap && soap.loading)}
-      canGenerate={(!autoGenerateNote || autoPipelineFailed) && canGenerateSOAP}
-      onGenerate={handleGenerateSOAP}
-      confidence={confidence}
-      onCompleteReview={handleCompleteReview}
-      canCompleteReview={(!autoGenerateNote || autoPipelineFailed) && canCompleteReview}
-      completeReviewDisabled={transcript.saving || transcript.hasChanges || generatingSOAP}
       error={soap.error}
       onRetry={soap.load}
     />
@@ -183,24 +156,13 @@ export function ConsultationWorkspace({
             toolbarLeft={toolbarLeft}
             onEndSession={onEndSession}
             onOpenSessions={onOpenSessions}
-          />
-        }
-        footer={
-          <ScribeSessionFooter
-            sessionId={sessionId}
-            lastSaved={lastSaved}
-            statusLabel={statusLabel}
+            onDelete={showDelete ? onDelete : undefined}
+            deleting={deleting}
           />
         }
       >
         <ScribeColumns
-          patient={
-            <PatientSidebar
-              patient={patient}
-              sessionDate={transcript.session?.created_at}
-            />
-          }
-          transcript={
+          recording={
             <TranscriptPanel
               segments={transcript.segments}
               dirty={transcript.dirty}
@@ -212,9 +174,12 @@ export function ConsultationWorkspace({
               pipelineMessage={transcriptPipelineMessage}
               loadError={transcript.error}
               onRetryLoad={transcript.load}
+              poorTranscription={showDelete}
+              onDelete={showDelete ? onDelete : undefined}
+              deleting={deleting}
             />
           }
-          note={notePanel}
+          soap={soapPanel}
         />
       </ScribeShell>
     </div>

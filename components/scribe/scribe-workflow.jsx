@@ -216,6 +216,8 @@ export function ScribeWorkflow() {
           pipelineBusy={pipelineBusy}
           pipelineMessage={pipelineMessage}
           autoGenerateNote={!viewFromHistory}
+          onDelete={() => deleteSession(activeSessionId)}
+          deleting={busySessionId === activeSessionId}
         />
         <SessionsDrawer
           open={sessionsOpen}
@@ -240,7 +242,6 @@ export function ScribeWorkflow() {
   return (
     <div className="relative h-full min-h-0" data-testid="scribe-workflow">
       <ScribeLiveSession
-        language={language}
         disabled={pipelineBusy}
         pipelineMessage={pipelineMessage}
         onRecordingComplete={handleRecordingComplete}

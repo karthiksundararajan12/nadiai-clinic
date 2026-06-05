@@ -2,15 +2,12 @@
 
 import { useCallback } from "react";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
-import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { ScribeShell, ScribeColumns } from "./ScribeShell.jsx";
-import { ScribeSessionHeader, ScribeSessionFooter } from "./ScribeSessionHeader.jsx";
-import { PatientSidebar } from "./PatientSidebar.jsx";
+import { ScribeSessionHeader } from "./ScribeSessionHeader.jsx";
 import { TranscriptPanel } from "./TranscriptPanel.jsx";
 import { SOAPEmptyPanel } from "./SOAPPanel.jsx";
 
 export function ScribeLiveSession({
-  language,
   disabled,
   pipelineMessage,
   onRecordingComplete,
@@ -23,11 +20,6 @@ export function ScribeLiveSession({
     chunkIntervalMs: 5_000,
     onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
   });
-
-  const { level: audioLevel } = useAudioLevel(
-    recording.analyserNode,
-    recording.isRecording && !recording.isPaused,
-  );
 
   const handleStop = useCallback(async () => {
     try {
@@ -48,20 +40,14 @@ export function ScribeLiveSession({
     <ScribeShell
       header={
         <ScribeSessionHeader
-          isRecording={isRecording}
-          isPaused={recording.isPaused}
-          duration={recording.duration}
-          audioLevel={audioLevel}
           toolbarLeft={toolbarLeft}
           onEndSession={onEndSession}
           onOpenSessions={onOpenSessions}
         />
       }
-      footer={<ScribeSessionFooter statusLabel="Recording" />}
     >
       <ScribeColumns
-        patient={<PatientSidebar sessionDate={new Date().toISOString()} />}
-        transcript={
+        recording={
           <TranscriptPanel
             segments={[]}
             dirty={{}}
@@ -70,7 +56,6 @@ export function ScribeLiveSession({
             isPaused={recording.isPaused}
             duration={recording.duration}
             pipelineMessage={pipelineMessage}
-            language={language}
             recordingControls={
               isRecording
                 ? {
@@ -86,13 +71,7 @@ export function ScribeLiveSession({
             isRequestingMic={recording.isRequesting}
           />
         }
-        note={
-          <SOAPEmptyPanel
-            sessionStatus="RECORDING"
-            generating={Boolean(pipelineMessage)}
-            canGenerate={false}
-          />
-        }
+        soap={<SOAPEmptyPanel generating={Boolean(pipelineMessage)} />}
       />
     </ScribeShell>
   );

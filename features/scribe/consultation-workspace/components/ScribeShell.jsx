@@ -1,46 +1,40 @@
 "use client";
 
-/**
- * Full-viewport scribe shell — 20 / 40 / 40 three-column clinical workspace.
- */
-
-export function ScribeShell({ header, actionBar, footer, children, className }) {
+export function ScribeShell({ header, children, className }) {
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden bg-slate-50 ${className ?? ""}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/80 ${className ?? ""}`}
       data-testid="scribe-shell"
     >
       {header}
-      {actionBar}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {children}
-      </div>
-      {footer}
+      <div className="min-h-0 flex-1 overflow-hidden">{children}</div>
     </div>
   );
 }
 
-function PanelCard({ children }) {
+export function ScribeCard({ title, children, className }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
-      {children}
+    <div
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm ${className ?? ""}`}
+    >
+      <div className="shrink-0 border-b border-slate-100 px-4 py-3">
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+      </div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </div>
   );
 }
 
-/** @param {{ patient: React.ReactNode; transcript: React.ReactNode; note: React.ReactNode }} props */
-export function ScribeColumns({ patient, transcript, note }) {
+/** @param {{ recording: React.ReactNode; soap: React.ReactNode }} props */
+export function ScribeColumns({ recording, soap }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-      <div className="hidden w-[280px] shrink-0 overflow-hidden border-r border-slate-200/80 bg-white lg:flex lg:flex-col">
-        {patient}
-      </div>
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-r border-slate-200/80 bg-slate-50/60 p-3">
-        <PanelCard>{transcript}</PanelCard>
-      </div>
-      <div className="flex min-h-0 w-full shrink-0 flex-col overflow-hidden bg-slate-50/80 p-3 lg:w-[min(440px,40%)]">
-        <PanelCard>{note}</PanelCard>
-      </div>
+    <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
+      <ScribeCard title="Recording" className="min-h-[280px] lg:min-h-0">
+        {recording}
+      </ScribeCard>
+      <ScribeCard title="SOAP Note" className="min-h-[280px] lg:min-h-0 lg:max-w-[420px] lg:shrink-0">
+        {soap}
+      </ScribeCard>
     </div>
   );
 }

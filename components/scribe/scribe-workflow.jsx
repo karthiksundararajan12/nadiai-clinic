@@ -10,8 +10,7 @@ import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { ScribeRecordingPanel } from "@/components/scribe/scribe-recording-panel";
 import { ConsultationHistoryTable } from "@/components/scribe/consultation-history-table";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
-import { TranscriptReviewWorkspace } from "@/features/scribe/transcript-review";
-import { SOAPReviewWorkspace } from "@/features/scribe/soap-review";
+import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -23,7 +22,6 @@ import {
   History,
   Loader2,
   RefreshCw,
-  Sparkles,
   Trash2,
 } from "lucide-react";
 
@@ -123,7 +121,7 @@ export function ScribeWorkflow() {
       if (payload?.session?.status === "TRANSCRIBED") {
         setViewFromHistory(false);
         setActiveSessionId(sessionId);
-        setView("transcript");
+        setView("consultation");
       }
       return payload;
     } catch (err) {
@@ -182,31 +180,6 @@ export function ScribeWorkflow() {
     }
   }, [language, runTranscription]);
 
-  const generateSOAP = useCallback(async (sessionId) => {
-    setBusySessionId(sessionId);
-    setActionError(null);
-    try {
-      const res = await fetch(`/api/scribe/sessions/${sessionId}/soap/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: true }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        const hint = payload?.details?.provider ? ` (provider: ${payload.details.provider})` : "";
-        throw new Error((payload?.error || `SOAP generation failed (${res.status})`) + hint);
-      }
-      await loadConsultations(true);
-      setViewFromHistory(false);
-      setActiveSessionId(sessionId);
-      setView("soap");
-    } catch (err) {
-      setActionError(err instanceof Error ? err : new Error(String(err)));
-    } finally {
-      setBusySessionId(null);
-    }
-  }, [loadConsultations]);
-
   const goHome = useCallback(() => {
     setView("home");
     setActiveSessionId(null);
@@ -237,34 +210,20 @@ export function ScribeWorkflow() {
     setListTab("history");
   }, [goHome]);
 
-  if (view === "transcript" && activeSessionId) {
+  if (view === "consultation" && activeSessionId) {
     return (
       <div className="space-y-4">
         <WorkflowHeader
-          title="Transcript review"
-          subtitle="Review the conversation, then complete review to enable SOAP"
+          title="Consultation"
+          subtitle="Conversation on the left · SOAP note on the right"
           onBack={goHome}
           onDelete={viewFromHistory ? undefined : () => deleteSession(activeSessionId)}
         />
-        <TranscriptReviewWorkspace key={activeSessionId} sessionId={activeSessionId} />
-      </div>
-    );
-  }
-
-  if (view === "soap" && activeSessionId) {
-    return (
-      <div className="space-y-4">
-        <WorkflowHeader
-          title="SOAP review"
-          subtitle="Edit, save versions, and approve — moves to history when approved"
-          onBack={goHome}
-          onDelete={viewFromHistory ? undefined : () => deleteSession(activeSessionId)}
-        />
-        <SOAPReviewWorkspace
+        <ConsultationWorkspace
           key={activeSessionId}
           sessionId={activeSessionId}
           onApproved={handleSOAPApproved}
-          onBack={goHome}
+          showToolbar={!viewFromHistory}
         />
       </div>
     );
@@ -369,16 +328,10 @@ export function ScribeWorkflow() {
                       isLatestRecording={session.id === lastRecordedSessionId}
                       busy={busySessionId === session.id}
                       onTranscribe={() => runTranscription(session.id)}
-                      onReviewTranscript={() => {
+                      onOpen={() => {
                         setViewFromHistory(false);
                         setActiveSessionId(session.id);
-                        setView("transcript");
-                      }}
-                      onGenerateSOAP={() => generateSOAP(session.id)}
-                      onReviewSOAP={() => {
-                        setViewFromHistory(false);
-                        setActiveSessionId(session.id);
-                        setView("soap");
+                        setView("consultation");
                       }}
                       onDelete={() => deleteSession(session.id)}
                     />
@@ -393,17 +346,17 @@ export function ScribeWorkflow() {
                   onViewTranscript={(id) => {
                     setViewFromHistory(true);
                     setActiveSessionId(id);
-                    setView("transcript");
+                    setView("consultation");
                   }}
                   onViewSOAP={(id) => {
                     setViewFromHistory(true);
                     setActiveSessionId(id);
-                    setView("soap");
+                    setView("consultation");
                   }}
                   onViewVersions={(id) => {
                     setViewFromHistory(true);
                     setActiveSessionId(id);
-                    setView("soap");
+                    setView("consultation");
                   }}
                   onViewAudit={async (id) => {
                     window.open(`/scribe/history`, "_self");
@@ -473,9 +426,7 @@ function ActiveConsultationRow({
   isLatestRecording,
   busy,
   onTranscribe,
-  onReviewTranscript,
-  onGenerateSOAP,
-  onReviewSOAP,
+  onOpen,
   onDelete,
 }) {
   const { status } = session;
@@ -485,9 +436,9 @@ function ActiveConsultationRow({
 
   const needsTranscribe = ["UPLOADED", "TRANSCRIPTION_FAILED"].includes(status);
   const canRetryTranscribe = ["TRANSCRIPTION_QUEUED", "TRANSCRIBING"].includes(status);
-  const canReviewTranscript = ["TRANSCRIBED", "REVIEWING", "REVIEW_COMPLETED"].includes(status);
-  const canGenerateSOAP = status === "REVIEW_COMPLETED";
-  const canReviewSOAP = ACTIVE_SOAP_STATUSES.has(status);
+  const canOpen =
+    ["TRANSCRIBED", "REVIEWING", "REVIEW_COMPLETED"].includes(status) ||
+    ACTIVE_SOAP_STATUSES.has(status);
 
   const statusLabel = status.replace(/_/g, " ");
 
@@ -511,38 +462,15 @@ function ActiveConsultationRow({
             {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : canRetryTranscribe ? "Retry" : "Transcribe"}
           </Button>
         )}
-        {canReviewTranscript && (
+        {canOpen && (
           <Button
             size="sm"
-            variant="outline"
+            variant="default"
             data-testid="review-transcript"
-            onClick={onReviewTranscript}
+            onClick={onOpen}
             className="text-xs"
           >
-            Review transcript
-          </Button>
-        )}
-        {canGenerateSOAP && (
-          <Button
-            size="sm"
-            disabled={busy}
-            data-testid="scribe-generate-soap"
-            onClick={onGenerateSOAP}
-            className="text-xs gap-1"
-          >
-            <Sparkles className="h-3.5 w-3.5" />
-            {busy ? "Generating…" : "Generate SOAP"}
-          </Button>
-        )}
-        {canReviewSOAP && (
-          <Button
-            size="sm"
-            variant="secondary"
-            data-testid="review-soap"
-            onClick={onReviewSOAP}
-            className="text-xs"
-          >
-            Review SOAP
+            Open
           </Button>
         )}
         {canDeleteSession(status) && (

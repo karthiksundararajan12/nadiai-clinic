@@ -97,9 +97,9 @@ function reducer(state, action) {
   }
 }
 
-export function useSOAPReview(sessionId) {
+export function useSOAPReview(sessionId, { enabled = true } = {}) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled && Boolean(sessionId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(null);
   const loadRequestRef = useRef(0);
@@ -111,12 +111,12 @@ export function useSOAPReview(sessionId) {
 
   useEffect(() => {
     dispatch({ type: "RESET" });
-    setLoading(Boolean(sessionId));
+    setLoading(enabled && Boolean(sessionId));
     setError(null);
-  }, [sessionId]);
+  }, [enabled, sessionId]);
 
   const load = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !enabled) return;
     const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
@@ -130,7 +130,7 @@ export function useSOAPReview(sessionId) {
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
-  }, [sessionId]);
+  }, [enabled, sessionId]);
 
   const saveSections = useCallback(async (sectionKeys, source = "autosave") => {
     const dirty = dirtyRef.current;
@@ -209,8 +209,9 @@ export function useSOAPReview(sessionId) {
   }, [dirtyKeys.length, load]));
 
   useEffect(() => {
+    if (!enabled) return;
     queueMicrotask(() => load());
-  }, [load]);
+  }, [enabled, load]);
 
   useEffect(() => {
     const handler = (event) => {

@@ -59,12 +59,9 @@ test.describe("AI Scribe — full clinical pipeline @full", () => {
     await page.getByTestId("scribe-complete-review").click();
     await api.waitForSessionStatus(sessionId, ["REVIEW_COMPLETED"], 90_000);
 
-    await page.getByRole("button", { name: "Back" }).click();
-    await page.getByTestId("consultations-refresh").click();
-    await expect(sessionRow(page, sessionId).getByTestId("scribe-generate-soap")).toBeVisible();
-
-    // 5. SOAP generation (UI)
-    await sessionRow(page, sessionId).getByTestId("scribe-generate-soap").click();
+    // 5. SOAP generation (split view — right panel)
+    await expect(page.getByTestId("scribe-generate-soap")).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId("scribe-generate-soap").click();
     await expect(page.getByTestId("soap-review-workspace")).toBeVisible({ timeout: 180_000 });
     const soap = await api.getSoapReview(sessionId);
     expect(soap.note).toBeTruthy();

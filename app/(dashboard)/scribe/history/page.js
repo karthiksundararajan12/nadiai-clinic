@@ -3,8 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { ConsultationHistoryTable } from "@/components/scribe/consultation-history-table";
-import { SOAPReviewWorkspace } from "@/features/scribe/soap-review";
-import { TranscriptReviewWorkspace } from "@/features/scribe/transcript-review";
+import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { PrescriptionReviewWorkspace } from "@/components/scribe/prescription-review-workspace";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,25 +57,13 @@ export default function ConsultationHistoryPage() {
     }
   }, []);
 
-  if (view === "transcript" && activeId) {
+  if ((view === "transcript" || view === "soap" || view === "consultation") && activeId) {
     return (
       <>
-        <Header title="Transcript" subtitle="Read-only transcript review" />
+        <Header title="Consultation" subtitle="Conversation and SOAP note" />
         <div className="flex-1 p-6 space-y-4">
           <BackButton onClick={goList} />
-          <TranscriptReviewWorkspace key={activeId} sessionId={activeId} />
-        </div>
-      </>
-    );
-  }
-
-  if (view === "soap" && activeId) {
-    return (
-      <>
-        <Header title="SOAP note" subtitle="Approved or archived SOAP" />
-        <div className="flex-1 p-6 space-y-4">
-          <BackButton onClick={goList} />
-          <SOAPReviewWorkspace key={activeId} sessionId={activeId} onBack={goList} />
+          <ConsultationWorkspace key={activeId} sessionId={activeId} showToolbar={false} />
         </div>
       </>
     );
@@ -145,9 +132,9 @@ export default function ConsultationHistoryPage() {
             ) : (
               <ConsultationHistoryTable
                 consultations={consultations}
-                onViewTranscript={(id) => { setActiveId(id); setView("transcript"); }}
-                onViewSOAP={(id) => { setActiveId(id); setView("soap"); }}
-                onViewVersions={(id) => { setActiveId(id); setView("soap"); }}
+                onViewTranscript={(id) => { setActiveId(id); setView("consultation"); }}
+                onViewSOAP={(id) => { setActiveId(id); setView("consultation"); }}
+                onViewVersions={(id) => { setActiveId(id); setView("consultation"); }}
                 onViewAudit={openAudit}
                 onViewPrescription={(id) => { setActiveId(id); setView("rx"); }}
               />

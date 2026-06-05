@@ -76,10 +76,10 @@ function reducer(state, action) {
   }
 }
 
-export function useTranscriptReview(sessionId) {
+export function useTranscriptReview(sessionId, { enabled = true } = {}) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [readOnly, setReadOnly] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(Boolean(sessionId && enabled));
   const [saving, setSaving] = useState(false);
   const [generatingSOAP, setGeneratingSOAP] = useState(false);
   const [error, setError] = useState(null);
@@ -87,12 +87,12 @@ export function useTranscriptReview(sessionId) {
 
   useEffect(() => {
     dispatch({ type: "RESET" });
-    setLoading(Boolean(sessionId));
+    setLoading(Boolean(sessionId && enabled));
     setError(null);
-  }, [sessionId]);
+  }, [sessionId, enabled]);
 
   const load = useCallback(async () => {
-    if (!sessionId) return;
+    if (!sessionId || !enabled) return;
     const requestId = ++loadRequestRef.current;
     setLoading(true);
     setError(null);
@@ -107,7 +107,7 @@ export function useTranscriptReview(sessionId) {
     } finally {
       if (requestId === loadRequestRef.current) setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, enabled]);
 
   const saveSegments = useCallback(async (segmentIds = Object.keys(state.dirty)) => {
     if (!segmentIds.length) return;
@@ -148,9 +148,9 @@ export function useTranscriptReview(sessionId) {
   const completeReview = useCallback(async () => {
     await saveSegments();
     const result = await completeTranscriptReview(sessionId);
-    dispatch({ type: "LOAD", payload: { ...state, session: result.session } });
+    await load();
     return result;
-  }, [saveSegments, sessionId, state]);
+  }, [saveSegments, sessionId, load]);
 
   const generateSOAP = useCallback(async () => {
     if (dirtyKeys.length > 0) {
@@ -183,8 +183,12 @@ export function useTranscriptReview(sessionId) {
   useTranscriptRealtime(sessionId, onRealtimeChange);
 
   useEffect(() => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     queueMicrotask(() => load());
-  }, [load]);
+  }, [load, enabled]);
 
   return {
     ...state,

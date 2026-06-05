@@ -54,15 +54,24 @@ export function SOAPEmptyPanel({
   onCompleteReview,
   canCompleteReview,
   completeReviewDisabled,
+  error,
+  onRetry,
 }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
       <PanelHeader confidence={confidence} />
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 py-12 text-center">
-        {generating ? (
+        {error ? (
+          <>
+            <p className="text-[13px] text-rose-600">{error.message}</p>
+            {onRetry && (
+              <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
+            )}
+          </>
+        ) : generating ? (
           <>
             <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
-            <p className="text-[14px] text-slate-600">Generating clinical note…</p>
+            <p className="text-[14px] text-slate-600">Generating SOAP note…</p>
           </>
         ) : (
           <>
@@ -72,11 +81,9 @@ export function SOAPEmptyPanel({
             <div className="max-w-[260px] space-y-1.5">
               <p className="text-[15px] font-semibold text-slate-900">AI note pending</p>
               <p className="text-[13px] leading-relaxed text-slate-500">
-                {sessionStatus === "REVIEWING"
-                  ? "Review the transcript, then complete review to unlock note generation."
-                  : canGenerate
-                    ? "Transcript is ready. Generate a structured SOAP note."
-                    : "Your clinical note will appear here after transcription."}
+                {canGenerate
+                  ? "Transcript is ready. Generate a structured SOAP note."
+                  : "Your clinical note will appear here after transcription."}
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full max-w-[220px]">

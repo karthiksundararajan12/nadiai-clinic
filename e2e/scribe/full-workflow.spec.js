@@ -53,16 +53,11 @@ test.describe("AI Scribe — full clinical pipeline @full", () => {
     const row = sessionRow(page, sessionId);
     await expect(row).toBeVisible({ timeout: 30_000 });
 
-    // 4. Transcript review (UI) + complete
+    // 4–5. Open consultation — transcript loads and SOAP auto-generates
     await row.getByTestId("review-transcript").click();
     await expect(page.getByTestId("transcript-review-workspace")).toBeVisible();
-    await expect(page.getByTestId("scribe-complete-review")).toBeEnabled({ timeout: 30_000 });
-    await page.getByTestId("scribe-complete-review").click();
-    await api.waitForSessionStatus(sessionId, ["REVIEW_COMPLETED"], 90_000);
-
-    // 5. SOAP generation (split view — right panel)
-    await expect(page.getByTestId("scribe-generate-soap")).toBeVisible({ timeout: 30_000 });
-    await page.getByTestId("scribe-generate-soap").click();
+    await expect(page.getByTestId("consultation-workspace")).toBeVisible();
+    await api.waitForSessionStatus(sessionId, ["REVIEW_COMPLETED", "GENERATING_SOAP", "SOAP_REVIEWING", "SOAP_READY"], 90_000);
     await expect(page.getByTestId("soap-review-workspace")).toBeVisible({ timeout: 180_000 });
     const soap = await api.getSoapReview(sessionId);
     expect(soap.note).toBeTruthy();

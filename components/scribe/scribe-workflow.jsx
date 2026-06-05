@@ -145,6 +145,9 @@ export function ScribeWorkflow() {
       if (!sessionId) throw new Error("Upload finished but no session id was returned");
 
       setLastRecordedSessionId(sessionId);
+      setActiveSessionId(sessionId);
+      setViewFromHistory(false);
+      setView("consultation");
       setPipelineMessage("Transcribing conversation…");
       await runTranscription(sessionId);
     } catch (err) {
@@ -210,6 +213,9 @@ export function ScribeWorkflow() {
           onOpenSessions={() => setSessionsOpen(true)}
           toolbarLeft={languageToggle}
           readOnly={viewFromHistory}
+          pipelineBusy={pipelineBusy}
+          pipelineMessage={pipelineMessage}
+          autoGenerateNote={!viewFromHistory}
         />
         <SessionsDrawer
           open={sessionsOpen}

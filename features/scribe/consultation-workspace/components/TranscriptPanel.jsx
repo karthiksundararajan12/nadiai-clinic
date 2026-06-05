@@ -27,13 +27,15 @@ export function TranscriptPanel({
   isPaused,
   duration,
   pipelineMessage,
+  loadError,
+  onRetryLoad,
   language,
   recordingControls,
   onStartRecording,
   isRequestingMic,
 }) {
   const disabled = readOnly || saving || sessionStatus === "REVIEW_COMPLETED";
-  const isLive = mode === "recording" || isRecording;
+  const isLive = (mode === "recording" || isRecording) && !pipelineMessage;
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="transcript-review-workspace">
@@ -46,7 +48,9 @@ export function TranscriptPanel({
       )}
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {segments.length === 0 ? (
+        {loadError && !pipelineMessage ? (
+          <InlineErrorState error={loadError} onRetry={onRetryLoad} />
+        ) : segments.length === 0 ? (
           <EmptyState
             isLive={isLive}
             isRequestingMic={isRequestingMic}
@@ -94,6 +98,19 @@ function PanelHeader({ isLive }) {
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
           Live
         </span>
+      )}
+    </div>
+  );
+}
+
+function InlineErrorState({ error, onRetry }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+      <p className="text-[13px] text-rose-600">{error?.message || "Failed to load transcript."}</p>
+      {onRetry && (
+        <Button variant="outline" size="sm" onClick={onRetry}>
+          Retry
+        </Button>
       )}
     </div>
   );

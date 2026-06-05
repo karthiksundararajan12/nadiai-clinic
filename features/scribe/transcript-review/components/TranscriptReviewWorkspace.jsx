@@ -40,13 +40,9 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
           hasChanges={review.hasChanges}
           saving={review.saving}
           autosaveStatus={review.autosaveStatus}
-          canUndo={review.canUndo}
-          canRedo={review.canRedo}
           canComplete={canCompleteReview}
           canGenerateSOAP={canGenerateSOAP}
           generatingSOAP={review.generatingSOAP}
-          onUndo={review.undo}
-          onRedo={review.redo}
           onSave={review.manualSave}
           onComplete={review.completeReview}
           onGenerateSOAP={review.generateSOAP}

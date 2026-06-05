@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, RotateCcw, RotateCw, Save, XCircle } from "lucide-react";
+import { CheckCircle2, Save, XCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -9,10 +9,6 @@ export function SOAPReviewToolbar({
   hasChanges,
   saving,
   autosaveStatus,
-  canUndo,
-  canRedo,
-  onUndo,
-  onRedo,
   onSave,
   onApprove,
   onReject,
@@ -32,14 +28,6 @@ export function SOAPReviewToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onUndo} disabled={!canUndo || saving || approved}>
-          <RotateCcw className="size-4" />
-          Undo
-        </Button>
-        <Button variant="outline" size="sm" onClick={onRedo} disabled={!canRedo || saving || approved}>
-          <RotateCw className="size-4" />
-          Redo
-        </Button>
         <Button
           variant="secondary"
           size="sm"

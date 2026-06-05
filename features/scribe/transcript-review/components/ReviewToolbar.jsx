@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, RotateCcw, RotateCw, Save, Sparkles } from "lucide-react";
+import { CheckCircle2, Save, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
@@ -8,13 +8,9 @@ export function ReviewToolbar({
   hasChanges,
   saving,
   autosaveStatus,
-  canUndo,
-  canRedo,
   canComplete,
   canGenerateSOAP,
   generatingSOAP,
-  onUndo,
-  onRedo,
   onSave,
   onComplete,
   onGenerateSOAP,
@@ -31,14 +27,6 @@ export function ReviewToolbar({
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button variant="outline" size="sm" onClick={onUndo} disabled={!canUndo || saving}>
-          <RotateCcw className="size-4" />
-          Undo
-        </Button>
-        <Button variant="outline" size="sm" onClick={onRedo} disabled={!canRedo || saving}>
-          <RotateCw className="size-4" />
-          Redo
-        </Button>
         <Button variant="secondary" size="sm" onClick={onSave} disabled={saving}>
           <Save className="size-4" />
           Save version

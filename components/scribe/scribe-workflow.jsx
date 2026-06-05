@@ -17,12 +17,14 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import {
   ArrowLeft,
   History,
   Loader2,
   RefreshCw,
   Sparkles,
+  Trash2,
 } from "lucide-react";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
@@ -73,6 +75,7 @@ export function ScribeWorkflow() {
   const [busySessionId, setBusySessionId] = useState(null);
   const [actionError, setActionError] = useState(null);
   const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
+  const [viewFromHistory, setViewFromHistory] = useState(false);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -118,6 +121,7 @@ export function ScribeWorkflow() {
       const payload = await fetchTranscriptionRun(sessionId, controller.signal);
       await loadConsultations(true);
       if (payload?.session?.status === "TRANSCRIBED") {
+        setViewFromHistory(false);
         setActiveSessionId(sessionId);
         setView("transcript");
       }
@@ -193,6 +197,7 @@ export function ScribeWorkflow() {
         throw new Error((payload?.error || `SOAP generation failed (${res.status})`) + hint);
       }
       await loadConsultations(true);
+      setViewFromHistory(false);
       setActiveSessionId(sessionId);
       setView("soap");
     } catch (err) {
@@ -205,8 +210,27 @@ export function ScribeWorkflow() {
   const goHome = useCallback(() => {
     setView("home");
     setActiveSessionId(null);
+    setViewFromHistory(false);
     loadConsultations(true);
   }, [loadConsultations]);
+
+  const deleteSession = useCallback(async (sessionId) => {
+    if (!window.confirm("Delete this recording? This cannot be undone.")) return;
+
+    setBusySessionId(sessionId);
+    setActionError(null);
+    try {
+      const res = await fetch(`/api/scribe/sessions/${sessionId}`, { method: "DELETE" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(payload?.error || `Delete failed (${res.status})`);
+      if (activeSessionId === sessionId) goHome();
+      else await loadConsultations(true);
+    } catch (err) {
+      setActionError(err instanceof Error ? err : new Error(String(err)));
+    } finally {
+      setBusySessionId(null);
+    }
+  }, [activeSessionId, goHome, loadConsultations]);
 
   const handleSOAPApproved = useCallback(() => {
     goHome();
@@ -220,6 +244,7 @@ export function ScribeWorkflow() {
           title="Transcript review"
           subtitle="Review the conversation, then complete review to enable SOAP"
           onBack={goHome}
+          onDelete={viewFromHistory ? undefined : () => deleteSession(activeSessionId)}
         />
         <TranscriptReviewWorkspace key={activeSessionId} sessionId={activeSessionId} />
       </div>
@@ -233,6 +258,7 @@ export function ScribeWorkflow() {
           title="SOAP review"
           subtitle="Edit, save versions, and approve — moves to history when approved"
           onBack={goHome}
+          onDelete={viewFromHistory ? undefined : () => deleteSession(activeSessionId)}
         />
         <SOAPReviewWorkspace
           key={activeSessionId}
@@ -344,14 +370,17 @@ export function ScribeWorkflow() {
                       busy={busySessionId === session.id}
                       onTranscribe={() => runTranscription(session.id)}
                       onReviewTranscript={() => {
+                        setViewFromHistory(false);
                         setActiveSessionId(session.id);
                         setView("transcript");
                       }}
                       onGenerateSOAP={() => generateSOAP(session.id)}
                       onReviewSOAP={() => {
+                        setViewFromHistory(false);
                         setActiveSessionId(session.id);
                         setView("soap");
                       }}
+                      onDelete={() => deleteSession(session.id)}
                     />
                   ))
                 )}
@@ -362,14 +391,17 @@ export function ScribeWorkflow() {
                   consultations={historySessions}
                   busySessionId={busySessionId}
                   onViewTranscript={(id) => {
+                    setViewFromHistory(true);
                     setActiveSessionId(id);
                     setView("transcript");
                   }}
                   onViewSOAP={(id) => {
+                    setViewFromHistory(true);
                     setActiveSessionId(id);
                     setView("soap");
                   }}
                   onViewVersions={(id) => {
+                    setViewFromHistory(true);
                     setActiveSessionId(id);
                     setView("soap");
                   }}
@@ -387,17 +419,31 @@ export function ScribeWorkflow() {
   );
 }
 
-function WorkflowHeader({ title, subtitle, onBack }) {
+function WorkflowHeader({ title, subtitle, onBack, onDelete }) {
   return (
     <div className="flex items-start justify-between gap-3">
       <div>
         <h2 className="text-lg font-semibold">{title}</h2>
         <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
       </div>
-      <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
-        <ArrowLeft className="h-3.5 w-3.5" />
-        Back
-      </Button>
+      <div className="flex items-center gap-2 shrink-0">
+        {onDelete && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onDelete}
+            className="gap-1.5 text-destructive hover:text-destructive"
+            data-testid="delete-session"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete
+          </Button>
+        )}
+        <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back
+        </Button>
+      </div>
     </div>
   );
 }
@@ -418,6 +464,10 @@ function UploadErrorBanner({ error, onRelease }) {
   );
 }
 
+function canDeleteSession(status) {
+  return ACTIVE_CONSULTATION_STATUSES.includes(status);
+}
+
 function ActiveConsultationRow({
   session,
   isLatestRecording,
@@ -426,6 +476,7 @@ function ActiveConsultationRow({
   onReviewTranscript,
   onGenerateSOAP,
   onReviewSOAP,
+  onDelete,
 }) {
   const { status } = session;
   const date = new Date(session.created_at).toLocaleString(undefined, {
@@ -492,6 +543,19 @@ function ActiveConsultationRow({
             className="text-xs"
           >
             Review SOAP
+          </Button>
+        )}
+        {canDeleteSession(status) && (
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={onDelete}
+            className="text-xs text-destructive hover:text-destructive"
+            data-testid="delete-session"
+            title="Delete recording"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
           </Button>
         )}
       </div>

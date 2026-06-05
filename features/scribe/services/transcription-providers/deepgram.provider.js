@@ -15,16 +15,25 @@
  *   hindi     → nova-2          (multilingual base model)
  *   hinglish  → nova-2 + multi  (code-switched language detection)
  *
- * Speaker mapping (first-appearance order from Deepgram):
- *   Speaker 0 → Doctor   (A)
- *   Speaker 1 → Patient  (B)
- *   Speaker 2 → Attendant (C)
- *   Speaker 3+ → Unknown  (U)
+ * Speaker mapping (first-appearance order in audio):
+ *   1st distinct Deepgram speaker → Doctor   (A)
+ *   2nd → Patient  (B)
+ *   3rd → Attendant (C)
+ *
+ * Uses diarize_model=latest + max_speakers=2 for doctor–patient consultations.
+ * Falls back to word-level speaker tags when utterances collapse to one speaker.
  */
 
 import { TranscriptionProvider }   from "./transcription-provider.js";
 import { TranscriptionProviderError } from "../../errors.js";
 import { SCRIBE_LANGUAGE, TRANSCRIPTION_CONFIG } from "../../constants.js";
+import {
+  buildAppearanceSpeakerMap,
+  buildSegmentsFromDiarizedWords,
+  collectDeepgramWords,
+  countUniqueSpeakerLabels,
+  resolveClinicalSpeaker,
+} from "../../lib/speaker-diarization.js";
 import { createLogger }             from "../../logger.js";
 
 const DEEPGRAM_API_URL = "https://api.deepgram.com/v1/listen";
@@ -49,24 +58,6 @@ const COST_CENTS_PER_MINUTE = {
   medical: 0.59,
   general: 0.43,
 };
-
-/** @type {Array<{ key: string; label: string }>} Deepgram speaker 0,1,2,3+ → role */
-const SPEAKER_ROLES = [
-  { key: "A", label: "Doctor"    },
-  { key: "B", label: "Patient"   },
-  { key: "C", label: "Attendant" },
-];
-const UNKNOWN_ROLE = { key: "U", label: "Unknown" };
-
-/**
- * Maps Deepgram's integer speaker ID to a clinical role.
- * @param {number|null|undefined} speakerId
- * @returns {{ key: string; label: string }}
- */
-function resolveSpeakerRole(speakerId) {
-  if (typeof speakerId !== "number") return UNKNOWN_ROLE;
-  return SPEAKER_ROLES[speakerId] ?? UNKNOWN_ROLE;
-}
 
 export class DeepgramProvider extends TranscriptionProvider {
   /**
@@ -112,12 +103,13 @@ export class DeepgramProvider extends TranscriptionProvider {
 
     const params = new URLSearchParams({
       model,
-      diarize:      "true",
-      smart_format: "true",
-      utterances:   "true",
-      punctuate:    "true",
-      paragraphs:   "false",
-      language:     deepgramLang,
+      diarize_model: "latest",
+      max_speakers:  "2",
+      smart_format:  "true",
+      utterances:    "true",
+      punctuate:     "true",
+      paragraphs:    "false",
+      language:      deepgramLang,
     });
 
     const endpoint = `${DEEPGRAM_API_URL}?${params}`;
@@ -182,9 +174,14 @@ export class DeepgramProvider extends TranscriptionProvider {
     const detectedLanguage = metadata.detected_language       ?? LANGUAGE_MAP[language] ?? null;
     const fullText         = (alternative0?.transcript ?? "").trim();
 
-    // ── Build segments from utterances ─────────────────────────────────────
-    const segments = utterances.map((utt, index) => {
-      const role       = resolveSpeakerRole(utt.speaker);
+    const allWords = collectDeepgramWords(utterances, alternative0);
+    const appearanceMap = buildAppearanceSpeakerMap(
+      allWords.length ? allWords : utterances,
+    );
+
+    /** @type {import('./transcription-provider.js').NormalizedSegment[]} */
+    let segments = utterances.map((utt, index) => {
+      const role       = resolveClinicalSpeaker(utt.speaker, appearanceMap);
       const confidence = clamp(utt.confidence ?? 0.9);
 
       return {
@@ -201,9 +198,41 @@ export class DeepgramProvider extends TranscriptionProvider {
           deepgram_speaker: utt.speaker ?? null,
           channel:          utt.channel ?? 0,
           word_count:       utt.words?.length ?? 0,
+          source:           "utterance",
         },
       };
     });
+
+    const wordSegments = buildSegmentsFromDiarizedWords(allWords, appearanceMap);
+    const utteranceDgSpeakers = new Set(
+      utterances.map((u) => u.speaker).filter((s) => typeof s === "number"),
+    );
+    const wordDgSpeakers = new Set(
+      allWords.map((w) => w.speaker).filter((s) => typeof s === "number"),
+    );
+
+    if (
+      wordSegments.length > 0 &&
+      (wordDgSpeakers.size > utteranceDgSpeakers.size ||
+        countUniqueSpeakerLabels(segments) < 2)
+    ) {
+      segments = wordSegments.map((seg, index) => ({ ...seg, index, id: String(index) }));
+      log.info("Using word-level diarization segments", {
+        utteranceSpeakers: utteranceDgSpeakers.size,
+        wordSpeakers: wordDgSpeakers.size,
+        segmentCount: segments.length,
+      });
+    }
+
+    if (countUniqueSpeakerLabels(segments) < 2) {
+      log.warn(
+        "Transcript has fewer than 2 speakers — ensure both doctor and patient are audible on the recording",
+        {
+          uniqueLabels: [...new Set(segments.map((s) => s.speaker_label))],
+          deepgramSpeakerIds: [...wordDgSpeakers],
+        },
+      );
+    }
 
     // ── Fallback: single segment when diarization produced no utterances ───
     if (segments.length === 0 && fullText) {

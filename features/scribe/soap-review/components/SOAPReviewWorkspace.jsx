@@ -41,10 +41,6 @@ export function SOAPReviewWorkspace({ sessionId, className, onApproved, onBack }
         hasChanges={review.hasChanges}
         saving={review.saving}
         autosaveStatus={review.autosaveStatus}
-        canUndo={review.canUndo}
-        canRedo={review.canRedo}
-        onUndo={review.undo}
-        onRedo={review.redo}
         onSave={review.manualSave}
         onApprove={handleApprove}
         onReject={handleReject}

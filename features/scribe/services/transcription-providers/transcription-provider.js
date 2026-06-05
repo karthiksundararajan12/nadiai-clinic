@@ -69,7 +69,7 @@ export class TranscriptionProvider {
    *  - MUST return real transcript data. No mocks, no fallbacks.
    *  - MUST throw TranscriptionProviderError on API failure.
    *  - MUST store the complete raw API response in result.providerResponse.
-   *  - MUST NOT apply heuristic speaker assignment.
+   *  - Speaker labels come from provider diarization (first-appearance → Doctor/Patient).
    *
    * @param {TranscriptionInput} input
    * @returns {Promise<TranscriptionResult>}

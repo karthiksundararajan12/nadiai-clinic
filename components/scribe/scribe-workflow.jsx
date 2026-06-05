@@ -1,16 +1,15 @@
 "use client";
 
 /**
- * ScribeWorkflow — Record → Transcript → SOAP → Archive to history
+ * ScribeWorkflow — Live session → Consultation review → History
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
-import { ScribeRecordingPanel } from "@/components/scribe/scribe-recording-panel";
 import { ConsultationHistoryTable } from "@/components/scribe/consultation-history-table";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
-import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
+import { ConsultationWorkspace, ScribeLiveSession } from "@/features/scribe/consultation-workspace";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -18,9 +17,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import {
-  ArrowLeft,
   History,
   Loader2,
+  Mic,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -55,9 +54,9 @@ async function fetchConsultations(bucket) {
   return payload?.data ?? [];
 }
 
-export function ScribeWorkflow() {
+export function ScribeWorkflow({ onImmersiveChange }) {
   const [language, setLanguage] = useState("english");
-  const [view, setView] = useState("home");
+  const [view, setView] = useState("live");
   const [listTab, setListTab] = useState("active");
   const [activeSessionId, setActiveSessionId] = useState(null);
 
@@ -80,6 +79,11 @@ export function ScribeWorkflow() {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  const isImmersive = view === "live" || view === "consultation";
+  useEffect(() => {
+    onImmersiveChange?.(isImmersive);
+  }, [isImmersive, onImmersiveChange]);
 
   const loadConsultations = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -174,18 +178,26 @@ export function ScribeWorkflow() {
       if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
       if (err && typeof err === "object" && "details" in err) wrapped.details = err.details;
       setUploadError(wrapped);
+      setView("live");
     } finally {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
   }, [language, runTranscription]);
 
-  const goHome = useCallback(() => {
-    setView("home");
+  const goToList = useCallback(() => {
+    setView("list");
     setActiveSessionId(null);
     setViewFromHistory(false);
     loadConsultations(true);
   }, [loadConsultations]);
+
+  const goLive = useCallback(() => {
+    setView("live");
+    setActiveSessionId(null);
+    setViewFromHistory(false);
+    setUploadError(null);
+  }, []);
 
   const deleteSession = useCallback(async (sessionId) => {
     if (!window.confirm("Delete this recording? This cannot be undone.")) return;
@@ -196,99 +208,101 @@ export function ScribeWorkflow() {
       const res = await fetch(`/api/scribe/sessions/${sessionId}`, { method: "DELETE" });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `Delete failed (${res.status})`);
-      if (activeSessionId === sessionId) goHome();
+      if (activeSessionId === sessionId) goToList();
       else await loadConsultations(true);
     } catch (err) {
       setActionError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setBusySessionId(null);
     }
-  }, [activeSessionId, goHome, loadConsultations]);
+  }, [activeSessionId, goToList, loadConsultations]);
 
   const handleSOAPApproved = useCallback(() => {
-    goHome();
+    goToList();
     setListTab("history");
-  }, [goHome]);
+  }, [goToList]);
 
   if (view === "consultation" && activeSessionId) {
     return (
-      <div className="space-y-4">
-        <WorkflowHeader
-          title="Consultation"
-          subtitle="Conversation on the left · SOAP note on the right"
-          onBack={goHome}
-          onDelete={viewFromHistory ? undefined : () => deleteSession(activeSessionId)}
+      <ConsultationWorkspace
+        key={activeSessionId}
+        sessionId={activeSessionId}
+        onApproved={handleSOAPApproved}
+        onEndSession={goToList}
+        showToolbar={!viewFromHistory}
+      />
+    );
+  }
+
+  if (view === "live") {
+    return (
+      <div className="space-y-3" data-testid="scribe-workflow">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <LanguageToggle value={language} onChange={setLanguage} />
+          <Button variant="outline" size="sm" onClick={goToList} className="gap-1.5 text-xs">
+            <History className="h-3.5 w-3.5" />
+            Past consultations
+          </Button>
+        </div>
+
+        <ScribeLiveSession
+          language={language}
+          disabled={pipelineBusy}
+          pipelineMessage={pipelineMessage}
+          onRecordingComplete={handleRecordingComplete}
+          onError={(err) => setUploadError(err)}
+          onEndSession={goToList}
         />
-        <ConsultationWorkspace
-          key={activeSessionId}
-          sessionId={activeSessionId}
-          onApproved={handleSOAPApproved}
-          showToolbar={!viewFromHistory}
-        />
+
+        {uploadError && (
+          <UploadErrorBanner
+            error={uploadError}
+            onRelease={async () => {
+              try {
+                await fetch("/api/scribe/sessions/release-blocking", { method: "POST" });
+                setUploadError(null);
+              } catch (e) {
+                setUploadError(e instanceof Error ? e : new Error(String(e)));
+              }
+            }}
+          />
+        )}
       </div>
     );
   }
 
   return (
     <div className="space-y-6" data-testid="scribe-workflow">
-      <LanguageToggle value={language} onChange={setLanguage} />
-
-      <Card className={cn(pipelineBusy && "border-primary/30")}>
-        <CardContent className="flex flex-col items-center justify-center py-10 px-8">
-          <ScribeRecordingPanel
-            disabled={pipelineBusy}
-            onRecordingComplete={handleRecordingComplete}
-            onError={(err) => setUploadError(err)}
-          />
-          {pipelineBusy && pipelineMessage && (
-            <p className="mt-4 text-sm text-muted-foreground flex items-center gap-2">
-              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
-              {pipelineMessage}
-            </p>
-          )}
-          {uploadError && (
-            <UploadErrorBanner
-              error={uploadError}
-              onRelease={async () => {
-                try {
-                  await fetch("/api/scribe/sessions/release-blocking", { method: "POST" });
-                  setUploadError(null);
-                } catch (e) {
-                  setUploadError(e instanceof Error ? e : new Error(String(e)));
-                }
-              }}
-            />
-          )}
-        </CardContent>
-      </Card>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-semibold">Consultations</h2>
+          <p className="text-sm text-muted-foreground">Active pipeline and archived history</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button size="sm" onClick={goLive} className="gap-1.5">
+            <Mic className="h-3.5 w-3.5" />
+            New consultation
+          </Button>
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/scribe/history" className="gap-1.5">
+              <History className="h-3.5 w-3.5" />
+              Full history
+            </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="consultations-refresh"
+            onClick={() => loadConsultations(true)}
+            disabled={refreshing}
+          >
+            <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
+          </Button>
+        </div>
+      </div>
 
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-          <div>
-            <CardTitle className="text-base">Consultations</CardTitle>
-            <p className="mt-0.5 text-sm text-muted-foreground">
-              Active pipeline vs archived history after SOAP approval.
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link href="/scribe/history" className="gap-1.5">
-                <History className="h-3.5 w-3.5" />
-                Full history
-              </Link>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              data-testid="consultations-refresh"
-              onClick={() => loadConsultations(true)}
-              disabled={refreshing}
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", refreshing && "animate-spin")} />
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           {actionError && (
             <div className="mb-3 rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
               {actionError.message}
@@ -318,7 +332,7 @@ export function ScribeWorkflow() {
               <TabsContent value="active" className="mt-4 space-y-2">
                 {activeSessions.length === 0 ? (
                   <p className="text-sm text-muted-foreground py-2">
-                    No active consultations. Record above to start.
+                    No active consultations. Start a new consultation above.
                   </p>
                 ) : (
                   activeSessions.map((session) => (
@@ -358,7 +372,7 @@ export function ScribeWorkflow() {
                     setActiveSessionId(id);
                     setView("consultation");
                   }}
-                  onViewAudit={async (id) => {
+                  onViewAudit={async () => {
                     window.open(`/scribe/history`, "_self");
                   }}
                   onViewPrescription={() => {}}
@@ -372,41 +386,12 @@ export function ScribeWorkflow() {
   );
 }
 
-function WorkflowHeader({ title, subtitle, onBack, onDelete }) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <h2 className="text-lg font-semibold">{title}</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>
-      </div>
-      <div className="flex items-center gap-2 shrink-0">
-        {onDelete && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onDelete}
-            className="gap-1.5 text-destructive hover:text-destructive"
-            data-testid="delete-session"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </Button>
-        )}
-        <Button variant="outline" size="sm" onClick={onBack} className="gap-1.5">
-          <ArrowLeft className="h-3.5 w-3.5" />
-          Back
-        </Button>
-      </div>
-    </div>
-  );
-}
-
 function UploadErrorBanner({ error, onRelease }) {
   const isBlocked = error?.code === "SESSION_ALREADY_ACTIVE" ||
     /already active/i.test(error?.message ?? "");
 
   return (
-    <div className="mt-4 w-full max-w-md rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center space-y-2">
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-center space-y-2">
       <p className="text-sm text-destructive">{error.message}</p>
       {isBlocked && (
         <Button type="button" variant="outline" size="sm" onClick={onRelease}>

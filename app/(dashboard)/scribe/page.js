@@ -17,6 +17,7 @@ const PRESCRIPTION_REVIEW_STATUSES = [
 ];
 
 export default function ScribePage() {
+  const [immersive, setImmersive] = useState(true);
   const [rxSessions, setRxSessions] = useState([]);
   const [rxLoading, setRxLoading] = useState(true);
   const [rxError, setRxError] = useState(null);
@@ -89,14 +90,17 @@ export default function ScribePage() {
 
   return (
     <>
-      <Header
-        title="AI Scribe"
-        subtitle="Record doctor–patient consultations · transcribe · review · generate SOAP"
-      />
+      {!immersive && (
+        <Header
+          title="AI Scribe"
+          subtitle="Record doctor–patient consultations · transcribe · review · generate SOAP"
+        />
+      )}
 
-      <div className="flex-1 p-6 space-y-6">
-        <ScribeWorkflow />
+      <div className={immersive ? "flex-1 p-3 lg:p-4" : "flex-1 p-6 space-y-6"}>
+        <ScribeWorkflow onImmersiveChange={setImmersive} />
 
+        {!immersive && (
         <Card data-testid="prescription-panel">
           <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
             <div>
@@ -169,6 +173,7 @@ export default function ScribePage() {
             )}
           </CardContent>
         </Card>
+        )}
       </div>
     </>
   );

@@ -48,6 +48,7 @@ test.describe("AI Scribe — full clinical pipeline @full", () => {
     session = await api.runTranscriptionUntil(sessionId, "TRANSCRIBED");
     expect(session.status).toBe("TRANSCRIBED");
 
+    await page.getByRole("button", { name: "Past consultations" }).click();
     await page.getByTestId("consultations-refresh").click();
     const row = sessionRow(page, sessionId);
     await expect(row).toBeVisible({ timeout: 30_000 });

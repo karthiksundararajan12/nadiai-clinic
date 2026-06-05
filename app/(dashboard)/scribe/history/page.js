@@ -63,7 +63,12 @@ export default function ConsultationHistoryPage() {
         <Header title="Consultation" subtitle="Conversation and SOAP note" />
         <div className="flex-1 p-6 space-y-4">
           <BackButton onClick={goList} />
-          <ConsultationWorkspace key={activeId} sessionId={activeId} showToolbar={false} />
+          <ConsultationWorkspace
+            key={activeId}
+            sessionId={activeId}
+            showToolbar={false}
+            onEndSession={goList}
+          />
         </div>
       </>
     );

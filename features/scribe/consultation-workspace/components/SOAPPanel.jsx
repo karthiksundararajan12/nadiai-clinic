@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
-import { ScribePanelCard } from "./ScribePanelCard.jsx";
 
 const SOAP_AVAILABLE_STATUSES = new Set([
   "SOAP_READY",
@@ -57,11 +56,8 @@ export function SOAPEmptyPanel({
   completeReviewDisabled,
 }) {
   return (
-    <ScribePanelCard
-      title="AI Generated Note"
-      subtitle="Structured clinical documentation"
-      headerRight={<NoteConfidenceBadge confidence={confidence} />}
-    >
+    <div className="flex h-full min-h-0 flex-col">
+      <PanelHeader confidence={confidence} />
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 py-12 text-center">
         {generating ? (
           <>
@@ -112,7 +108,7 @@ export function SOAPEmptyPanel({
           </>
         )}
       </div>
-    </ScribePanelCard>
+    </div>
   );
 }
 
@@ -138,58 +134,34 @@ export function SOAPEditorPanel({
 
   if (loading) {
     return (
-      <ScribePanelCard
-        title="AI Generated Note"
-        subtitle="Structured clinical documentation"
-        headerRight={<NoteConfidenceBadge confidence={confidence} />}
-        data-testid="soap-review-workspace"
-      >
+      <div className="flex h-full flex-col">
+        <PanelHeader confidence={confidence} />
         <div className="flex flex-1 items-center justify-center text-[13px] text-slate-500">
           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
           Loading note…
         </div>
-      </ScribePanelCard>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <ScribePanelCard
-        title="AI Generated Note"
-        subtitle="Structured clinical documentation"
-        headerRight={<NoteConfidenceBadge confidence={confidence} />}
-        data-testid="soap-review-workspace"
-      >
+      <div className="flex h-full flex-col">
+        <PanelHeader confidence={confidence} />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
           <p className="text-[13px] text-rose-600">{error.message}</p>
           <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
         </div>
-      </ScribePanelCard>
+      </div>
     );
   }
 
   const disabled = readOnly || saving;
 
   return (
-    <ScribePanelCard
-      title="AI Generated Note"
-      subtitle="Structured clinical documentation"
-      headerRight={<NoteConfidenceBadge confidence={confidence} />}
-      data-testid="soap-review-workspace"
-      footer={
-        !readOnly ? (
-          <NoteActions
-            onRegenerate={onRegenerate}
-            onSave={onSave}
-            onApprove={onApprove}
-            canApprove={canApprove}
-            saving={saving}
-            generating={generating}
-            hasChanges={hasChanges}
-          />
-        ) : undefined
-      }
-    >
+    <div className="flex h-full min-h-0 flex-col" data-testid="soap-review-workspace">
+      <PanelHeader confidence={confidence} />
+
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
         <div className="shrink-0 border-b border-slate-100 px-4">
           <TabsList className="h-10 w-full justify-start gap-0 rounded-none bg-transparent p-0">
@@ -238,17 +210,36 @@ export function SOAPEditorPanel({
           </TabsContent>
         </div>
       </Tabs>
-    </ScribePanelCard>
+
+      {!readOnly && (
+        <NoteActions
+          onRegenerate={onRegenerate}
+          onSave={onSave}
+          onApprove={onApprove}
+          canApprove={canApprove}
+          saving={saving}
+          generating={generating}
+          hasChanges={hasChanges}
+        />
+      )}
+    </div>
   );
 }
 
-function NoteConfidenceBadge({ confidence }) {
-  if (confidence == null) return null;
+function PanelHeader({ confidence }) {
   return (
-    <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
-      <Sparkles className="h-3 w-3" />
-      {confidence}%
-    </span>
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">AI Generated Note</h2>
+        <p className="mt-0.5 text-[12px] text-slate-500">Structured clinical documentation</p>
+      </div>
+      {confidence != null && (
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
+          <Sparkles className="h-3 w-3" />
+          {confidence}%
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -297,7 +288,7 @@ function SOAPCard({ letter, label, tone, value, dirty, disabled, editing, onEdit
 
 function NoteActions({ onRegenerate, onSave, onApprove, canApprove, saving, generating, hasChanges }) {
   return (
-    <div className="space-y-2 p-4">
+    <div className="shrink-0 space-y-2 border-t border-slate-200/80 bg-white p-4">
       <div className="flex gap-2">
         <Button
           variant="outline"

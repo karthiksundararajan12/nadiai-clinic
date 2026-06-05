@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
+import { useUser } from "@/hooks/use-user";
 import { useTranscriptReview } from "../../transcript-review/hooks/use-transcript-review.js";
 import { useSOAPReview } from "../../soap-review/hooks/use-soap-review.js";
 import { usePatientForSession } from "../hooks/use-patient-for-session.js";
@@ -26,6 +27,7 @@ export function ConsultationWorkspace({
   onOpenSessions,
   readOnly: readOnlyProp,
 }) {
+  const { displayName, specialization } = useUser();
   const transcript = useTranscriptReview(sessionId);
   const sessionStatus = transcript.session?.status ?? "";
   const hasSoap = SOAP_AVAILABLE_STATUSES.has(sessionStatus);
@@ -133,6 +135,8 @@ export function ConsultationWorkspace({
       <ScribeShell
         header={
           <ScribeSessionHeader
+            doctorName={displayName}
+            doctorSpecialty={specialization}
             onEndSession={onEndSession}
             onOpenSessions={onOpenSessions}
           />

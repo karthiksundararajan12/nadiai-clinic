@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../transcript-review/components/Timestamp.jsx";
+import { ScribePanelCard } from "./ScribePanelCard.jsx";
 
 export function TranscriptPanel({
   segments,
@@ -35,12 +36,32 @@ export function TranscriptPanel({
   const disabled = readOnly || saving || sessionStatus === "REVIEW_COMPLETED";
   const isLive = mode === "recording" || isRecording;
 
-  return (
-    <div className="flex h-full min-h-0 flex-col" data-testid="transcript-review-workspace">
-      <PanelHeader isLive={isLive} />
+  const liveBadge = isLive ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+      {isRecording ? "Live" : "Ready"}
+    </span>
+  ) : null;
 
+  return (
+    <ScribePanelCard
+      title="Live Consultation"
+      subtitle={isLive ? "Recording in progress" : "Doctor–patient transcript"}
+      headerRight={liveBadge}
+      data-testid="transcript-review-workspace"
+      footer={
+        isLive && recordingControls ? (
+          <RecordingControls
+            isPaused={isPaused}
+            duration={duration}
+            language={language}
+            controls={recordingControls}
+          />
+        ) : undefined
+      }
+    >
       {isLive && isRecording && (
-        <div className="shrink-0 border-b border-slate-100 bg-gradient-to-b from-indigo-50/40 to-white px-6 py-5">
+        <div className="shrink-0 border-b border-slate-100 bg-gradient-to-b from-indigo-50/30 to-white px-6 py-4">
           <WaveformDisplay active={!isPaused} />
         </div>
       )}
@@ -54,7 +75,7 @@ export function TranscriptPanel({
             onStartRecording={onStartRecording}
           />
         ) : (
-          <div className="space-y-5 px-5 py-5">
+          <div className="space-y-4 px-5 py-5">
             {segments.map((segment) => (
               <ChatBubble
                 key={segment.id}
@@ -67,41 +88,13 @@ export function TranscriptPanel({
           </div>
         )}
       </div>
-
-      {isLive && recordingControls && (
-        <RecordingControls
-          isPaused={isPaused}
-          duration={duration}
-          language={language}
-          controls={recordingControls}
-        />
-      )}
-    </div>
-  );
-}
-
-function PanelHeader({ isLive }) {
-  return (
-    <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
-      <div>
-        <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">Live Consultation</h2>
-        <p className="mt-0.5 text-[12px] text-slate-500">
-          {isLive ? "Recording in progress" : "Transcribed conversation"}
-        </p>
-      </div>
-      {isLive && (
-        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-          Live
-        </span>
-      )}
-    </div>
+    </ScribePanelCard>
   );
 }
 
 function EmptyState({ isLive, isRequestingMic, pipelineMessage, onStartRecording }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center px-6 py-16 text-center">
+    <div className="flex h-full min-h-[280px] flex-col items-center justify-center px-6 py-14 text-center">
       {isRequestingMic ? (
         <>
           <Loader2 className="mb-4 h-9 w-9 animate-spin text-indigo-500" />
@@ -141,7 +134,7 @@ function EmptyState({ isLive, isRequestingMic, pipelineMessage, onStartRecording
 
 function RecordingControls({ isPaused, duration, language, controls }) {
   return (
-    <div className="shrink-0 border-t border-slate-100 bg-slate-50/60 px-5 py-5">
+    <div className="px-5 py-5">
       <div className="flex items-center justify-center gap-5">
         <Button
           variant="outline"
@@ -191,9 +184,7 @@ function ChatBubble({ segment, dirty, disabled, onChange }) {
       <div
         className={cn(
           "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-2 ring-white",
-          isDoctor
-            ? "bg-indigo-100 text-indigo-600"
-            : "bg-teal-100 text-teal-600",
+          isDoctor ? "bg-indigo-100 text-indigo-600" : "bg-teal-100 text-teal-600",
         )}
       >
         {isDoctor ? <Stethoscope className="h-4 w-4" /> : <UserRound className="h-4 w-4" />}
@@ -245,11 +236,11 @@ function ChatBubble({ segment, dirty, disabled, onChange }) {
 function WaveformDisplay({ active }) {
   const bars = 32;
   return (
-    <div className="flex h-[56px] items-end justify-center gap-[3px]">
+    <div className="flex h-[52px] items-end justify-center gap-[3px]">
       {Array.from({ length: bars }, (_, i) => {
         const center = (bars - 1) / 2;
         const envelope = 0.35 + 0.65 * (1 - Math.abs(i - center) / center);
-        const h = active ? 12 + envelope * 44 : 6;
+        const h = active ? 12 + envelope * 40 : 6;
         return (
           <div
             key={i}

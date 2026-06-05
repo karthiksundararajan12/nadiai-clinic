@@ -2,7 +2,6 @@
 
 import { Bell, History, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { AudioLevelMeter } from "@/features/scribe/components/recording/AudioLevelMeter.jsx";
 
 function formatDuration(seconds) {
@@ -11,47 +10,25 @@ function formatDuration(seconds) {
   return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-function initials(name) {
-  return (name ?? "DR")
-    .split(" ")
-    .map((p) => p[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-}
-
 export function ScribeSessionHeader({
   isRecording,
   isPaused,
   duration = 0,
   audioLevel = 0,
-  doctorName,
-  doctorSpecialty,
   onEndSession,
   onOpenSessions,
   endSessionLabel = "End Session",
 }) {
   return (
-    <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 lg:px-5">
-      <div className="flex min-w-0 items-center gap-4">
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-[11px] font-bold tracking-tight text-white">
-            N
-          </div>
-          <div className="hidden sm:flex items-center gap-2.5">
-            <span className="text-[15px] font-semibold tracking-tight text-slate-900">Nadi AI</span>
-            <span className="h-4 w-px bg-slate-200" aria-hidden />
-            <span className="text-[13px] font-medium text-slate-500">AI Scribe</span>
-          </div>
-        </div>
-
-        {isRecording && (
-          <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+    <header className="flex h-12 shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 lg:px-5">
+      <div className="flex min-w-0 items-center gap-3">
+        {isRecording ? (
+          <>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {isPaused ? "Paused" : "Recording"}
             </span>
-            <span className="font-mono text-[15px] font-semibold tabular-nums text-slate-900">
+            <span className="font-mono text-[14px] font-semibold tabular-nums text-slate-900">
               {formatDuration(duration)}
             </span>
             <AudioLevelMeter
@@ -59,11 +36,13 @@ export function ScribeSessionHeader({
               isActive={isRecording && !isPaused}
               className="hidden h-7 md:flex"
             />
-          </div>
+          </>
+        ) : (
+          <span className="text-[13px] font-medium text-slate-500">Clinical workspace</span>
         )}
       </div>
 
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1.5">
         {onOpenSessions && (
           <Button
             variant="ghost"
@@ -96,24 +75,6 @@ export function ScribeSessionHeader({
           <Bell className="h-[17px] w-[17px]" />
           <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500" />
         </Button>
-
-        <div className="ml-1 flex items-center gap-2.5 border-l border-slate-200 pl-3">
-          <div
-            className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700",
-            )}
-          >
-            {initials(doctorName)}
-          </div>
-          <div className="hidden leading-tight md:block">
-            <p className="max-w-[150px] truncate text-[13px] font-semibold text-slate-900">
-              {doctorName ?? "Doctor"}
-            </p>
-            <p className="max-w-[150px] truncate text-[11px] text-slate-500">
-              {doctorSpecialty ?? "Physician"}
-            </p>
-          </div>
-        </div>
       </div>
     </header>
   );
@@ -136,16 +97,7 @@ export function ScribeSessionFooter({
           {statusLabel}
         </span>
       </div>
-      <span className="hidden sm:inline">v{version} · Nadi AI</span>
+      <span className="hidden sm:inline">v{version}</span>
     </footer>
-  );
-}
-
-export function ScribeActionBar({ children }) {
-  if (!children) return null;
-  return (
-    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-slate-50/80 px-4 py-2 lg:px-5">
-      {children}
-    </div>
   );
 }

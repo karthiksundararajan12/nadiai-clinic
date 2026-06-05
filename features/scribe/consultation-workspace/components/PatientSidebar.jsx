@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowRight, Heart, Pill, Thermometer, User, Weight } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { ScribePanelCard } from "./ScribePanelCard.jsx";
 
 function patientInitials(name) {
   return (name ?? "P")
@@ -32,19 +32,34 @@ function Section({ title, children }) {
   );
 }
 
-export function PatientSidebar({ patient, sessionDate, className }) {
+export function PatientSidebar({ patient, sessionDate }) {
   const name = patient?.name ?? "Walk-in Patient";
   const mrn = patient?.id ? `MRN-${String(patient.id).slice(0, 8).toUpperCase()}` : "Not linked";
 
   return (
-    <aside className={cn("flex h-full min-h-0 flex-col", className)}>
-      <div className="shrink-0 border-b border-slate-100 px-5 py-5">
+    <ScribePanelCard
+      title="Patient Context"
+      subtitle="Clinical background for this visit"
+      footer={
+        <div className="px-5 py-3">
+          <button
+            type="button"
+            className="flex w-full items-center gap-1.5 text-[13px] font-medium text-indigo-600 hover:text-indigo-700"
+          >
+            <User className="h-3.5 w-3.5" />
+            View full history
+            <ArrowRight className="ml-auto h-3.5 w-3.5" />
+          </button>
+        </div>
+      }
+    >
+      <div className="shrink-0 border-b border-slate-100 px-5 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-sm font-semibold text-slate-700 ring-2 ring-white">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-slate-100 to-slate-200 text-sm font-semibold text-slate-700 ring-2 ring-white shadow-sm">
             {patientInitials(name)}
           </div>
           <div className="min-w-0">
-            <p className="truncate text-[15px] font-semibold text-slate-900">{name}</p>
+            <p className="truncate text-[14px] font-semibold text-slate-900">{name}</p>
             <p className="font-mono text-[11px] text-slate-400">{mrn}</p>
           </div>
         </div>
@@ -113,18 +128,7 @@ export function PatientSidebar({ patient, sessionDate, className }) {
           </div>
         </Section>
       </div>
-
-      <div className="shrink-0 border-t border-slate-100 px-5 py-3">
-        <button
-          type="button"
-          className="flex w-full items-center gap-1.5 text-[13px] font-medium text-indigo-600 hover:text-indigo-700"
-        >
-          <User className="h-3.5 w-3.5" />
-          View full history
-          <ArrowRight className="ml-auto h-3.5 w-3.5" />
-        </button>
-      </div>
-    </aside>
+    </ScribePanelCard>
   );
 }
 

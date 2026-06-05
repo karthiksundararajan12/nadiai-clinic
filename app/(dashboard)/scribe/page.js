@@ -1,180 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Header } from "@/components/layout/header";
+import { useEffect, useState } from "react";
 import { ScribeWorkflow } from "@/components/scribe/scribe-workflow";
 import { PrescriptionReviewWorkspace } from "@/components/scribe/prescription-review-workspace";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { FileText, RefreshCw, Sparkles } from "lucide-react";
-
-const PRESCRIPTION_GENERATE_STATUSES = ["SOAP_APPROVED", "COMPLETED"];
-const PRESCRIPTION_REVIEW_STATUSES = [
-  "PRESCRIPTION_DRAFT_READY",
-  "PRESCRIPTION_REVIEW_REQUIRED",
-  "PRESCRIPTION_REVIEWING",
-  "PRESCRIPTION_APPROVED",
-];
+import { ArrowLeft } from "lucide-react";
 
 export default function ScribePage() {
-  const [immersive, setImmersive] = useState(true);
-  const [rxSessions, setRxSessions] = useState([]);
-  const [rxLoading, setRxLoading] = useState(true);
-  const [rxError, setRxError] = useState(null);
-  const [rxGenerating, setRxGenerating] = useState(null);
   const [rxReviewSessionId, setRxReviewSessionId] = useState(null);
 
-  const loadRxSessions = useCallback(async () => {
-    setRxLoading(true);
-    setRxError(null);
-    try {
-      const allStatuses = [...PRESCRIPTION_GENERATE_STATUSES, ...PRESCRIPTION_REVIEW_STATUSES];
-      const query = allStatuses.map((s) => `status=${encodeURIComponent(s)}`).join("&");
-      const res = await fetch(`/api/scribe/sessions?${query}&limit=20`);
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || `Failed to load sessions (${res.status})`);
-      setRxSessions(payload?.data ?? []);
-    } catch (err) {
-      setRxError(err);
-    } finally {
-      setRxLoading(false);
-    }
-  }, []);
-
-  const generatePrescription = useCallback(async (sessionId) => {
-    setRxGenerating(sessionId);
-    setRxError(null);
-    try {
-      const res = await fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ force: false }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload?.error || `Prescription generation failed (${res.status})`);
-      await loadRxSessions();
-    } catch (err) {
-      setRxError(err);
-    } finally {
-      setRxGenerating(null);
-    }
-  }, [loadRxSessions]);
-
   useEffect(() => {
-    queueMicrotask(() => loadRxSessions());
-  }, [loadRxSessions]);
+    const params = new URLSearchParams(window.location.search);
+    const rx = params.get("rx");
+    if (rx) setRxReviewSessionId(rx);
+  }, []);
 
   if (rxReviewSessionId) {
     return (
-      <>
-        <Header
-          title="Prescription Review"
-          subtitle="Review, edit, and approve the AI-generated prescription draft"
-        />
-        <div className="flex-1 p-6 space-y-4">
+      <div className="flex h-full flex-col overflow-hidden bg-slate-50">
+        <div className="flex items-center gap-3 border-b border-slate-200 bg-white px-5 py-3">
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
-            onClick={() => { setRxReviewSessionId(null); loadRxSessions(); }}
+            className="gap-1.5"
+            onClick={() => {
+              setRxReviewSessionId(null);
+              window.history.replaceState({}, "", "/scribe");
+            }}
           >
-            ← Back to Scribe
+            <ArrowLeft className="h-4 w-4" />
+            Back to scribe
           </Button>
+          <span className="text-[14px] font-semibold text-slate-900">Prescription review</span>
+        </div>
+        <div className="flex-1 overflow-auto p-6">
           <PrescriptionReviewWorkspace
             sessionId={rxReviewSessionId}
-            onApproved={() => { setRxReviewSessionId(null); loadRxSessions(); }}
+            onApproved={() => {
+              setRxReviewSessionId(null);
+              window.history.replaceState({}, "", "/scribe");
+            }}
           />
         </div>
-      </>
+      </div>
     );
   }
 
-  return (
-    <>
-      {!immersive && (
-        <Header
-          title="AI Scribe"
-          subtitle="Record doctor–patient consultations · transcribe · review · generate SOAP"
-        />
-      )}
-
-      <div className={immersive ? "flex-1 p-3 lg:p-4" : "flex-1 p-6 space-y-6"}>
-        <ScribeWorkflow onImmersiveChange={setImmersive} />
-
-        {!immersive && (
-        <Card data-testid="prescription-panel">
-          <CardHeader className="flex flex-row items-center justify-between gap-3 pb-3">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileText className="h-4 w-4 text-muted-foreground" />
-                Prescription Review
-              </CardTitle>
-              <p className="mt-0.5 text-sm text-muted-foreground">
-                After SOAP is approved, generate and review prescription drafts.
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              data-testid="prescription-refresh"
-              onClick={loadRxSessions}
-              disabled={rxLoading}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${rxLoading ? "animate-spin" : ""}`} />
-              Refresh
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {rxLoading ? (
-              <p className="text-sm text-muted-foreground">Loading…</p>
-            ) : rxError ? (
-              <p className="text-sm text-destructive">{rxError.message}</p>
-            ) : rxSessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No prescriptions yet. Approve a SOAP note first, then generate a prescription draft.
-              </p>
-            ) : (
-              <div className="space-y-2">
-                {rxSessions.map((session) => (
-                  <div
-                    key={session.id}
-                    data-testid="prescription-row"
-                    data-session-id={session.id}
-                    className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <p className="font-mono text-sm text-muted-foreground">{session.id.slice(0, 8)}…</p>
-                    <div className="flex gap-2">
-                      {PRESCRIPTION_GENERATE_STATUSES.includes(session.status) && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          data-testid="prescription-generate"
-                          disabled={rxGenerating === session.id}
-                          onClick={() => generatePrescription(session.id)}
-                          className="gap-1 text-xs"
-                        >
-                          <Sparkles className="h-3.5 w-3.5" />
-                          {rxGenerating === session.id ? "Generating…" : "Generate Rx"}
-                        </Button>
-                      )}
-                      {PRESCRIPTION_REVIEW_STATUSES.includes(session.status) && (
-                        <Button
-                          size="sm"
-                          data-testid="prescription-review-open"
-                          onClick={() => setRxReviewSessionId(session.id)}
-                          className="text-xs"
-                        >
-                          Review Rx
-                        </Button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-        )}
-      </div>
-    </>
-  );
+  return <ScribeWorkflow />;
 }

@@ -10,9 +10,7 @@ import {
   RefreshCw,
   Sparkles,
 } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -34,10 +32,17 @@ const SOAP_AVAILABLE_STATUSES = new Set([
 export { SOAP_AVAILABLE_STATUSES };
 
 const SOAP_CORE = [
-  { key: "subjective", letter: "S", label: "Subjective", color: "bg-blue-500" },
-  { key: "objective", letter: "O", label: "Objective", color: "bg-emerald-500" },
-  { key: "assessment", letter: "A", label: "Assessment", color: "bg-amber-500" },
-  { key: "plan", letter: "P", label: "Plan", color: "bg-violet-500" },
+  { key: "subjective", letter: "S", label: "Subjective", tone: "bg-indigo-600" },
+  { key: "objective", letter: "O", label: "Objective", tone: "bg-teal-600" },
+  { key: "assessment", letter: "A", label: "Assessment", tone: "bg-violet-600" },
+  { key: "plan", letter: "P", label: "Plan", tone: "bg-amber-600" },
+];
+
+const TABS = [
+  ["soap", "SOAP Note"],
+  ["summary", "Summary"],
+  ["prescription", "Prescription"],
+  ["followup", "Follow-up"],
 ];
 
 export function SOAPEmptyPanel({
@@ -46,37 +51,60 @@ export function SOAPEmptyPanel({
   canGenerate,
   onGenerate,
   confidence,
+  onCompleteReview,
+  canCompleteReview,
+  completeReviewDisabled,
 }) {
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-muted/10 lg:w-[380px] shrink-0">
+    <div className="flex h-full min-h-0 flex-col">
       <PanelHeader confidence={confidence} />
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-5 px-8 py-12 text-center">
         {generating ? (
           <>
-            <Loader2 className="size-10 animate-spin text-primary" />
-            <p className="text-sm text-muted-foreground">Generating SOAP note from transcript…</p>
+            <Loader2 className="h-10 w-10 animate-spin text-indigo-500" />
+            <p className="text-[14px] text-slate-600">Generating clinical note…</p>
           </>
         ) : (
           <>
-            <div className="rounded-full bg-primary/10 p-5">
-              <Sparkles className="size-8 text-primary" />
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-indigo-50 ring-1 ring-indigo-100">
+              <Sparkles className="h-7 w-7 text-indigo-500" />
             </div>
-            <div className="max-w-xs space-y-1">
-              <p className="text-sm font-semibold">AI Generated Note</p>
-              <p className="text-xs text-muted-foreground">
+            <div className="max-w-[260px] space-y-1.5">
+              <p className="text-[15px] font-semibold text-slate-900">AI note pending</p>
+              <p className="text-[13px] leading-relaxed text-slate-500">
                 {sessionStatus === "REVIEWING"
-                  ? "Complete transcript review, then generate your clinical note."
+                  ? "Review the transcript, then complete review to unlock note generation."
                   : canGenerate
-                    ? "Ready to generate SOAP from the conversation."
-                    : "SOAP note will appear here after transcription."}
+                    ? "Transcript is ready. Generate a structured SOAP note."
+                    : "Your clinical note will appear here after transcription."}
               </p>
             </div>
-            {canGenerate && (
-              <Button onClick={onGenerate} data-testid="scribe-generate-soap-inline" className="gap-2">
-                <Sparkles className="size-4" />
-                Generate SOAP
-              </Button>
-            )}
+            <div className="flex flex-col gap-2 w-full max-w-[220px]">
+              {canCompleteReview && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  data-testid="scribe-complete-review"
+                  onClick={onCompleteReview}
+                  disabled={completeReviewDisabled}
+                  className="h-9"
+                >
+                  <CheckCircle2 className="h-4 w-4" />
+                  Complete review
+                </Button>
+              )}
+              {canGenerate && (
+                <Button
+                  size="sm"
+                  data-testid="scribe-generate-soap"
+                  onClick={onGenerate}
+                  className="h-9 bg-slate-900 hover:bg-slate-800"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Generate SOAP
+                </Button>
+              )}
+            </div>
           </>
         )}
       </div>
@@ -106,11 +134,11 @@ export function SOAPEditorPanel({
 
   if (loading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-muted/10 lg:w-[380px] shrink-0">
+      <div className="flex h-full flex-col">
         <PanelHeader confidence={confidence} />
-        <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted-foreground">
-          <Loader2 className="mr-2 size-4 animate-spin" />
-          Loading SOAP note…
+        <div className="flex flex-1 items-center justify-center text-[13px] text-slate-500">
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          Loading note…
         </div>
       </div>
     );
@@ -118,10 +146,10 @@ export function SOAPEditorPanel({
 
   if (error) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col bg-muted/10 lg:w-[380px] shrink-0">
+      <div className="flex h-full flex-col">
         <PanelHeader confidence={confidence} />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="text-sm text-destructive">{error.message}</p>
+          <p className="text-[13px] text-rose-600">{error.message}</p>
           <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
         </div>
       </div>
@@ -131,25 +159,17 @@ export function SOAPEditorPanel({
   const disabled = readOnly || saving;
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col bg-muted/10 lg:w-[380px] shrink-0"
-      data-testid="soap-review-workspace"
-    >
+    <div className="flex h-full min-h-0 flex-col" data-testid="soap-review-workspace">
       <PanelHeader confidence={confidence} />
 
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b px-3 pt-2">
-          <TabsList className="w-full h-8 bg-transparent p-0 gap-0">
-            {[
-              ["soap", "SOAP Note"],
-              ["summary", "Summary"],
-              ["prescription", "Prescription"],
-              ["followup", "Follow-up Plan"],
-            ].map(([value, label]) => (
+        <div className="shrink-0 border-b border-slate-100 px-4">
+          <TabsList className="h-10 w-full justify-start gap-0 rounded-none bg-transparent p-0">
+            {TABS.map(([value, label]) => (
               <TabsTrigger
                 key={value}
                 value={value}
-                className="flex-1 text-[10px] h-7 rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none"
+                className="rounded-none border-b-2 border-transparent px-3 pb-2.5 pt-2 text-[12px] font-medium text-slate-500 data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:text-slate-900 data-[state=active]:shadow-none"
               >
                 {label}
               </TabsTrigger>
@@ -157,131 +177,50 @@ export function SOAPEditorPanel({
           </TabsList>
         </div>
 
-        <ScrollArea className="flex-1 min-h-0">
-          <TabsContent value="soap" className="mt-0 p-3 space-y-3">
-            {SOAP_CORE.map(({ key, letter, label, color }) => (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <TabsContent value="soap" className="mt-0 space-y-3 p-4">
+            {SOAP_CORE.map((section) => (
               <SOAPCard
-                key={key}
-                letter={letter}
-                label={label}
-                color={color}
-                value={draft[key]}
-                dirty={Boolean(dirty[key])}
+                key={section.key}
+                {...section}
+                value={draft[section.key]}
+                dirty={Boolean(dirty[section.key])}
                 disabled={disabled}
-                editing={editingSection === key}
-                onEdit={() => setEditingSection(key)}
-                onChange={(v) => onChange(key, v)}
+                editing={editingSection === section.key}
+                onEdit={() => setEditingSection(section.key)}
+                onChange={(v) => onChange(section.key, v)}
               />
             ))}
           </TabsContent>
 
-          <TabsContent value="summary" className="mt-0 p-3 space-y-3">
-            <SOAPCard
-              letter="C"
-              label="Chief Complaint"
-              color="bg-slate-500"
-              value={draft.chiefComplaint}
-              dirty={Boolean(dirty.chiefComplaint)}
-              disabled={disabled}
-              editing={editingSection === "chiefComplaint"}
-              onEdit={() => setEditingSection("chiefComplaint")}
-              onChange={(v) => onChange("chiefComplaint", v)}
-            />
-            <SOAPCard
-              letter="H"
-              label="History of Present Illness"
-              color="bg-slate-500"
-              value={draft.historyOfPresentIllness}
-              dirty={Boolean(dirty.historyOfPresentIllness)}
-              disabled={disabled}
-              editing={editingSection === "historyOfPresentIllness"}
-              onEdit={() => setEditingSection("historyOfPresentIllness")}
-              onChange={(v) => onChange("historyOfPresentIllness", v)}
-            />
-            <SOAPCard
-              letter="Σ"
-              label="Clinical Summary"
-              color="bg-primary"
-              value={draft.clinicalSummary}
-              dirty={Boolean(dirty.clinicalSummary)}
-              disabled={disabled}
-              editing={editingSection === "clinicalSummary"}
-              onEdit={() => setEditingSection("clinicalSummary")}
-              onChange={(v) => onChange("clinicalSummary", v)}
-            />
+          <TabsContent value="summary" className="mt-0 space-y-3 p-4">
+            <SOAPCard letter="C" label="Chief complaint" tone="bg-slate-600" value={draft.chiefComplaint} dirty={Boolean(dirty.chiefComplaint)} disabled={disabled} editing={editingSection === "chiefComplaint"} onEdit={() => setEditingSection("chiefComplaint")} onChange={(v) => onChange("chiefComplaint", v)} />
+            <SOAPCard letter="H" label="History of present illness" tone="bg-slate-600" value={draft.historyOfPresentIllness} dirty={Boolean(dirty.historyOfPresentIllness)} disabled={disabled} editing={editingSection === "historyOfPresentIllness"} onEdit={() => setEditingSection("historyOfPresentIllness")} onChange={(v) => onChange("historyOfPresentIllness", v)} />
+            <SOAPCard letter="Σ" label="Clinical summary" tone="bg-indigo-600" value={draft.clinicalSummary} dirty={Boolean(dirty.clinicalSummary)} disabled={disabled} editing={editingSection === "clinicalSummary"} onEdit={() => setEditingSection("clinicalSummary")} onChange={(v) => onChange("clinicalSummary", v)} />
           </TabsContent>
 
-          <TabsContent value="prescription" className="mt-0 p-6 text-center">
-            <p className="text-sm text-muted-foreground">
-              Approve the SOAP note first, then generate a prescription from the main Scribe page.
+          <TabsContent value="prescription" className="mt-0 p-8 text-center">
+            <p className="text-[13px] leading-relaxed text-slate-500">
+              Approve the SOAP note to unlock prescription generation.
             </p>
           </TabsContent>
 
-          <TabsContent value="followup" className="mt-0 p-3">
-            <SOAPCard
-              letter="F"
-              label="Follow-up Plan"
-              color="bg-violet-500"
-              value={draft.plan}
-              dirty={Boolean(dirty.plan)}
-              disabled={disabled}
-              editing={editingSection === "plan_followup"}
-              onEdit={() => setEditingSection("plan_followup")}
-              onChange={(v) => onChange("plan", v)}
-            />
+          <TabsContent value="followup" className="mt-0 p-4">
+            <SOAPCard letter="F" label="Follow-up plan" tone="bg-violet-600" value={draft.plan} dirty={Boolean(dirty.plan)} disabled={disabled} editing={editingSection === "plan"} onEdit={() => setEditingSection("plan")} onChange={(v) => onChange("plan", v)} />
           </TabsContent>
-        </ScrollArea>
+        </div>
       </Tabs>
 
       {!readOnly && (
-        <div className="shrink-0 border-t bg-background p-3 space-y-2">
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5 flex-1"
-              onClick={onRegenerate}
-              disabled={saving || generating}
-            >
-              <RefreshCw className={cn("h-3.5 w-3.5", generating && "animate-spin")} />
-              Regenerate
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs gap-1.5 flex-1"
-              onClick={onSave}
-              disabled={saving || !hasChanges}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              Save edits
-            </Button>
-            {canApprove && (
-              <Button
-                size="sm"
-                className="h-8 text-xs gap-1.5 flex-1"
-                data-testid="soap-approve"
-                onClick={onApprove}
-                disabled={saving || hasChanges}
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Approve Note
-                <ChevronDown className="h-3 w-3 opacity-70" />
-              </Button>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <Button variant="ghost" size="sm" className="h-7 text-[10px] flex-1" disabled>
-              Export PDF
-            </Button>
-            <Button variant="ghost" size="sm" className="h-7 text-[10px] flex-1" disabled>
-              Send to EMR
-            </Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7" disabled>
-              <MoreHorizontal className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-        </div>
+        <NoteActions
+          onRegenerate={onRegenerate}
+          onSave={onSave}
+          onApprove={onApprove}
+          canApprove={canApprove}
+          saving={saving}
+          generating={generating}
+          hasChanges={hasChanges}
+        />
       )}
     </div>
   );
@@ -289,40 +228,46 @@ export function SOAPEditorPanel({
 
 function PanelHeader({ confidence }) {
   return (
-    <div className="shrink-0 flex items-center justify-between border-b px-4 py-3">
+    <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-100 px-5 py-4">
       <div>
-        <h3 className="text-sm font-semibold">AI Generated Note</h3>
-        <p className="text-xs text-muted-foreground mt-0.5">Clinical documentation</p>
+        <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">AI Generated Note</h2>
+        <p className="mt-0.5 text-[12px] text-slate-500">Structured clinical documentation</p>
       </div>
       {confidence != null && (
-        <Badge variant="outline" className="text-[10px] bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
-          Confidence: {confidence}%
-        </Badge>
+        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
+          <Sparkles className="h-3 w-3" />
+          {confidence}%
+        </span>
       )}
     </div>
   );
 }
 
-function SOAPCard({ letter, label, color, value, dirty, disabled, editing, onEdit, onChange }) {
+function SOAPCard({ letter, label, tone, value, dirty, disabled, editing, onEdit, onChange }) {
   const isEditing = editing && !disabled;
 
   return (
-    <div className="rounded-xl border bg-background overflow-hidden">
-      <div className="flex items-center justify-between px-3 py-2 border-b bg-muted/30">
-        <div className="flex items-center gap-2">
-          <span className={cn("flex h-6 w-6 items-center justify-center rounded-md text-white text-xs font-bold", color)}>
+    <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/50 px-3.5 py-2.5">
+        <div className="flex items-center gap-2.5">
+          <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg text-[12px] font-bold text-white", tone)}>
             {letter}
           </span>
-          <span className="text-xs font-semibold">{label}</span>
-          {dirty && <span className="text-[9px] text-primary">· unsaved</span>}
+          <span className="text-[13px] font-semibold text-slate-800">{label}</span>
+          {dirty && <span className="text-[10px] font-medium text-indigo-600">Unsaved</span>}
         </div>
         {!disabled && (
-          <Button variant="ghost" size="sm" className="h-6 text-[10px] px-2" onClick={onEdit}>
+          <button
+            type="button"
+            onClick={onEdit}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-slate-500 hover:text-slate-800"
+          >
+            <Pencil className="h-3 w-3" />
             Edit
-          </Button>
+          </button>
         )}
       </div>
-      <div className="p-3">
+      <div className="px-4 py-3.5">
         {isEditing || !value ? (
           <Textarea
             value={value ?? ""}
@@ -330,12 +275,65 @@ function SOAPCard({ letter, label, color, value, dirty, disabled, editing, onEdi
             disabled={disabled}
             rows={4}
             placeholder={`Enter ${label.toLowerCase()}…`}
-            className="min-h-0 resize-none text-sm leading-relaxed border-0 bg-transparent p-0 shadow-none focus-visible:ring-0"
+            className="min-h-0 resize-none border-0 bg-transparent p-0 text-[14px] leading-relaxed shadow-none focus-visible:ring-0"
             autoFocus={isEditing}
           />
         ) : (
-          <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">{value}</p>
+          <p className="whitespace-pre-wrap text-[14px] leading-relaxed text-slate-700">{value}</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function NoteActions({ onRegenerate, onSave, onApprove, canApprove, saving, generating, hasChanges }) {
+  return (
+    <div className="shrink-0 space-y-2 border-t border-slate-200/80 bg-white p-4">
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 flex-1 gap-1.5 border-slate-200 text-[12px]"
+          onClick={onRegenerate}
+          disabled={saving || generating}
+        >
+          <RefreshCw className={cn("h-3.5 w-3.5", generating && "animate-spin")} />
+          Regenerate
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-9 flex-1 gap-1.5 border-slate-200 text-[12px]"
+          onClick={onSave}
+          disabled={saving || !hasChanges}
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit manually
+        </Button>
+        {canApprove && (
+          <Button
+            size="sm"
+            className="h-9 flex-[1.2] gap-1.5 bg-slate-900 text-[12px] hover:bg-slate-800"
+            data-testid="soap-approve"
+            onClick={onApprove}
+            disabled={saving || hasChanges}
+          >
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            Approve note
+            <ChevronDown className="h-3 w-3 opacity-60" />
+          </Button>
+        )}
+      </div>
+      <div className="flex gap-2">
+        <Button variant="outline" size="sm" className="h-8 flex-1 text-[11px] text-slate-500" disabled>
+          Export PDF
+        </Button>
+        <Button variant="outline" size="sm" className="h-8 flex-1 text-[11px] text-slate-500" disabled>
+          Send to EMR
+        </Button>
+        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" disabled>
+          <MoreHorizontal className="h-3.5 w-3.5" />
+        </Button>
       </div>
     </div>
   );

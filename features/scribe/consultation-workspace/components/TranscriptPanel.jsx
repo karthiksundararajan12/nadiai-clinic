@@ -1,13 +1,19 @@
 "use client";
 
-import { Loader2, Mic, Pause, Play, Square, Stethoscope, UserRound } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import {
+  FilePlus2,
+  Loader2,
+  Mic,
+  Pause,
+  Play,
+  Square,
+  Stethoscope,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../transcript-review/components/Timestamp.jsx";
-import { EmptyTranscriptState } from "../../transcript-review/components/ReviewStateViews.jsx";
 
 export function TranscriptPanel({
   segments,
@@ -22,7 +28,6 @@ export function TranscriptPanel({
   duration,
   pipelineMessage,
   language,
-  onLanguageChange,
   recordingControls,
   onStartRecording,
   isRequestingMic,
@@ -31,76 +36,25 @@ export function TranscriptPanel({
   const isLive = mode === "recording" || isRecording;
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col bg-background"
-      data-testid="transcript-review-workspace"
-    >
-      <div className="shrink-0 flex items-center justify-between border-b px-4 py-3">
-        <div>
-          <h3 className="text-sm font-semibold">Live Consultation</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            {isLive ? "Recording in progress" : "Doctor–patient conversation"}
-          </p>
-        </div>
-        {isLive && (
-          <Badge className="bg-emerald-500/10 text-emerald-700 border-emerald-500/30 text-[10px]">
-            <span className="mr-1 h-1.5 w-1.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
-            Recording
-          </Badge>
-        )}
-      </div>
+    <div className="flex h-full min-h-0 flex-col" data-testid="transcript-review-workspace">
+      <PanelHeader isLive={isLive} />
 
       {isLive && isRecording && (
-        <div className="shrink-0 border-b bg-primary/5 px-4 py-4">
+        <div className="shrink-0 border-b border-slate-100 bg-gradient-to-b from-indigo-50/40 to-white px-6 py-5">
           <WaveformDisplay active={!isPaused} />
         </div>
       )}
 
-      <ScrollArea className="flex-1 min-h-0">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {segments.length === 0 ? (
-          <div className="p-6">
-            {isLive ? (
-              <div className="flex flex-col items-center justify-center py-12 text-center text-muted-foreground">
-                {isRequestingMic ? (
-                  <>
-                    <Loader2 className="h-8 w-8 mb-3 animate-spin text-primary" />
-                    <p className="text-sm font-medium text-foreground">Allow microphone access…</p>
-                  </>
-                ) : pipelineMessage ? (
-                  <>
-                    <Loader2 className="h-8 w-8 mb-3 animate-spin text-primary" />
-                    <p className="text-sm font-medium text-foreground">{pipelineMessage}</p>
-                  </>
-                ) : onStartRecording ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={onStartRecording}
-                      className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg hover:bg-primary/90 transition-transform hover:scale-105"
-                    >
-                      <Mic className="h-9 w-9" />
-                    </button>
-                    <p className="text-sm font-medium text-foreground">Tap to start consultation</p>
-                    <p className="text-xs mt-1 max-w-xs">
-                      Speak naturally — transcript and SOAP note generate when you stop.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Mic className="h-8 w-8 mb-3 text-primary/40" />
-                    <p className="text-sm font-medium text-foreground">Listening…</p>
-                    <p className="text-xs mt-1 max-w-xs">
-                      Transcript will appear here after you stop recording.
-                    </p>
-                  </>
-                )}
-              </div>
-            ) : (
-              <EmptyTranscriptState />
-            )}
-          </div>
+          <EmptyState
+            isLive={isLive}
+            isRequestingMic={isRequestingMic}
+            pipelineMessage={pipelineMessage}
+            onStartRecording={onStartRecording}
+          />
         ) : (
-          <div className="space-y-4 p-4">
+          <div className="space-y-5 px-5 py-5">
             {segments.map((segment) => (
               <ChatBubble
                 key={segment.id}
@@ -112,47 +66,117 @@ export function TranscriptPanel({
             ))}
           </div>
         )}
-      </ScrollArea>
+      </div>
 
       {isLive && recordingControls && (
-        <div className="shrink-0 border-t bg-muted/20 px-4 py-4">
-          <div className="flex items-center justify-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full"
-              onClick={recordingControls.onPauseResume}
-              disabled={recordingControls.disabled}
-            >
-              {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-            </Button>
-            <Button
-              size="icon"
-              className="h-14 w-14 rounded-full bg-primary hover:bg-primary/90"
-              onClick={recordingControls.onStop}
-              disabled={recordingControls.disabled}
-            >
-              <Square className="h-5 w-5 fill-current" />
-            </Button>
-            <Button
-              variant="outline"
-              size="icon"
-              className="h-11 w-11 rounded-full"
-              disabled
-              title="Add note (coming soon)"
-            >
-              <span className="text-lg leading-none">+</span>
-            </Button>
-          </div>
-          <div className="mt-3 flex items-center justify-between text-[10px] text-muted-foreground">
-            <span>{language ?? "English"}</span>
-            <span>Auto save: On</span>
-            {duration != null && (
-              <span className="font-mono tabular-nums">{formatTimestamp(duration)}</span>
-            )}
-          </div>
-        </div>
+        <RecordingControls
+          isPaused={isPaused}
+          duration={duration}
+          language={language}
+          controls={recordingControls}
+        />
       )}
+    </div>
+  );
+}
+
+function PanelHeader({ isLive }) {
+  return (
+    <div className="flex shrink-0 items-center justify-between border-b border-slate-100 px-5 py-4">
+      <div>
+        <h2 className="text-[15px] font-semibold tracking-tight text-slate-900">Live Consultation</h2>
+        <p className="mt-0.5 text-[12px] text-slate-500">
+          {isLive ? "Recording in progress" : "Transcribed conversation"}
+        </p>
+      </div>
+      {isLive && (
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Live
+        </span>
+      )}
+    </div>
+  );
+}
+
+function EmptyState({ isLive, isRequestingMic, pipelineMessage, onStartRecording }) {
+  return (
+    <div className="flex h-full flex-col items-center justify-center px-6 py-16 text-center">
+      {isRequestingMic ? (
+        <>
+          <Loader2 className="mb-4 h-9 w-9 animate-spin text-indigo-500" />
+          <p className="text-[14px] font-medium text-slate-900">Allow microphone access</p>
+          <p className="mt-1 max-w-xs text-[13px] text-slate-500">Required to capture the consultation.</p>
+        </>
+      ) : pipelineMessage ? (
+        <>
+          <Loader2 className="mb-4 h-9 w-9 animate-spin text-indigo-500" />
+          <p className="text-[14px] font-medium text-slate-900">{pipelineMessage}</p>
+        </>
+      ) : onStartRecording ? (
+        <>
+          <button
+            type="button"
+            onClick={onStartRecording}
+            className="group mb-5 flex h-[72px] w-[72px] items-center justify-center rounded-full bg-slate-900 text-white shadow-lg shadow-slate-900/20 transition-transform hover:scale-[1.03] active:scale-[0.98]"
+          >
+            <Mic className="h-8 w-8" />
+          </button>
+          <p className="text-[15px] font-semibold text-slate-900">Start consultation</p>
+          <p className="mt-1.5 max-w-[280px] text-[13px] leading-relaxed text-slate-500">
+            Speak naturally with your patient. Transcript and clinical note generate when you stop.
+          </p>
+        </>
+      ) : isLive ? (
+        <>
+          <div className="mb-4 h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+          <p className="text-[14px] font-medium text-slate-900">Listening…</p>
+        </>
+      ) : (
+        <p className="text-[13px] text-slate-500">No transcript segments yet.</p>
+      )}
+    </div>
+  );
+}
+
+function RecordingControls({ isPaused, duration, language, controls }) {
+  return (
+    <div className="shrink-0 border-t border-slate-100 bg-slate-50/60 px-5 py-5">
+      <div className="flex items-center justify-center gap-5">
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-12 w-12 rounded-full border-slate-200 bg-white shadow-sm"
+          onClick={controls.onPauseResume}
+          disabled={controls.disabled}
+        >
+          {isPaused ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+        </Button>
+        <Button
+          size="icon"
+          className="h-[60px] w-[60px] rounded-full bg-slate-900 shadow-lg shadow-slate-900/25 hover:bg-slate-800"
+          onClick={controls.onStop}
+          disabled={controls.disabled}
+        >
+          <Square className="h-5 w-5 fill-current" />
+        </Button>
+        <Button
+          variant="outline"
+          size="icon"
+          className="h-12 w-12 rounded-full border-slate-200 bg-white shadow-sm"
+          disabled
+          title="Add note (coming soon)"
+        >
+          <FilePlus2 className="h-4 w-4" />
+        </Button>
+      </div>
+      <div className="mt-4 flex items-center justify-between text-[11px] font-medium text-slate-400">
+        <span>{language ?? "English (India)"}</span>
+        <span>Auto-save on</span>
+        {duration != null && (
+          <span className="font-mono tabular-nums text-slate-600">{formatTimestamp(duration)}</span>
+        )}
+      </div>
     </div>
   );
 }
@@ -166,38 +190,50 @@ function ChatBubble({ segment, dirty, disabled, onChange }) {
     <div className="flex gap-3">
       <div
         className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-          isDoctor ? "bg-blue-100 text-blue-600" : "bg-emerald-100 text-emerald-600",
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-full ring-2 ring-white",
+          isDoctor
+            ? "bg-indigo-100 text-indigo-600"
+            : "bg-teal-100 text-teal-600",
         )}
       >
         {isDoctor ? <Stethoscope className="h-4 w-4" /> : <UserRound className="h-4 w-4" />}
       </div>
       <div className="min-w-0 flex-1">
-        <div className="mb-1 flex items-center gap-2">
-          <span className="text-xs font-semibold">{segment.speaker_label ?? (isDoctor ? "Doctor" : "Patient")}</span>
-          <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
+        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+          <span className="text-[13px] font-semibold text-slate-900">
+            {segment.speaker_label ?? (isDoctor ? "Doctor" : "Patient")}
+          </span>
+          <span className="font-mono text-[11px] tabular-nums text-slate-400">
             {formatTimestamp(segment.start_seconds)}
           </span>
           {segment.is_low_confidence && (
-            <Badge variant="warning" className="h-4 text-[9px] px-1">Low conf.</Badge>
+            <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium text-amber-700">
+              Low confidence
+            </span>
           )}
-          {dirty && <Badge variant="accent" className="h-4 text-[9px] px-1">Edited</Badge>}
+          {dirty && (
+            <span className="rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+              Edited
+            </span>
+          )}
         </div>
         <div
           className={cn(
-            "rounded-xl rounded-tl-sm px-3 py-2.5 text-sm leading-relaxed",
-            isDoctor ? "bg-blue-50/80 dark:bg-blue-950/20" : "bg-emerald-50/80 dark:bg-emerald-950/20",
-            dirty && "ring-1 ring-primary/30",
+            "rounded-2xl rounded-tl-md px-4 py-3 text-[14px] leading-relaxed",
+            isDoctor
+              ? "bg-slate-50 text-slate-800 ring-1 ring-slate-200/60"
+              : "bg-white text-slate-800 ring-1 ring-slate-200/80 shadow-sm",
+            dirty && "ring-2 ring-indigo-300/50",
           )}
         >
           {disabled ? (
-            <p>{segment.text}</p>
+            <p className="whitespace-pre-wrap">{segment.text}</p>
           ) : (
             <Textarea
               value={segment.text ?? ""}
               onChange={(e) => onChange(segment.id, { text: e.target.value })}
-              rows={Math.min(5, Math.max(2, Math.ceil((segment.text?.length ?? 0) / 70)))}
-              className="min-h-0 resize-none border-0 bg-transparent p-0 text-sm leading-relaxed shadow-none focus-visible:ring-0"
+              rows={Math.min(6, Math.max(2, Math.ceil((segment.text?.length ?? 0) / 72)))}
+              className="min-h-0 resize-none border-0 bg-transparent p-0 text-[14px] leading-relaxed shadow-none focus-visible:ring-0"
             />
           )}
         </div>
@@ -207,22 +243,24 @@ function ChatBubble({ segment, dirty, disabled, onChange }) {
 }
 
 function WaveformDisplay({ active }) {
-  const bars = 24;
+  const bars = 32;
   return (
-    <div className="flex items-center justify-center gap-[3px] h-16">
+    <div className="flex h-[56px] items-end justify-center gap-[3px]">
       {Array.from({ length: bars }, (_, i) => {
         const center = (bars - 1) / 2;
-        const envelope = 1 - Math.abs(i - center) / center;
+        const envelope = 0.35 + 0.65 * (1 - Math.abs(i - center) / center);
+        const h = active ? 12 + envelope * 44 : 6;
         return (
           <div
             key={i}
             className={cn(
-              "w-1 rounded-full bg-primary/80 transition-all",
-              active ? "animate-pulse" : "opacity-30",
+              "w-[3px] rounded-full transition-all duration-150",
+              active ? "bg-indigo-400" : "bg-slate-200",
             )}
             style={{
-              height: active ? `${20 + envelope * 40}px` : "8px",
-              animationDelay: active ? `${i * 40}ms` : undefined,
+              height: `${h}px`,
+              opacity: active ? 0.5 + envelope * 0.5 : 0.4,
+              animation: active ? `pulse 1.2s ease-in-out ${i * 35}ms infinite` : undefined,
             }}
           />
         );

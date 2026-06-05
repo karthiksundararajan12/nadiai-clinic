@@ -48,7 +48,7 @@ test.describe("AI Scribe — full clinical pipeline @full", () => {
     session = await api.runTranscriptionUntil(sessionId, "TRANSCRIBED");
     expect(session.status).toBe("TRANSCRIBED");
 
-    await page.getByRole("button", { name: "Past consultations" }).click();
+    await page.getByRole("button", { name: "Sessions" }).click();
     await page.getByTestId("consultations-refresh").click();
     const row = sessionRow(page, sessionId);
     await expect(row).toBeVisible({ timeout: 30_000 });
@@ -72,18 +72,14 @@ test.describe("AI Scribe — full clinical pipeline @full", () => {
     await api.waitForSessionStatus(sessionId, ["SOAP_APPROVED", "COMPLETED"], 90_000);
 
     // 8. Prescription generation + review + approval
-    await page.getByTestId("prescription-refresh").click();
-
-    const rxRow = page.locator(`[data-testid="prescription-row"][data-session-id="${sessionId}"]`);
-    await expect(rxRow).toBeVisible({ timeout: 60_000 });
-    await rxRow.getByTestId("prescription-generate").click();
+    await api.generatePrescription(sessionId);
     await api.waitForSessionStatus(
       sessionId,
       ["PRESCRIPTION_DRAFT_READY", "PRESCRIPTION_REVIEW_REQUIRED", "PRESCRIPTION_REVIEWING"],
       180_000,
     );
 
-    await rxRow.getByTestId("prescription-review-open").click();
+    await page.goto(`/scribe?rx=${sessionId}`);
     await expect(page.getByTestId("prescription-review-workspace")).toBeVisible({ timeout: 60_000 });
     await page.getByTestId("prescription-approve").click();
 

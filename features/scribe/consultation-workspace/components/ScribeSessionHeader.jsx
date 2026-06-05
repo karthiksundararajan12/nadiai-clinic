@@ -1,7 +1,6 @@
 "use client";
 
-import { Bell, Square } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { Bell, History, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { AudioLevelMeter } from "@/features/scribe/components/recording/AudioLevelMeter.jsx";
@@ -29,68 +28,88 @@ export function ScribeSessionHeader({
   doctorName,
   doctorSpecialty,
   onEndSession,
+  onOpenSessions,
   endSessionLabel = "End Session",
 }) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b bg-background px-4 lg:px-5">
-      <div className="flex items-center gap-3 min-w-0">
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">
+    <header className="flex h-[52px] shrink-0 items-center justify-between border-b border-slate-200/80 bg-white px-4 lg:px-5">
+      <div className="flex min-w-0 items-center gap-4">
+        <div className="flex items-center gap-2.5 shrink-0">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-slate-900 text-[11px] font-bold tracking-tight text-white">
             N
           </div>
-          <div className="hidden sm:block leading-tight">
-            <p className="text-sm font-semibold">Nadi AI</p>
-            <p className="text-[10px] text-muted-foreground">AI Scribe</p>
+          <div className="hidden sm:flex items-center gap-2.5">
+            <span className="text-[15px] font-semibold tracking-tight text-slate-900">Nadi AI</span>
+            <span className="h-4 w-px bg-slate-200" aria-hidden />
+            <span className="text-[13px] font-medium text-slate-500">AI Scribe</span>
           </div>
         </div>
 
         {isRecording && (
-          <div className="flex items-center gap-2 sm:gap-3 ml-1 sm:ml-4 pl-3 sm:pl-4 border-l">
-            <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white gap-1 text-[10px] h-5">
-              <span className="h-1.5 w-1.5 rounded-full bg-white animate-pulse" />
+          <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-600/15">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
               {isPaused ? "Paused" : "Recording"}
-            </Badge>
-            <span className="font-mono text-sm font-semibold tabular-nums text-foreground">
+            </span>
+            <span className="font-mono text-[15px] font-semibold tabular-nums text-slate-900">
               {formatDuration(duration)}
             </span>
             <AudioLevelMeter
               level={isPaused ? 0 : audioLevel}
               isActive={isRecording && !isPaused}
-              className="hidden md:flex h-8"
+              className="hidden h-7 md:flex"
             />
           </div>
         )}
       </div>
 
-      <div className="flex items-center gap-2 sm:gap-3 shrink-0">
+      <div className="flex shrink-0 items-center gap-2">
+        {onOpenSessions && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onOpenSessions}
+            className="h-8 gap-1.5 text-xs text-slate-600 hover:text-slate-900"
+          >
+            <History className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Sessions</span>
+          </Button>
+        )}
+
         {onEndSession && (
           <Button
             variant="outline"
             size="sm"
             onClick={onEndSession}
-            className="gap-1.5 border-destructive/40 text-destructive hover:bg-destructive/5 hover:text-destructive h-8 text-xs"
+            className="h-8 gap-1.5 border-rose-200 text-xs text-rose-600 hover:bg-rose-50 hover:text-rose-700"
           >
             <Square className="h-3 w-3 fill-current" />
             <span className="hidden sm:inline">{endSessionLabel}</span>
           </Button>
         )}
 
-        <Button variant="ghost" size="icon" className="relative h-8 w-8 text-muted-foreground">
-          <Bell className="h-4 w-4" />
-          <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-destructive" />
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative h-8 w-8 text-slate-500 hover:text-slate-700"
+        >
+          <Bell className="h-[17px] w-[17px]" />
+          <span className="absolute right-2 top-2 h-1.5 w-1.5 rounded-full bg-rose-500" />
         </Button>
 
-        <div className="flex items-center gap-2 pl-2 border-l">
+        <div className="ml-1 flex items-center gap-2.5 border-l border-slate-200 pl-3">
           <div
             className={cn(
-              "flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-semibold",
+              "flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-700",
             )}
           >
             {initials(doctorName)}
           </div>
-          <div className="hidden md:block leading-tight">
-            <p className="text-xs font-semibold truncate max-w-[140px]">{doctorName ?? "Doctor"}</p>
-            <p className="text-[10px] text-muted-foreground truncate max-w-[140px]">
+          <div className="hidden leading-tight md:block">
+            <p className="max-w-[150px] truncate text-[13px] font-semibold text-slate-900">
+              {doctorName ?? "Doctor"}
+            </p>
+            <p className="max-w-[150px] truncate text-[11px] text-slate-500">
               {doctorSpecialty ?? "Physician"}
             </p>
           </div>
@@ -107,17 +126,26 @@ export function ScribeSessionFooter({
   version = "1.0",
 }) {
   return (
-    <footer className="flex h-9 shrink-0 items-center justify-between border-t bg-muted/30 px-4 text-[10px] text-muted-foreground lg:px-5">
-      <span className="font-mono truncate max-w-[40%]">
+    <footer className="flex h-8 shrink-0 items-center justify-between border-t border-slate-200/80 bg-white px-4 text-[11px] text-slate-500 lg:px-5">
+      <span className="max-w-[35%] truncate font-mono">
         {sessionId ? `Session ${sessionId.slice(0, 8)}…` : "New session"}
       </span>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         {lastSaved && <span>Last saved {lastSaved}</span>}
-        <Badge variant="outline" className="h-4 text-[9px] px-1.5 bg-emerald-500/10 text-emerald-700 border-emerald-500/30">
+        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-medium text-emerald-700 ring-1 ring-emerald-600/15">
           {statusLabel}
-        </Badge>
+        </span>
       </div>
-      <span>v{version} · Nadi AI</span>
+      <span className="hidden sm:inline">v{version} · Nadi AI</span>
     </footer>
+  );
+}
+
+export function ScribeActionBar({ children }) {
+  if (!children) return null;
+  return (
+    <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-slate-200/60 bg-slate-50/80 px-4 py-2 lg:px-5">
+      {children}
+    </div>
   );
 }

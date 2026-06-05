@@ -9,6 +9,7 @@ import {
   ReviewErrorState,
   ReviewLoadingState,
 } from "../../transcript-review/components/ReviewStateViews.jsx";
+import { ScribeShell, ScribeColumns } from "./ScribeShell.jsx";
 import { ScribeSessionHeader, ScribeSessionFooter } from "./ScribeSessionHeader.jsx";
 import { PatientSidebar } from "./PatientSidebar.jsx";
 import { TranscriptPanel } from "./TranscriptPanel.jsx";
@@ -18,14 +19,13 @@ import {
   SOAP_AVAILABLE_STATUSES,
   computeTranscriptConfidence,
 } from "./SOAPPanel.jsx";
-import { ConsultationToolbar } from "./ConsultationToolbar.jsx";
 
 export function ConsultationWorkspace({
   sessionId,
-  className,
   onApproved,
   onEndSession,
-  showToolbar = true,
+  onOpenSessions,
+  readOnly: readOnlyProp,
 }) {
   const { displayName, specialization } = useUser();
   const transcript = useTranscriptReview(sessionId);
@@ -34,7 +34,7 @@ export function ConsultationWorkspace({
   const soap = useSOAPReview(sessionId, { enabled: hasSoap && !transcript.loading });
   const { patient } = usePatientForSession(transcript.session?.patient_id);
 
-  const readOnly = transcript.readOnly;
+  const readOnly = readOnlyProp ?? transcript.readOnly;
   const soapApproved =
     soap.readOnly ||
     sessionStatus === "SOAP_APPROVED" ||
@@ -54,13 +54,7 @@ export function ConsultationWorkspace({
     [transcript.segments],
   );
 
-  const autosaveStatus = transcript.hasChanges
-    ? transcript.autosaveStatus
-    : soap.hasChanges
-      ? soap.autosaveStatus
-      : transcript.autosaveStatus;
-
-  const statusLabel = soapApproved ? "Approved" : hasSoap ? "Draft" : "Review";
+  const statusLabel = soapApproved ? "Approved" : hasSoap ? "Draft" : "In review";
 
   const handleSave = useCallback(async () => {
     if (transcript.hasChanges) await transcript.manualSave();
@@ -82,16 +76,20 @@ export function ConsultationWorkspace({
     onApproved?.();
   }, [onApproved, soap]);
 
-  const handleRejectSOAP = useCallback(async () => {
-    const reason = window.prompt("Enter rejection reason for this SOAP note:");
-    if (!reason?.trim()) return;
-    await soap.reject(reason.trim());
-    await transcript.load();
-  }, [soap, transcript]);
+  if (transcript.loading) {
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-slate-50">
+        <ReviewLoadingState />
+      </div>
+    );
+  }
 
-  if (transcript.loading) return <ReviewLoadingState />;
   if (transcript.error) {
-    return <ReviewErrorState error={transcript.error} onRetry={transcript.load} />;
+    return (
+      <div className="flex h-[100dvh] items-center justify-center bg-slate-50 p-6">
+        <ReviewErrorState error={transcript.error} onRetry={transcript.load} />
+      </div>
+    );
   }
 
   const lastSaved = transcript.session?.updated_at
@@ -101,99 +99,77 @@ export function ConsultationWorkspace({
       })
     : null;
 
+  const notePanel = hasSoap ? (
+    <SOAPEditorPanel
+      draft={soap.draft}
+      dirty={soap.dirty}
+      readOnly={soapApproved}
+      saving={soap.saving}
+      loading={soap.loading}
+      error={soap.error}
+      onChange={soap.updateSection}
+      onRetry={soap.load}
+      confidence={confidence}
+      onRegenerate={handleGenerateSOAP}
+      onApprove={handleApproveSOAP}
+      onSave={handleSave}
+      canApprove={canApproveSOAP}
+      generating={generatingSOAP}
+      hasChanges={soap.hasChanges || transcript.hasChanges}
+    />
+  ) : (
+    <SOAPEmptyPanel
+      sessionStatus={sessionStatus}
+      generating={generatingSOAP}
+      canGenerate={canGenerateSOAP}
+      onGenerate={handleGenerateSOAP}
+      confidence={confidence}
+      onCompleteReview={handleCompleteReview}
+      canCompleteReview={canCompleteReview}
+      completeReviewDisabled={transcript.saving || transcript.hasChanges || generatingSOAP}
+    />
+  );
+
   return (
-    <div
-      className={className}
-      data-testid="consultation-workspace"
-    >
-      <section
-        aria-label="Consultation workspace"
-        className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-sm"
+    <div data-testid="consultation-workspace">
+      <ScribeShell
+        header={
+          <ScribeSessionHeader
+            doctorName={displayName}
+            doctorSpecialty={specialization}
+            onEndSession={onEndSession}
+            onOpenSessions={onOpenSessions}
+          />
+        }
+        footer={
+          <ScribeSessionFooter
+            sessionId={sessionId}
+            lastSaved={lastSaved}
+            statusLabel={statusLabel}
+          />
+        }
       >
-        <ScribeSessionHeader
-          doctorName={displayName}
-          doctorSpecialty={specialization}
-          onEndSession={onEndSession}
-          endSessionLabel="End Session"
-        />
-
-        {showToolbar && !readOnly && (
-          <ConsultationToolbar
-            sessionStatus={sessionStatus}
-            transcriptDirty={transcript.hasChanges}
-            soapDirty={soap.hasChanges}
-            saving={transcript.saving || soap.saving}
-            autosaveStatus={autosaveStatus}
-            canCompleteReview={canCompleteReview}
-            canGenerateSOAP={canGenerateSOAP}
-            generatingSOAP={generatingSOAP}
-            canApproveSOAP={canApproveSOAP}
-            soapApproved={soapApproved}
-            onSave={handleSave}
-            onCompleteReview={handleCompleteReview}
-            onGenerateSOAP={handleGenerateSOAP}
-            onApproveSOAP={handleApproveSOAP}
-            onRejectSOAP={handleRejectSOAP}
-          />
-        )}
-
-        {readOnly && (
-          <p className="shrink-0 text-xs text-muted-foreground border-b bg-muted/30 px-4 py-2">
-            Archived consultation — read-only view.
-          </p>
-        )}
-
-        <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-          <PatientSidebar
-            patient={patient}
-            sessionDate={transcript.session?.created_at}
-          />
-
-          <TranscriptPanel
-            segments={transcript.segments}
-            dirty={transcript.dirty}
-            readOnly={readOnly}
-            saving={transcript.saving}
-            sessionStatus={sessionStatus}
-            onChange={transcript.updateSegment}
-            mode="review"
-          />
-
-          {hasSoap ? (
-            <SOAPEditorPanel
-              draft={soap.draft}
-              dirty={soap.dirty}
-              readOnly={soapApproved}
-              saving={soap.saving}
-              loading={soap.loading}
-              error={soap.error}
-              onChange={soap.updateSection}
-              onRetry={soap.load}
-              confidence={confidence}
-              onRegenerate={handleGenerateSOAP}
-              onApprove={handleApproveSOAP}
-              onSave={handleSave}
-              canApprove={canApproveSOAP}
-              generating={generatingSOAP}
-              hasChanges={soap.hasChanges || transcript.hasChanges}
+        <ScribeColumns
+          patient={
+            <PatientSidebar
+              patient={patient}
+              sessionDate={transcript.session?.created_at}
             />
-          ) : (
-            <SOAPEmptyPanel
+          }
+          transcript={
+            <TranscriptPanel
+              segments={transcript.segments}
+              dirty={transcript.dirty}
+              readOnly={readOnly}
+              saving={transcript.saving}
               sessionStatus={sessionStatus}
-              generating={generatingSOAP}
-              canGenerate={canGenerateSOAP}
-              onGenerate={handleGenerateSOAP}
-              confidence={confidence}
+              onChange={transcript.updateSegment}
+              mode="review"
             />
-          )}
-        </div>
-
-        <ScribeSessionFooter
-          sessionId={sessionId}
-          lastSaved={lastSaved}
-          statusLabel={statusLabel}
+          }
+          note={notePanel}
         />
-      </section>
+      </ScribeShell>
     </div>
   );
 }

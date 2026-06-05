@@ -4,6 +4,7 @@ import { useCallback } from "react";
 import { useUser } from "@/hooks/use-user";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
+import { ScribeShell, ScribeColumns } from "./ScribeShell.jsx";
 import { ScribeSessionHeader, ScribeSessionFooter } from "./ScribeSessionHeader.jsx";
 import { PatientSidebar } from "./PatientSidebar.jsx";
 import { TranscriptPanel } from "./TranscriptPanel.jsx";
@@ -16,6 +17,7 @@ export function ScribeLiveSession({
   onRecordingComplete,
   onError,
   onEndSession,
+  onOpenSessions,
 }) {
   const { displayName, specialization } = useUser();
 
@@ -45,51 +47,56 @@ export function ScribeLiveSession({
   const isRecording = recording.isRecording || recording.isPaused;
 
   return (
-    <div
-      className="flex min-h-[calc(100vh-4rem)] flex-col overflow-hidden rounded-xl border bg-background shadow-sm"
-      data-testid="scribe-live-session"
-    >
-      <ScribeSessionHeader
-        isRecording={isRecording}
-        isPaused={recording.isPaused}
-        duration={recording.duration}
-        audioLevel={audioLevel}
-        doctorName={displayName}
-        doctorSpecialty={specialization}
-        onEndSession={onEndSession}
-      />
-
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
-        <PatientSidebar sessionDate={new Date().toISOString()} />
-
-        <TranscriptPanel
-          segments={[]}
-          dirty={{}}
-          mode="recording"
+    <ScribeShell
+      header={
+        <ScribeSessionHeader
           isRecording={isRecording}
           isPaused={recording.isPaused}
           duration={recording.duration}
-          pipelineMessage={pipelineMessage}
-          language={language}
-          recordingControls={
-            isRecording
-              ? {
-                  disabled: disabled || recording.isRequesting,
-                  onPauseResume: recording.isPaused
-                    ? recording.resumeRecording
-                    : recording.pauseRecording,
-                  onStop: handleStop,
-                }
-              : null
-          }
-          onStartRecording={!isRecording && !disabled ? recording.startRecording : undefined}
-          isRequestingMic={recording.isRequesting}
+          audioLevel={audioLevel}
+          doctorName={displayName}
+          doctorSpecialty={specialization}
+          onEndSession={onEndSession}
+          onOpenSessions={onOpenSessions}
         />
-
-        <SOAPEmptyPanel sessionStatus="RECORDING" generating={Boolean(pipelineMessage)} canGenerate={false} />
-      </div>
-
-      <ScribeSessionFooter statusLabel="Recording" />
-    </div>
+      }
+      footer={<ScribeSessionFooter statusLabel="Recording" />}
+    >
+      <ScribeColumns
+        patient={<PatientSidebar sessionDate={new Date().toISOString()} />}
+        transcript={
+          <TranscriptPanel
+            segments={[]}
+            dirty={{}}
+            mode="recording"
+            isRecording={isRecording}
+            isPaused={recording.isPaused}
+            duration={recording.duration}
+            pipelineMessage={pipelineMessage}
+            language={language}
+            recordingControls={
+              isRecording
+                ? {
+                    disabled: disabled || recording.isRequesting,
+                    onPauseResume: recording.isPaused
+                      ? recording.resumeRecording
+                      : recording.pauseRecording,
+                    onStop: handleStop,
+                  }
+                : null
+            }
+            onStartRecording={!isRecording && !disabled ? recording.startRecording : undefined}
+            isRequestingMic={recording.isRequesting}
+          />
+        }
+        note={
+          <SOAPEmptyPanel
+            sessionStatus="RECORDING"
+            generating={Boolean(pipelineMessage)}
+            canGenerate={false}
+          />
+        }
+      />
+    </ScribeShell>
   );
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback } from "react";
-import { useUser } from "@/hooks/use-user";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { ScribeShell, ScribeColumns } from "./ScribeShell.jsx";
@@ -18,9 +17,8 @@ export function ScribeLiveSession({
   onError,
   onEndSession,
   onOpenSessions,
+  toolbarLeft,
 }) {
-  const { displayName, specialization } = useUser();
-
   const recording = useRecording({
     chunkIntervalMs: 5_000,
     onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
@@ -54,8 +52,7 @@ export function ScribeLiveSession({
           isPaused={recording.isPaused}
           duration={recording.duration}
           audioLevel={audioLevel}
-          doctorName={displayName}
-          doctorSpecialty={specialization}
+          toolbarLeft={toolbarLeft}
           onEndSession={onEndSession}
           onOpenSessions={onOpenSessions}
         />

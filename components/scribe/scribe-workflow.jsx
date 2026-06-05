@@ -195,22 +195,20 @@ export function ScribeWorkflow() {
     loadConsultations(true);
   }, [goLive, loadConsultations]);
 
-  const languageBar = view === "live" && (
-    <div className="absolute left-4 top-[60px] z-30 hidden lg:block">
-      <LanguageToggle value={language} onChange={setLanguage} />
-    </div>
+  const languageToggle = (
+    <LanguageToggle value={language} onChange={setLanguage} />
   );
 
   if (view === "consultation" && activeSessionId) {
     return (
-      <>
-        {languageBar}
+      <div className="h-full min-h-0">
         <ConsultationWorkspace
           key={activeSessionId}
           sessionId={activeSessionId}
           onApproved={handleSOAPApproved}
           onEndSession={goLive}
           onOpenSessions={() => setSessionsOpen(true)}
+          toolbarLeft={languageToggle}
           readOnly={viewFromHistory}
         />
         <SessionsDrawer
@@ -229,13 +227,12 @@ export function ScribeWorkflow() {
           onDelete={deleteSession}
           canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
         />
-      </>
+      </div>
     );
   }
 
   return (
-    <div className="relative" data-testid="scribe-workflow">
-      {languageBar}
+    <div className="relative h-full min-h-0" data-testid="scribe-workflow">
       <ScribeLiveSession
         language={language}
         disabled={pipelineBusy}
@@ -244,6 +241,7 @@ export function ScribeWorkflow() {
         onError={(err) => setUploadError(err)}
         onEndSession={goLive}
         onOpenSessions={() => setSessionsOpen(true)}
+        toolbarLeft={languageToggle}
       />
 
       {uploadError && (

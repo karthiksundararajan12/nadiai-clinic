@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo } from "react";
-import { useUser } from "@/hooks/use-user";
 import { useTranscriptReview } from "../../transcript-review/hooks/use-transcript-review.js";
 import { useSOAPReview } from "../../soap-review/hooks/use-soap-review.js";
 import { usePatientForSession } from "../hooks/use-patient-for-session.js";
@@ -25,9 +24,9 @@ export function ConsultationWorkspace({
   onApproved,
   onEndSession,
   onOpenSessions,
+  toolbarLeft,
   readOnly: readOnlyProp,
 }) {
-  const { displayName, specialization } = useUser();
   const transcript = useTranscriptReview(sessionId);
   const sessionStatus = transcript.session?.status ?? "";
   const hasSoap = SOAP_AVAILABLE_STATUSES.has(sessionStatus);
@@ -78,7 +77,7 @@ export function ConsultationWorkspace({
 
   if (transcript.loading) {
     return (
-      <div className="flex h-[100dvh] items-center justify-center bg-slate-50">
+      <div className="flex h-full min-h-[320px] items-center justify-center bg-slate-50">
         <ReviewLoadingState />
       </div>
     );
@@ -86,7 +85,7 @@ export function ConsultationWorkspace({
 
   if (transcript.error) {
     return (
-      <div className="flex h-[100dvh] items-center justify-center bg-slate-50 p-6">
+      <div className="flex h-full min-h-[320px] items-center justify-center bg-slate-50 p-6">
         <ReviewErrorState error={transcript.error} onRetry={transcript.load} />
       </div>
     );
@@ -131,12 +130,11 @@ export function ConsultationWorkspace({
   );
 
   return (
-    <div data-testid="consultation-workspace">
+    <div className="h-full min-h-0" data-testid="consultation-workspace">
       <ScribeShell
         header={
           <ScribeSessionHeader
-            doctorName={displayName}
-            doctorSpecialty={specialization}
+            toolbarLeft={toolbarLeft}
             onEndSession={onEndSession}
             onOpenSessions={onOpenSessions}
           />

@@ -1,18 +1,36 @@
 "use client";
 
-import { Loader2, Mic, Pause, Play, Square, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import {
+  AlertTriangle,
+  Loader2,
+  Mic,
+  Pause,
+  Play,
+  Save,
+  Search,
+  Square,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../transcript-review/components/Timestamp.jsx";
+import { SpeakerSelect } from "../../transcript-review/components/SpeakerSelect.jsx";
+import { AudioPlaybackBar } from "./AudioPlaybackBar.jsx";
+import { inferSoapSectionFromSegment } from "../lib/transcript-soap-link.js";
 
 export function TranscriptPanel({
+  sessionId,
   segments,
   dirty,
   readOnly,
   saving,
   sessionStatus,
   onChange,
+  onSave,
+  hasChanges,
+  autosaveStatus,
   mode = "review",
   isRecording,
   isPaused,
@@ -26,12 +44,82 @@ export function TranscriptPanel({
   recordingControls,
   onStartRecording,
   isRequestingMic,
+  activeSegmentId,
+  onSegmentClick,
+  onAudioTimeUpdate,
+  onSeekReady,
+  highlightedSoapSection,
 }) {
+  const [query, setQuery] = useState("");
   const disabled = readOnly || saving || sessionStatus === "REVIEW_COMPLETED";
   const isLive = (mode === "recording" || isRecording) && !pipelineMessage;
 
+  const filteredSegments = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return segments;
+    return segments.filter(
+      (s) =>
+        (s.text ?? "").toLowerCase().includes(q) ||
+        (s.speaker_label ?? "").toLowerCase().includes(q),
+    );
+  }, [segments, query]);
+
+  const lowConfidenceCount = useMemo(
+    () => segments.filter((s) => s.is_low_confidence).length,
+    [segments],
+  );
+
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="transcript-review-workspace">
+      {sessionId && mode === "review" && segments.length > 0 && (
+        <AudioPlaybackBar
+          sessionId={sessionId}
+          onTimeUpdate={onAudioTimeUpdate}
+          onSeekReady={onSeekReady}
+        />
+      )}
+
+      {segments.length > 0 && mode === "review" && (
+        <div className="shrink-0 space-y-2 border-b border-slate-100 px-4 py-2">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search transcript…"
+              className="h-8 w-full rounded-md border border-slate-200 bg-white pl-8 pr-3 text-sm outline-none focus:border-indigo-400"
+              aria-label="Search transcript"
+            />
+          </div>
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs text-slate-500">
+              {segments.length} segments
+              {lowConfidenceCount > 0 && (
+                <span className="ml-2 text-amber-700">
+                  · {lowConfidenceCount} low confidence
+                </span>
+              )}
+            </span>
+            {!readOnly && onSave && (
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={onSave}
+                disabled={saving || !hasChanges}
+              >
+                <Save className="h-3 w-3" />
+                Save
+              </Button>
+            )}
+          </div>
+          {autosaveStatus === "saved" && !hasChanges && (
+            <p className="text-xs text-emerald-600">Transcript saved</p>
+          )}
+        </div>
+      )}
+
       <div className="min-h-0 flex-1 overflow-y-auto">
         {loadError && !pipelineMessage ? (
           <CenterMessage
@@ -62,32 +150,99 @@ export function TranscriptPanel({
                 <DeleteButton onDelete={onDelete} deleting={deleting} />
               </div>
             )}
-            {segments.map((segment) => (
-              <div key={segment.id} className="py-3">
-                <p className="mb-1 text-xs font-medium text-slate-500">
-                  {segment.speaker_label ?? segment.speaker ?? "Speaker"}
-                  <span className="ml-2 font-mono text-slate-400">
-                    {formatTimestamp(segment.start_seconds)}
-                  </span>
-                </p>
-                {disabled ? (
-                  <p className="text-sm leading-relaxed text-slate-800 whitespace-pre-wrap">{segment.text}</p>
-                ) : (
-                  <Textarea
-                    value={segment.text ?? ""}
-                    onChange={(e) => onChange(segment.id, { text: e.target.value })}
-                    rows={Math.min(5, Math.max(2, Math.ceil((segment.text?.length ?? 0) / 80)))}
-                    className={cn(
-                      "min-h-0 resize-none border-slate-200 text-sm",
-                      dirty[segment.id] && "border-indigo-300",
-                    )}
-                  />
-                )}
-              </div>
-            ))}
+            {filteredSegments.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">No matches for &ldquo;{query}&rdquo;</p>
+            ) : (
+              filteredSegments.map((segment) => (
+                <TranscriptSegmentRow
+                  key={segment.id}
+                  segment={segment}
+                  dirty={Boolean(dirty[segment.id])}
+                  disabled={disabled}
+                  active={activeSegmentId === segment.id}
+                  linkedSection={inferSoapSectionFromSegment(segment)}
+                  highlighted={highlightedSoapSection === inferSoapSectionFromSegment(segment)}
+                  onChange={onChange}
+                  onClick={() => onSegmentClick?.(segment)}
+                />
+              ))
+            )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function TranscriptSegmentRow({
+  segment,
+  dirty,
+  disabled,
+  active,
+  linkedSection,
+  highlighted,
+  onChange,
+  onClick,
+}) {
+  const lowConfidence = segment.is_low_confidence;
+
+  return (
+    <div
+      className={cn(
+        "py-3 transition-colors",
+        lowConfidence && "bg-amber-50/60",
+        active && "bg-indigo-50/50",
+        highlighted && "ring-1 ring-inset ring-indigo-200",
+      )}
+    >
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {disabled ? (
+          <span className="text-xs font-semibold text-slate-700">
+            {segment.speaker_label ?? segment.speaker ?? "Speaker"}
+          </span>
+        ) : (
+          <SpeakerSelect
+            speaker={segment.speaker}
+            speakerLabel={segment.speaker_label}
+            disabled={disabled}
+            onChange={(patch) => onChange(segment.id, patch)}
+          />
+        )}
+        <button
+          type="button"
+          onClick={onClick}
+          className="font-mono text-xs text-indigo-600 hover:underline"
+          title={`Jump to ${formatTimestamp(segment.start_seconds)} · highlights ${linkedSection}`}
+        >
+          {formatTimestamp(segment.start_seconds)}
+        </button>
+        {lowConfidence && (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-800">
+            <AlertTriangle className="h-3 w-3" />
+            Low confidence
+            {segment.confidence != null && ` ${Math.round(segment.confidence * 100)}%`}
+          </span>
+        )}
+        {dirty && <span className="text-[10px] font-medium text-indigo-600">Unsaved</span>}
+      </div>
+
+      {disabled ? (
+        <p className="cursor-pointer text-sm leading-relaxed text-slate-800 whitespace-pre-wrap" onClick={onClick}>
+          {segment.text}
+        </p>
+      ) : (
+        <Textarea
+          value={segment.text ?? ""}
+          onChange={(e) => onChange(segment.id, { text: e.target.value })}
+          onFocus={onClick}
+          rows={Math.min(5, Math.max(2, Math.ceil((segment.text?.length ?? 0) / 80)))}
+          className={cn(
+            "min-h-0 resize-none border-slate-200 text-sm",
+            dirty && "border-indigo-300",
+            lowConfidence && "border-amber-300",
+          )}
+        />
+      )}
     </div>
   );
 }

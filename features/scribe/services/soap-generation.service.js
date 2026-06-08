@@ -70,6 +70,7 @@ export class SOAPGenerationService {
     if (
       context.session.status !== SESSION_STATUS.REVIEW_COMPLETED &&
       context.session.status !== SESSION_STATUS.SOAP_REVIEW_REQUIRED &&
+      context.session.status !== SESSION_STATUS.SOAP_REVIEWING &&
       context.session.status !== SESSION_STATUS.SOAP_READY
     ) {
       throw new InvalidStateTransitionError(context.session.status, SESSION_STATUS.GENERATING_SOAP);
@@ -102,6 +103,14 @@ export class SOAPGenerationService {
     await this._transitionToGenerating(context.session, ctx);
 
     const startedAt = Date.now();
+    if (input.force) {
+      await this._audit.log({
+        action: AUDIT_ACTION.SOAP_REGENERATED,
+        sessionId,
+        ctx,
+        metadata: { transcriptVersionId: transcriptVersion.id },
+      });
+    }
     await this._audit.log({
       action: AUDIT_ACTION.SOAP_GENERATION_STARTED,
       sessionId,
@@ -109,6 +118,7 @@ export class SOAPGenerationService {
       metadata: {
         promptVersion: SOAP_GENERATION_CONFIG.PROMPT_VERSION,
         transcriptVersionId: transcriptVersion.id,
+        force: Boolean(input.force),
       },
     });
 

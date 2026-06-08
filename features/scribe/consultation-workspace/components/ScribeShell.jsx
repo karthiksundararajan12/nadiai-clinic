@@ -29,10 +29,10 @@ export function ScribeCard({ title, children, className }) {
 export function ScribeColumns({ recording, soap }) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-4 overflow-hidden p-4 lg:flex-row">
-      <ScribeCard title="Recording" className="min-h-[280px] lg:min-h-0">
+      <ScribeCard title="Transcript" className="min-h-[280px] lg:min-h-0 lg:flex-[1.2]">
         {recording}
       </ScribeCard>
-      <ScribeCard title="SOAP Note" className="min-h-[280px] lg:min-h-0 lg:max-w-[420px] lg:shrink-0">
+      <ScribeCard title="SOAP Note" className="min-h-[280px] lg:min-h-0 lg:flex-1 lg:max-w-none">
         {soap}
       </ScribeCard>
     </div>

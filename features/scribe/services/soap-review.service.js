@@ -14,6 +14,7 @@ import {
   ApproveSOAPNoteSchema,
   CompareSOAPVersionsSchema,
   RejectSOAPNoteSchema,
+  RestoreSOAPVersionSchema,
   SaveSOAPVersionSchema,
   UpdateSOAPSectionSchema,
 } from "../schemas.js";
@@ -207,6 +208,63 @@ export class SOAPReviewService {
   async getVersions(sessionId, ctx) {
     await this._assertAccessible(sessionId, ctx);
     return this._soap.getVersions(sessionId);
+  }
+
+  /** @param {string} sessionId @param {Record<string, unknown>} rawInput @param {import("../models/session.model.js").RequestContext} ctx */
+  async restoreVersion(sessionId, rawInput, ctx) {
+    const parsed = RestoreSOAPVersionSchema.safeParse(rawInput);
+    if (!parsed.success) throw new SessionValidationError(parsed.error);
+
+    const version = await this._soap.getVersion(parsed.data.version_id);
+    if (!version || version.session_id !== sessionId) {
+      throw new SessionValidationError("SOAP version not found for this session");
+    }
+    if (version.is_approved_version) {
+      throw new SessionValidationError("Approved snapshots cannot be restored");
+    }
+
+    const { session, note } = await this._assertReviewing(sessionId, ctx);
+    const restored = version.note ?? {};
+    const updated = await this._soap.updateNote(note.id, {
+      note: restored,
+      subjective: restored.subjective ?? "",
+      objective: restored.objective ?? "",
+      assessment: restored.assessment ?? "",
+      plan: restored.plan ?? "",
+      chief_complaint: restored.chiefComplaint ?? "",
+      history_of_present_illness: restored.historyOfPresentIllness ?? "",
+      clinical_summary: restored.clinicalSummary ?? "",
+      status: SOAP_NOTE_STATUS.REVIEWING,
+      modification_summary: summarizeDiff(note.original_note ?? note.note, restored),
+      reviewer_id: ctx.actorId,
+      reviewed_at: new Date().toISOString(),
+    });
+
+    await this._soap.insertEdit({
+      soap_note_id: note.id,
+      session_id: session.id,
+      clinic_id: ctx.clinicId,
+      doctor_id: ctx.doctorId,
+      actor_id: ctx.actorId,
+      section_key: null,
+      edit_type: "version_restored",
+      before_value: { version_number: note.version_number ?? null },
+      after_value: { version_id: version.id, version_number: version.version_number },
+      diff_metadata: { restoredFrom: version.version_number },
+    });
+
+    await this._audit.log({
+      action: AUDIT_ACTION.SOAP_VERSION_RESTORED,
+      sessionId,
+      ctx,
+      metadata: {
+        soapNoteId: note.id,
+        versionId: version.id,
+        versionNumber: version.version_number,
+      },
+    });
+
+    return { session, note: updated, version };
   }
 
   /** @param {string} sessionId @param {Record<string, unknown>} rawInput @param {import("../models/session.model.js").RequestContext} ctx */

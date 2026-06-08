@@ -43,6 +43,20 @@ export async function rejectSOAPNote(sessionId, reason) {
   });
 }
 
+export async function regenerateSOAPNote(sessionId) {
+  return requestJson(`/api/scribe/sessions/${sessionId}/soap/retry`, {
+    method: "POST",
+    body: { force: true },
+  });
+}
+
+export async function restoreSOAPVersion(sessionId, versionId) {
+  return requestJson(
+    `/api/scribe/sessions/${sessionId}/soap/review/versions/${versionId}/restore`,
+    { method: "POST" },
+  );
+}
+
 async function requestJson(url, options = {}) {
   const res = await fetch(url, {
     method: options.method ?? "GET",

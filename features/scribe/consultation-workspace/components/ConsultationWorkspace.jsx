@@ -11,7 +11,12 @@ import {
   SOAPEmptyPanel,
   SOAP_AVAILABLE_STATUSES,
 } from "./SOAPPanel.jsx";
+import { ConsultationTimeline } from "./ConsultationTimeline.jsx";
 import { isPoorTranscription } from "../lib/transcription-quality.js";
+import { inferSoapSectionFromSegment } from "../lib/transcript-soap-link.js";
+import { exportSoapAsPdf } from "../services/scribe-export.client.js";
+import { useSessionStatus } from "../hooks/use-session-status.js";
+import { useUnsavedGuard } from "../hooks/use-unsaved-guard.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -26,7 +31,9 @@ export function ConsultationWorkspace({
   pipelineMessage = null,
   autoGenerateNote = true,
 }) {
-  const transcript = useTranscriptReview(sessionId, { enabled: !pipelineBusy });
+  const statusPoll = useSessionStatus(sessionId, { enabled: pipelineBusy });
+  const transcriptReady = !pipelineBusy || statusPoll.isTranscribed;
+  const transcript = useTranscriptReview(sessionId, { enabled: transcriptReady });
   const sessionStatus = transcript.session?.status ?? "";
   const hasSoap = SOAP_AVAILABLE_STATUSES.has(sessionStatus);
   const soap = useSOAPReview(sessionId, { enabled: hasSoap && !transcript.loading && !pipelineBusy });
@@ -39,10 +46,17 @@ export function ConsultationWorkspace({
     sessionStatus === "READY_FOR_PRESCRIPTION";
 
   const canApproveSOAP = !soapApproved && sessionStatus === "SOAP_REVIEWING";
+  const canRegenerateSOAP = !soapApproved && !readOnly && hasSoap;
+  const canExportSOAP = hasSoap && !soap.loading;
   const generatingSOAP =
-    transcript.generatingSOAP || sessionStatus === "GENERATING_SOAP";
+    transcript.generatingSOAP || soap.regenerating || sessionStatus === "GENERATING_SOAP";
 
   const [autoPipelineRunning, setAutoPipelineRunning] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [activeSegmentId, setActiveSegmentId] = useState(null);
+  const [activeSoapSection, setActiveSoapSection] = useState(null);
+  const [highlightedSoapSection, setHighlightedSoapSection] = useState(null);
+  const audioSeekRef = useRef(null);
   const autoPipelineAttemptedRef = useRef(false);
 
   const poorTranscription = useMemo(
@@ -64,11 +78,62 @@ export function ConsultationWorkspace({
   );
 
   const showDelete = Boolean(onDelete) && !readOnly && poorTranscription;
+  const hasUnsavedChanges = transcript.hasChanges || soap.hasChanges;
+
+  useUnsavedGuard(hasUnsavedChanges && !readOnly);
+
+  const handleSegmentClick = useCallback((segment) => {
+    const section = inferSoapSectionFromSegment(segment);
+    setActiveSegmentId(segment.id);
+    setActiveSoapSection(section);
+    setHighlightedSoapSection(section);
+    audioSeekRef.current?.(segment.start_seconds ?? 0);
+    document.getElementById(`soap-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, []);
+
+  const handleAudioTimeUpdate = useCallback((seconds) => {
+    const match = transcript.segments.find(
+      (s) => seconds >= (s.start_seconds ?? 0) && seconds < (s.end_seconds ?? Number.MAX_VALUE),
+    );
+    if (match) setActiveSegmentId(match.id);
+  }, [transcript.segments]);
 
   const handleApproveSOAP = useCallback(async () => {
     await soap.approve();
     onApproved?.();
   }, [onApproved, soap]);
+
+  const handleSaveSOAP = useCallback(async () => {
+    await soap.manualSave();
+  }, [soap]);
+
+  const handleSaveTranscript = useCallback(async () => {
+    await transcript.manualSave();
+  }, [transcript]);
+
+  const handleRejectSOAP = useCallback(async (reason) => {
+    await soap.reject(reason);
+    await transcript.load();
+  }, [soap, transcript]);
+
+  const handleRegenerateSOAP = useCallback(async () => {
+    await soap.regenerate();
+    await transcript.load();
+  }, [soap, transcript]);
+
+  const handleRestoreVersion = useCallback(async (versionId) => {
+    if (!window.confirm("Restore this SOAP version? Current edits will be replaced.")) return;
+    await soap.restoreVersion(versionId);
+  }, [soap]);
+
+  const handleExportSOAP = useCallback(async () => {
+    setExporting(true);
+    try {
+      await exportSoapAsPdf(sessionId);
+    } finally {
+      setExporting(false);
+    }
+  }, [sessionId]);
 
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
@@ -96,6 +161,7 @@ export function ConsultationWorkspace({
           await transcript.load();
         }
         await transcript.generateSOAP();
+        await soap.load();
       } catch {
         autoPipelineAttemptedRef.current = false;
       } finally {
@@ -112,18 +178,30 @@ export function ConsultationWorkspace({
     transcript.completeReview,
     transcript.generateSOAP,
     transcript.load,
+    soap.load,
     autoPipelineRunning,
     generatingSOAP,
     poorTranscription,
   ]);
 
-  const transcriptPipelineMessage = pipelineBusy
-    ? pipelineMessage
+  const transcriptPipelineMessage = pipelineBusy && !statusPoll.isTranscribed
+    ? pipelineMessage ?? "Transcribing…"
     : transcript.loading && !transcript.segments.length
       ? "Loading transcript…"
       : null;
 
   const noteGenerating = pipelineBusy || autoPipelineRunning || generatingSOAP;
+
+  const saveStatus = transcript.saving || soap.saving
+    ? "saving"
+    : transcript.autosaveStatus === "error" || soap.autosaveStatus === "error"
+      ? "error"
+      : !transcript.hasChanges && !soap.hasChanges &&
+          (soap.autosaveStatus === "saved" || transcript.autosaveStatus === "saved")
+        ? "saved"
+        : hasUnsavedChanges
+          ? "saving"
+          : null;
 
   const soapReady = hasSoap && !soap.loading && !soap.error;
   const soapPanel = soapReady ? (
@@ -133,12 +211,24 @@ export function ConsultationWorkspace({
       readOnly={soapApproved}
       saving={soap.saving}
       error={soap.error}
+      versions={soap.versions}
       onChange={soap.updateSection}
       onRetry={soap.load}
+      onSave={handleSaveSOAP}
       onApprove={handleApproveSOAP}
+      onReject={handleRejectSOAP}
+      onRegenerate={handleRegenerateSOAP}
+      onRestoreVersion={handleRestoreVersion}
+      onExport={handleExportSOAP}
       canApprove={canApproveSOAP}
+      canExport={canExportSOAP}
+      canRegenerate={canRegenerateSOAP}
       generating={noteGenerating}
-      hasChanges={soap.hasChanges || transcript.hasChanges}
+      regenerating={soap.regenerating}
+      exporting={exporting}
+      autosaveStatus={soap.autosaveStatus}
+      activeSection={activeSoapSection}
+      onSectionFocus={setActiveSoapSection}
     />
   ) : (
     <SOAPEmptyPanel
@@ -152,24 +242,37 @@ export function ConsultationWorkspace({
     <div className="h-full min-h-0" data-testid="consultation-workspace">
       <ScribeShell
         header={
-          <ScribeSessionHeader
-            toolbarLeft={toolbarLeft}
-            onEndSession={onEndSession}
-            onOpenSessions={onOpenSessions}
-            onDelete={showDelete ? onDelete : undefined}
-            deleting={deleting}
-          />
+          <>
+            <ScribeSessionHeader
+              toolbarLeft={toolbarLeft}
+              onEndSession={onEndSession}
+              onOpenSessions={onOpenSessions}
+              onDelete={showDelete ? onDelete : undefined}
+              deleting={deleting}
+              pipelineLabel={pipelineBusy ? pipelineMessage : null}
+              saveStatus={!pipelineBusy ? saveStatus : null}
+              hasUnsavedChanges={hasUnsavedChanges && !readOnly}
+            />
+            <ConsultationTimeline
+              status={sessionStatus}
+              processing={pipelineBusy || noteGenerating}
+            />
+          </>
         }
       >
         <ScribeColumns
           recording={
             <TranscriptPanel
+              sessionId={sessionId}
               segments={transcript.segments}
               dirty={transcript.dirty}
               readOnly={readOnly}
               saving={transcript.saving}
+              hasChanges={transcript.hasChanges}
+              autosaveStatus={transcript.autosaveStatus}
               sessionStatus={sessionStatus}
               onChange={transcript.updateSegment}
+              onSave={handleSaveTranscript}
               mode="review"
               pipelineMessage={transcriptPipelineMessage}
               loadError={transcript.error}
@@ -177,6 +280,11 @@ export function ConsultationWorkspace({
               poorTranscription={showDelete}
               onDelete={showDelete ? onDelete : undefined}
               deleting={deleting}
+              activeSegmentId={activeSegmentId}
+              onSegmentClick={handleSegmentClick}
+              onAudioTimeUpdate={handleAudioTimeUpdate}
+              onSeekReady={(fn) => { audioSeekRef.current = fn; }}
+              highlightedSoapSection={highlightedSoapSection}
             />
           }
           soap={soapPanel}

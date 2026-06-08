@@ -8,6 +8,8 @@ import {
   fetchSOAPReviewWorkspace,
   fetchSOAPVersions,
   rejectSOAPNote,
+  regenerateSOAPNote,
+  restoreSOAPVersion,
   saveSOAPVersion,
   updateSOAPSection,
 } from "../services/soap-review.client.js";
@@ -101,6 +103,7 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
   const [state, dispatch] = useReducer(reducer, initialState);
   const [loading, setLoading] = useState(enabled && Boolean(sessionId));
   const [saving, setSaving] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [error, setError] = useState(null);
   const loadRequestRef = useRef(0);
   const dirtyRef = useRef({});
@@ -204,6 +207,38 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     return comparison;
   }, [sessionId]);
 
+  const regenerate = useCallback(async () => {
+    if (dirtyKeys.length > 0) {
+      await saveSections(dirtyKeys, "manual");
+    }
+    setRegenerating(true);
+    setError(null);
+    try {
+      const result = await regenerateSOAPNote(sessionId);
+      await load();
+      return result;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setRegenerating(false);
+    }
+  }, [dirtyKeys, load, saveSections, sessionId]);
+
+  const restoreVersion = useCallback(async (versionId) => {
+    setSaving(true);
+    try {
+      const result = await restoreSOAPVersion(sessionId, versionId);
+      await load();
+      return result;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }, [load, sessionId]);
+
   useSOAPRealtime(sessionId, useCallback(() => {
     if (!dirtyKeys.length) load();
   }, [dirtyKeys.length, load]));
@@ -237,6 +272,7 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     ...state,
     loading,
     saving,
+    regenerating,
     error,
     readOnly,
     autosaveStatus,
@@ -248,6 +284,8 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     manualSave,
     approve,
     reject,
+    regenerate,
+    restoreVersion,
     compare,
     undo: () => dispatch({ type: "UNDO" }),
     redo: () => dispatch({ type: "REDO" }),

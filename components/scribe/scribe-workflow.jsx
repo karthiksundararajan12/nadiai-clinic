@@ -10,19 +10,91 @@ import {
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
 import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
+import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
+const TRANSCRIBE_POLL_MS = 1500;
 
-async function fetchTranscriptionRun(sessionId, signal) {
-  const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
+const TRANSCRIBED_STATUSES = new Set([
+  "TRANSCRIBED",
+  "REVIEWING",
+  "REVIEW_COMPLETED",
+  "GENERATING_SOAP",
+  "SOAP_READY",
+  "SOAP_REVIEW_REQUIRED",
+  "SOAP_REVIEWING",
+]);
+
+const TRANSCRIPTION_FAILED_STATUSES = new Set(["TRANSCRIPTION_FAILED", "FAILED"]);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function queueTranscription(sessionId, signal) {
+  const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/queue`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
     signal,
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error || `Transcription failed (${res.status})`);
+  if (!res.ok && res.status !== 202) {
+    throw new Error(payload?.error || `Transcription queue failed (${res.status})`);
+  }
   return payload;
+}
+
+async function pollUntilTranscribed(sessionId, signal) {
+  const deadline = Date.now() + TRANSCRIBE_TIMEOUT_MS;
+
+  while (Date.now() < deadline) {
+    if (signal.aborted) {
+      const err = new Error("Transcription aborted");
+      err.name = "AbortError";
+      throw err;
+    }
+
+    const res = await fetch(`/api/scribe/sessions/${sessionId}`, { signal });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload?.error || `Session poll failed (${res.status})`);
+
+    const status = payload?.session?.status ?? payload?.status;
+    if (TRANSCRIBED_STATUSES.has(status)) return payload;
+    if (TRANSCRIPTION_FAILED_STATUSES.has(status)) {
+      throw new Error(payload?.error || "Transcription failed");
+    }
+
+    await sleep(TRANSCRIBE_POLL_MS);
+  }
+
+  const err = new Error("Transcription timed out.");
+  err.name = "AbortError";
+  throw err;
+}
+
+async function runTranscriptionPipeline(sessionId, signal) {
+  let queued = false;
+  try {
+    await queueTranscription(sessionId, signal);
+    queued = true;
+  } catch {
+    const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+      signal,
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(payload?.error || `Transcription failed (${res.status})`);
+    return payload;
+  }
+
+  if (queued) {
+    return pollUntilTranscribed(sessionId, signal);
+  }
+
+  throw new Error("Transcription could not be started");
 }
 
 async function fetchConsultations(bucket) {
@@ -93,9 +165,10 @@ export function ScribeWorkflow() {
     const timeout = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
 
     try {
-      const payload = await fetchTranscriptionRun(sessionId, controller.signal);
+      const payload = await runTranscriptionPipeline(sessionId, controller.signal);
       await loadConsultations(true);
-      if (payload?.session?.status === "TRANSCRIBED") {
+      const status = payload?.session?.status ?? payload?.status;
+      if (TRANSCRIBED_STATUSES.has(status)) {
         setViewFromHistory(false);
         setActiveSessionId(sessionId);
         setView("consultation");
@@ -148,14 +221,24 @@ export function ScribeWorkflow() {
       setActiveSessionId(sessionId);
       setViewFromHistory(false);
       setView("consultation");
-      setPipelineMessage("Transcribing conversation…");
-      await runTranscription(sessionId);
+      setPipelineMessage("Transcribing…");
+
+      void logSessionEvent(sessionId, "recording_started", {}).catch(() => {});
+      void logSessionEvent(sessionId, "recording_stopped", {
+        duration_seconds: audioDurationSeconds,
+      }).catch(() => {});
+
+      void runTranscription(sessionId).finally(() => {
+        if (mountedRef.current) {
+          setPipelineBusy(false);
+          setPipelineMessage(null);
+        }
+      });
     } catch (err) {
       const wrapped = err instanceof Error ? err : new Error(String(err));
       if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
       setUploadError(wrapped);
       setView("live");
-    } finally {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }

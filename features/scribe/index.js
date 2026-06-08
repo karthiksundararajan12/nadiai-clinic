@@ -151,6 +151,8 @@ export {
 export { PrescriptionRepository }      from "./repository/prescription.repository.js";
 export { PrescriptionService }         from "./services/prescription.service.js";
 export { PrescriptionReviewService }   from "./services/prescription-review.service.js";
+export { SOAPExportService }           from "./services/soap-export.service.js";
+export { AudioPlaybackService }        from "./services/audio-playback.service.js";
 
 // ─────────────────────────────────────────────────────────────
 // FACTORY
@@ -173,6 +175,8 @@ import { PrescriptionRepository as _PrescRepo }     from "./repository/prescript
 import { PrescriptionService as _PrescService }       from "./services/prescription.service.js";
 import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescription-review.service.js";
 import { ConsultationHistoryService as _HistorySvc } from "./services/consultation-history.service.js";
+import { SOAPExportService as _ExportSvc } from "./services/soap-export.service.js";
+import { AudioPlaybackService as _AudioSvc } from "./services/audio-playback.service.js";
 
 /**
  * Wires together all scribe domain services with a Supabase client.
@@ -204,6 +208,8 @@ export function createScribeServices(supabaseClient) {
   const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
   const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
   const consultationHistorySvc = new _HistorySvc(sessionRepo, soapRepo, prescriptionRepo, auditSvc);
+  const soapExportSvc = new _ExportSvc(sessionRepo, soapRepo, auditSvc);
+  const audioPlaybackSvc = new _AudioSvc(sessionRepo, supabase);
   return {
     sessionService:              sessionSvc,
     auditService:                auditSvc,
@@ -215,5 +221,7 @@ export function createScribeServices(supabaseClient) {
     prescriptionService:         prescriptionSvc,
     prescriptionReviewService:   prescriptionReviewSvc,
     consultationHistoryService:  consultationHistorySvc,
+    soapExportService:           soapExportSvc,
+    audioPlaybackService:        audioPlaybackSvc,
   };
 }

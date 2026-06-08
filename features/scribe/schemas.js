@@ -411,6 +411,12 @@ export const RejectSOAPNoteSchema = z.object({
 
 /** @typedef {z.infer<typeof RejectSOAPNoteSchema>} RejectSOAPNoteInput */
 
+export const RestoreSOAPVersionSchema = z.object({
+  version_id: uuid,
+});
+
+/** @typedef {z.infer<typeof RestoreSOAPVersionSchema>} RestoreSOAPVersionInput */
+
 // ─────────────────────────────────────────────────────────────
 // PRESCRIPTION DRAFT GENERATION
 // ─────────────────────────────────────────────────────────────

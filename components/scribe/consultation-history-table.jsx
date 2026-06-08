@@ -20,6 +20,7 @@ import {
  *   onViewVersions?: (id: string) => void;
  *   onViewAudit?: (id: string) => void;
  *   onViewPrescription?: (id: string) => void;
+ *   onExportPdf?: (id: string) => void;
  * }} props
  */
 export function ConsultationHistoryTable({
@@ -30,6 +31,7 @@ export function ConsultationHistoryTable({
   onViewVersions,
   onViewAudit,
   onViewPrescription,
+  onExportPdf,
 }) {
   if (!consultations?.length) {
     return (
@@ -66,6 +68,7 @@ export function ConsultationHistoryTable({
               onViewVersions={onViewVersions}
               onViewAudit={onViewAudit}
               onViewPrescription={onViewPrescription}
+              onExportPdf={onExportPdf}
             />
           ))}
         </tbody>
@@ -82,6 +85,7 @@ function ConsultationHistoryRow({
   onViewVersions,
   onViewAudit,
   onViewPrescription,
+  onExportPdf,
 }) {
   const date = new Date(row.created_at).toLocaleString(undefined, {
     month: "short",
@@ -153,7 +157,14 @@ function ConsultationHistoryRow({
               onClick={() => onViewPrescription?.(row.id)}
             />
           )}
-          <ActionButton icon={ScrollText} label="PDF" disabled title="Coming soon" />
+          {canSoap && (
+            <ActionButton
+              icon={ScrollText}
+              label="PDF"
+              disabled={busy}
+              onClick={() => onExportPdf?.(row.id)}
+            />
+          )}
         </div>
       </td>
     </tr>

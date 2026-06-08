@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ArrowLeft, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { exportSoapAsPdf } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 
 export default function ConsultationHistoryPage() {
   const [consultations, setConsultations] = useState([]);
@@ -66,7 +67,7 @@ export default function ConsultationHistoryPage() {
           <ConsultationWorkspace
             key={activeId}
             sessionId={activeId}
-            showToolbar={false}
+            readOnly
             onEndSession={goList}
           />
         </div>
@@ -142,6 +143,7 @@ export default function ConsultationHistoryPage() {
                 onViewVersions={(id) => { setActiveId(id); setView("consultation"); }}
                 onViewAudit={openAudit}
                 onViewPrescription={(id) => { setActiveId(id); setView("rx"); }}
+                onExportPdf={(id) => exportSoapAsPdf(id).catch((err) => setError(err))}
               />
             )}
           </CardContent>

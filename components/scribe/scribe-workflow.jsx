@@ -13,7 +13,6 @@ import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
-const TRANSCRIBE_POLL_MS = 1500;
 
 const TRANSCRIBED_STATUSES = new Set([
   "TRANSCRIBED",
@@ -25,76 +24,22 @@ const TRANSCRIBED_STATUSES = new Set([
   "SOAP_REVIEWING",
 ]);
 
-const TRANSCRIPTION_FAILED_STATUSES = new Set(["TRANSCRIPTION_FAILED", "FAILED"]);
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function queueTranscription(sessionId, signal) {
-  const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/queue`, {
+/**
+ * Runs transcription inline via the doctor UI endpoint (no background worker required).
+ * The queue-only path left sessions stuck at TRANSCRIPTION_QUEUED in local/dev.
+ */
+async function runTranscriptionPipeline(sessionId, signal) {
+  const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
     signal,
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok && res.status !== 202) {
-    throw new Error(payload?.error || `Transcription queue failed (${res.status})`);
+  if (!res.ok) {
+    throw new Error(payload?.error || `Transcription failed (${res.status})`);
   }
   return payload;
-}
-
-async function pollUntilTranscribed(sessionId, signal) {
-  const deadline = Date.now() + TRANSCRIBE_TIMEOUT_MS;
-
-  while (Date.now() < deadline) {
-    if (signal.aborted) {
-      const err = new Error("Transcription aborted");
-      err.name = "AbortError";
-      throw err;
-    }
-
-    const res = await fetch(`/api/scribe/sessions/${sessionId}`, { signal });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(payload?.error || `Session poll failed (${res.status})`);
-
-    const status = payload?.session?.status ?? payload?.status;
-    if (TRANSCRIBED_STATUSES.has(status)) return payload;
-    if (TRANSCRIPTION_FAILED_STATUSES.has(status)) {
-      throw new Error(payload?.error || "Transcription failed");
-    }
-
-    await sleep(TRANSCRIBE_POLL_MS);
-  }
-
-  const err = new Error("Transcription timed out.");
-  err.name = "AbortError";
-  throw err;
-}
-
-async function runTranscriptionPipeline(sessionId, signal) {
-  let queued = false;
-  try {
-    await queueTranscription(sessionId, signal);
-    queued = true;
-  } catch {
-    const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({}),
-      signal,
-    });
-    const payload = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(payload?.error || `Transcription failed (${res.status})`);
-    return payload;
-  }
-
-  if (queued) {
-    return pollUntilTranscribed(sessionId, signal);
-  }
-
-  throw new Error("Transcription could not be started");
 }
 
 async function fetchConsultations(bucket) {
@@ -160,6 +105,8 @@ export function ScribeWorkflow() {
   }, [loadConsultations]);
 
   const runTranscription = useCallback(async (sessionId) => {
+    setPipelineBusy(true);
+    setPipelineMessage("Transcribing…");
     setBusySessionId(sessionId);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), TRANSCRIBE_TIMEOUT_MS);
@@ -186,6 +133,10 @@ export function ScribeWorkflow() {
     } finally {
       clearTimeout(timeout);
       setBusySessionId(null);
+      if (mountedRef.current) {
+        setPipelineBusy(false);
+        setPipelineMessage(null);
+      }
     }
   }, [loadConsultations]);
 
@@ -228,12 +179,7 @@ export function ScribeWorkflow() {
         duration_seconds: audioDurationSeconds,
       }).catch(() => {});
 
-      void runTranscription(sessionId).finally(() => {
-        if (mountedRef.current) {
-          setPipelineBusy(false);
-          setPipelineMessage(null);
-        }
-      });
+      void runTranscription(sessionId);
     } catch (err) {
       const wrapped = err instanceof Error ? err : new Error(String(err));
       if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
@@ -298,6 +244,11 @@ export function ScribeWorkflow() {
           readOnly={viewFromHistory}
           pipelineBusy={pipelineBusy}
           pipelineMessage={pipelineMessage}
+          onTranscriptionComplete={() => {
+            setPipelineBusy(false);
+            setPipelineMessage(null);
+          }}
+          onStartTranscription={runTranscription}
           autoGenerateNote={!viewFromHistory}
           onDelete={() => deleteSession(activeSessionId)}
           deleting={busySessionId === activeSessionId}

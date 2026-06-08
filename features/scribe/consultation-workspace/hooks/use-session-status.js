@@ -4,7 +4,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSessionStatus } from "../services/scribe-export.client.js";
 
 const TERMINAL_FAILURE = new Set(["TRANSCRIPTION_FAILED", "FAILED"]);
-const TRANSCRIBED = new Set(["TRANSCRIBED", "REVIEWING", "REVIEW_COMPLETED"]);
+const TRANSCRIBED = new Set([
+  "TRANSCRIBED",
+  "REVIEWING",
+  "REVIEW_COMPLETED",
+  "GENERATING_SOAP",
+  "SOAP_READY",
+  "SOAP_REVIEW_REQUIRED",
+  "SOAP_REVIEWING",
+]);
 
 /**
  * Polls session status while background processing runs.

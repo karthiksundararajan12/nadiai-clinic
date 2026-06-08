@@ -17,6 +17,10 @@ import { inferSoapSectionFromSegment } from "../lib/transcript-soap-link.js";
 import { exportSoapAsPdf } from "../services/scribe-export.client.js";
 import { useSessionStatus } from "../hooks/use-session-status.js";
 import { useUnsavedGuard } from "../hooks/use-unsaved-guard.js";
+import {
+  isTranscriptWorkspaceAvailable,
+  isTranscriptionPending,
+} from "../lib/transcript-availability.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -29,27 +33,37 @@ export function ConsultationWorkspace({
   readOnly: readOnlyProp,
   pipelineBusy = false,
   pipelineMessage = null,
+  onTranscriptionComplete,
+  onStartTranscription,
   autoGenerateNote = true,
 }) {
-  const statusPoll = useSessionStatus(sessionId, { enabled: pipelineBusy });
-  const transcriptReady = !pipelineBusy || statusPoll.isTranscribed;
-  const transcript = useTranscriptReview(sessionId, { enabled: transcriptReady });
-  const sessionStatus = transcript.session?.status ?? "";
-  const hasSoap = SOAP_AVAILABLE_STATUSES.has(sessionStatus);
-  const soap = useSOAPReview(sessionId, { enabled: hasSoap && !transcript.loading && !pipelineBusy });
+  const statusPoll = useSessionStatus(sessionId, { enabled: Boolean(sessionId), intervalMs: 1500 });
+
+  const polledStatus = statusPoll.session?.status ?? "";
+  const transcript = useTranscriptReview(sessionId, {
+    enabled: isTranscriptWorkspaceAvailable(polledStatus),
+  });
+  const resolvedSessionStatus = polledStatus || transcript.session?.status || "";
+  const transcriptionPending = isTranscriptionPending(resolvedSessionStatus);
+  const waitingForTranscript = pipelineBusy || transcriptionPending;
+
+  const hasSoap = SOAP_AVAILABLE_STATUSES.has(resolvedSessionStatus);
+  const soap = useSOAPReview(sessionId, {
+    enabled: hasSoap && !transcript.loading && !waitingForTranscript,
+  });
 
   const readOnly = readOnlyProp ?? transcript.readOnly;
   const soapApproved =
     soap.readOnly ||
-    sessionStatus === "SOAP_APPROVED" ||
-    sessionStatus === "COMPLETED" ||
-    sessionStatus === "READY_FOR_PRESCRIPTION";
+    resolvedSessionStatus === "SOAP_APPROVED" ||
+    resolvedSessionStatus === "COMPLETED" ||
+    resolvedSessionStatus === "READY_FOR_PRESCRIPTION";
 
-  const canApproveSOAP = !soapApproved && sessionStatus === "SOAP_REVIEWING";
+  const canApproveSOAP = !soapApproved && resolvedSessionStatus === "SOAP_REVIEWING";
   const canRegenerateSOAP = !soapApproved && !readOnly && hasSoap;
   const canExportSOAP = hasSoap && !soap.loading;
   const generatingSOAP =
-    transcript.generatingSOAP || soap.regenerating || sessionStatus === "GENERATING_SOAP";
+    transcript.generatingSOAP || soap.regenerating || resolvedSessionStatus === "GENERATING_SOAP";
 
   const [autoPipelineRunning, setAutoPipelineRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -58,21 +72,24 @@ export function ConsultationWorkspace({
   const [highlightedSoapSection, setHighlightedSoapSection] = useState(null);
   const audioSeekRef = useRef(null);
   const autoPipelineAttemptedRef = useRef(false);
+  const autoTranscribeAttemptedRef = useRef(false);
 
   const poorTranscription = useMemo(
-    () =>
-      isPoorTranscription({
-        sessionStatus,
+    () => {
+      if (waitingForTranscript) return false;
+      return isPoorTranscription({
+        sessionStatus: resolvedSessionStatus,
         segments: transcript.segments,
         loadError: transcript.error,
-        pipelineBusy,
+        pipelineBusy: waitingForTranscript,
         loading: transcript.loading,
-      }),
+      });
+    },
     [
-      sessionStatus,
+      resolvedSessionStatus,
       transcript.segments,
       transcript.error,
-      pipelineBusy,
+      waitingForTranscript,
       transcript.loading,
     ],
   );
@@ -81,6 +98,26 @@ export function ConsultationWorkspace({
   const hasUnsavedChanges = transcript.hasChanges || soap.hasChanges;
 
   useUnsavedGuard(hasUnsavedChanges && !readOnly);
+
+  useEffect(() => {
+    autoTranscribeAttemptedRef.current = false;
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (readOnly || !onStartTranscription || !transcriptionPending || pipelineBusy) return;
+    if (autoTranscribeAttemptedRef.current) return;
+    autoTranscribeAttemptedRef.current = true;
+    onStartTranscription(sessionId);
+  }, [sessionId, transcriptionPending, readOnly, onStartTranscription, pipelineBusy]);
+
+  useEffect(() => {
+    if (!pipelineBusy) return;
+    if (statusPoll.isTranscribed && isTranscriptWorkspaceAvailable(polledStatus)) {
+      onTranscriptionComplete?.();
+    } else if (statusPoll.isFailed) {
+      onTranscriptionComplete?.();
+    }
+  }, [pipelineBusy, statusPoll.isTranscribed, statusPoll.isFailed, polledStatus, onTranscriptionComplete]);
 
   const handleSegmentClick = useCallback((segment) => {
     const section = inferSoapSectionFromSegment(segment);
@@ -141,13 +178,13 @@ export function ConsultationWorkspace({
   }, [sessionId]);
 
   useEffect(() => {
-    if (!autoGenerateNote || readOnly || pipelineBusy || transcript.loading || poorTranscription) return;
+    if (!autoGenerateNote || readOnly || waitingForTranscript || transcript.loading || poorTranscription) return;
     if (autoPipelineAttemptedRef.current || autoPipelineRunning || generatingSOAP) return;
 
     const shouldCompleteAndGenerate =
-      sessionStatus === "REVIEWING" && transcript.segments.length > 0;
+      resolvedSessionStatus === "REVIEWING" && transcript.segments.length > 0;
     const shouldGenerateOnly =
-      ["REVIEW_COMPLETED", "SOAP_READY", "SOAP_REVIEW_REQUIRED"].includes(sessionStatus);
+      ["REVIEW_COMPLETED", "SOAP_READY", "SOAP_REVIEW_REQUIRED"].includes(resolvedSessionStatus);
 
     if (!shouldCompleteAndGenerate && !shouldGenerateOnly) return;
 
@@ -171,8 +208,8 @@ export function ConsultationWorkspace({
   }, [
     autoGenerateNote,
     readOnly,
-    pipelineBusy,
-    sessionStatus,
+    waitingForTranscript,
+    resolvedSessionStatus,
     transcript.loading,
     transcript.segments.length,
     transcript.completeReview,
@@ -184,13 +221,24 @@ export function ConsultationWorkspace({
     poorTranscription,
   ]);
 
-  const transcriptPipelineMessage = pipelineBusy && !statusPoll.isTranscribed
-    ? pipelineMessage ?? "Transcribing…"
-    : transcript.loading && !transcript.segments.length
-      ? "Loading transcript…"
-      : null;
+  const awaitingStatus = Boolean(sessionId) && !polledStatus && !transcript.session;
+  const transcriptPipelineMessage = statusPoll.isFailed
+    ? "Transcription failed. Tap Sessions → Transcribe to retry."
+    : awaitingStatus
+      ? "Loading session…"
+      : waitingForTranscript
+      ? resolvedSessionStatus === "TRANSCRIBING"
+        ? "Transcribing audio…"
+        : resolvedSessionStatus === "TRANSCRIPTION_QUEUED"
+          ? "Starting transcription…"
+          : pipelineMessage ?? "Transcribing…"
+      : transcript.loading && !transcript.segments.length
+        ? "Loading transcript…"
+        : null;
 
-  const noteGenerating = pipelineBusy || autoPipelineRunning || generatingSOAP;
+  const transcriptLoadError = waitingForTranscript ? null : transcript.error;
+
+  const noteGenerating = waitingForTranscript || autoPipelineRunning || generatingSOAP;
 
   const saveStatus = transcript.saving || soap.saving
     ? "saving"
@@ -249,13 +297,13 @@ export function ConsultationWorkspace({
               onOpenSessions={onOpenSessions}
               onDelete={showDelete ? onDelete : undefined}
               deleting={deleting}
-              pipelineLabel={pipelineBusy ? pipelineMessage : null}
-              saveStatus={!pipelineBusy ? saveStatus : null}
+              pipelineLabel={waitingForTranscript ? (pipelineMessage ?? "Transcribing…") : null}
+              saveStatus={!waitingForTranscript ? saveStatus : null}
               hasUnsavedChanges={hasUnsavedChanges && !readOnly}
             />
             <ConsultationTimeline
-              status={sessionStatus}
-              processing={pipelineBusy || noteGenerating}
+              status={resolvedSessionStatus}
+              processing={waitingForTranscript || noteGenerating}
             />
           </>
         }
@@ -270,12 +318,12 @@ export function ConsultationWorkspace({
               saving={transcript.saving}
               hasChanges={transcript.hasChanges}
               autosaveStatus={transcript.autosaveStatus}
-              sessionStatus={sessionStatus}
+              sessionStatus={resolvedSessionStatus}
               onChange={transcript.updateSegment}
               onSave={handleSaveTranscript}
               mode="review"
               pipelineMessage={transcriptPipelineMessage}
-              loadError={transcript.error}
+              loadError={transcriptLoadError}
               onRetryLoad={transcript.load}
               poorTranscription={showDelete}
               onDelete={showDelete ? onDelete : undefined}

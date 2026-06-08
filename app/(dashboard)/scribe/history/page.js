@@ -62,14 +62,19 @@ export default function ConsultationHistoryPage() {
     return (
       <>
         <Header title="Consultation" subtitle="Conversation and SOAP note" />
-        <div className="flex-1 p-6 space-y-4">
-          <BackButton onClick={goList} />
-          <ConsultationWorkspace
-            key={activeId}
-            sessionId={activeId}
-            readOnly
-            onEndSession={goList}
-          />
+        <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden">
+          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-background px-6 py-3">
+            <BackButton onClick={goList} />
+          </div>
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <ConsultationWorkspace
+              key={activeId}
+              sessionId={activeId}
+              readOnly
+              autoGenerateNote={false}
+              onEndSession={goList}
+            />
+          </div>
         </div>
       </>
     );
@@ -134,7 +139,9 @@ export default function ConsultationHistoryPage() {
             {loading ? (
               <p className="text-sm text-muted-foreground">Loading history…</p>
             ) : error ? (
-              <p className="text-sm text-destructive">{error.message}</p>
+              <p className="text-sm text-destructive">
+                {error instanceof Error ? error.message : String(error)}
+              </p>
             ) : (
               <ConsultationHistoryTable
                 consultations={consultations}

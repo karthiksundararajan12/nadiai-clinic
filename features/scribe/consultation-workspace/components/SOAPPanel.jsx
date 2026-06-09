@@ -16,17 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { CORE_SOAP_SECTIONS, getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
+import { SOAP_AVAILABLE_STATUSES } from "../lib/soap-availability.js";
 import { SOAPVersionPanel } from "./SOAPVersionPanel.jsx";
+
+export { SOAP_AVAILABLE_STATUSES };
 
 const SECONDARY_SECTIONS = [
   ["chiefComplaint", "Chief Complaint"],
   ["historyOfPresentIllness", "History of Present Illness"],
   ["clinicalSummary", "Clinical Summary"],
 ];
-
-import { SOAP_AVAILABLE_STATUSES } from "../lib/soap-availability.js";
-
-export { SOAP_AVAILABLE_STATUSES };
 
 export function SOAPEmptyPanel({ generating, error, onRetry }) {
   return (

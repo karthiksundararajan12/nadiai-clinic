@@ -21,7 +21,7 @@ export function ProductivityInsightsCard({ metrics, className }) {
   return (
     <aside
       className={cn(
-        "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm",
+        "rounded-lg border border-gray-200 bg-white p-4 shadow-none",
         className,
       )}
     >

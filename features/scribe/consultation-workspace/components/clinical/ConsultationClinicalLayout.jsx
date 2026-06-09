@@ -1,232 +1,162 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PatientContextHeader } from "./PatientContextHeader.jsx";
-import { ClinicalTimeline } from "./ClinicalTimeline.jsx";
-import { ConsultationSummaryCard } from "./ConsultationSummaryCard.jsx";
-import { ChatTranscriptPanel } from "./ChatTranscriptPanel.jsx";
-import { ClinicalAudioPlayer } from "./ClinicalAudioPlayer.jsx";
-import { SOAPCardsPanel, SOAPEmptyState } from "./SOAPCardsPanel.jsx";
+import { useCallback } from "react";
+import { PatientSelector } from "../consultation/PatientSelector.jsx";
+import { PatientHistoryPanel } from "../consultation/PatientHistoryPanel.jsx";
+import { ConsultationSummary } from "../consultation/ConsultationSummary.jsx";
+import { CollapsibleTranscriptPanel } from "../consultation/TranscriptPanel.jsx";
+import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
 import { ProductivityInsightsCard } from "./ProductivityInsightsCard.jsx";
-import { ConsultationActionBar } from "./ConsultationActionBar.jsx";
+import { AISuggestions } from "../consultation/AISuggestions.jsx";
+import { PrescriptionPreview, ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
+import { ClinicalTimeline } from "./ClinicalTimeline.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
 import { AuditTrailDrawer } from "./AuditTrailDrawer.jsx";
 
 export function ConsultationClinicalLayout({
   sessionId,
   patient,
+  onPatientSelect,
+  onPatientClear,
   sessionDate,
   status,
   summary,
+  summaryHandlers,
   metrics,
   quality,
+  insights,
+  icdOverride,
+  onIcdOverride,
+  rpmEnabled,
+  onRpmToggle,
   evidenceMap,
-  transcriptProps,
+  transcriptSegments,
+  transcriptReadOnly,
+  transcriptSaving,
+  onTranscriptRegenerate,
+  transcriptRegenerating,
   soapProps,
-  actionBarProps,
+  readOnly,
+  toolbarLeft,
+  onOpenSessions,
   versions,
   onRestoreVersion,
   onCompareVersions,
-  soapCompare,
-  toolbarLeft,
-  onOpenSessions,
-  onEndSession,
-  onDelete,
-  deleting,
-  saveStatus,
-  hasUnsavedChanges,
-  pipelineLabel,
+  approveBanner,
+  onEvidenceJump: externalEvidenceJump,
+  versionsOpen,
+  onVersionsOpenChange,
+  auditOpen,
+  onAuditOpenChange,
 }) {
-  const [versionsOpen, setVersionsOpen] = useState(false);
-  const [auditOpen, setAuditOpen] = useState(false);
-  const [split, setSplit] = useState(58);
-  const dragging = useRef(false);
-  const transcriptScrollRef = useRef(null);
 
   const scrollToSegment = useCallback((segmentId) => {
-    const el = document.getElementById(`chat-segment-${segmentId}`);
-    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    document.getElementById(`chat-segment-${segmentId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, []);
 
   const handleEvidenceJump = useCallback((item) => {
     if (item?.id) scrollToSegment(item.id);
-    if (item?.start_seconds != null) {
-      transcriptProps.onPlayFromHere?.({ id: item.id, start_seconds: item.start_seconds });
-    }
-  }, [scrollToSegment, transcriptProps]);
+    externalEvidenceJump?.(item);
+  }, [scrollToSegment, externalEvidenceJump]);
 
   const handleCompare = useCallback(async (fromId, toId) => {
-    if (onCompareVersions) await onCompareVersions(fromId, toId);
-    else if (soapCompare) await soapCompare(fromId, toId);
-  }, [onCompareVersions, soapCompare]);
+    await onCompareVersions?.(fromId, toId);
+  }, [onCompareVersions]);
 
-  const transcriptColumn = (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-      <div className="shrink-0 border-b border-slate-100 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">Conversation Transcript</h2>
-        <p className="text-xs text-slate-500">AI-generated from consultation audio</p>
-      </div>
-      <div className="min-h-0 flex-1" ref={transcriptScrollRef}>
-        <ChatTranscriptPanel
-          {...transcriptProps}
-          audioPlayer={
-            transcriptProps.sessionId ? (
-              <div className="border-b border-slate-100 p-4">
-                <ClinicalAudioPlayer
-                  sessionId={transcriptProps.sessionId}
-                  onTimeUpdate={transcriptProps.onAudioTimeUpdate}
-                  onSeekReady={transcriptProps.onSeekReady}
-                />
-              </div>
-            ) : null
-          }
-        />
-      </div>
-    </div>
-  );
-
-  const soapColumn = (
-    <div className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-sm">
-      <div className="shrink-0 border-b border-slate-100 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-900">Clinical SOAP Note</h2>
-        <p className="text-xs text-slate-500">Review and approve before signing</p>
-      </div>
-      <div className="min-h-0 flex-1">
-        {soapProps.ready ? (
-          <SOAPCardsPanel
-            {...soapProps.panel}
-            quality={quality}
-            evidenceMap={evidenceMap}
-            onEvidenceJump={handleEvidenceJump}
-          />
-        ) : (
-          <SOAPEmptyState {...soapProps.empty} />
-        )}
-      </div>
-    </div>
-  );
-
-  const summaryBlock = (
-    <div className="space-y-4">
-      <ConsultationSummaryCard summary={summary} />
-      <ProductivityInsightsCard metrics={metrics} className="hidden xl:block" />
-    </div>
-  );
+  const soapApproved =
+    status === "SOAP_APPROVED" || status === "COMPLETED" || status === "READY_FOR_PRESCRIPTION";
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f8fafc]" data-testid="consultation-workspace">
-      <PatientContextHeader
-        patient={patient}
-        sessionDate={sessionDate}
-        status={status}
-        toolbarLeft={toolbarLeft}
-        onOpenSessions={onOpenSessions}
-        onEndSession={onEndSession}
-        onDelete={onDelete}
-        deleting={deleting}
-        saveStatus={saveStatus}
-        hasUnsavedChanges={hasUnsavedChanges}
-        pipelineLabel={pipelineLabel}
-      />
-      <ClinicalTimeline status={status} />
+    <div className="flex h-full min-h-0 flex-col bg-gray-50 pb-[72px]" data-testid="consultation-workspace">
+      <PatientSelector patient={patient} onSelect={onPatientSelect} onClear={onPatientClear} />
 
-      {/* Mobile & tablet tabs */}
-      <div className="flex min-h-0 flex-1 flex-col lg:hidden">
-        <Tabs defaultValue="transcript" className="flex min-h-0 flex-1 flex-col">
-          <TabsList className="mx-4 mt-3 grid w-auto grid-cols-3">
-            <TabsTrigger value="summary">Summary</TabsTrigger>
-            <TabsTrigger value="transcript">Transcript</TabsTrigger>
-            <TabsTrigger value="soap">SOAP</TabsTrigger>
-          </TabsList>
-          <TabsContent value="summary" className="flex-1 overflow-y-auto px-4 pb-24 pt-3">
-            {summaryBlock}
-            <ProductivityInsightsCard metrics={metrics} className="mt-4 xl:hidden" />
-          </TabsContent>
-          <TabsContent value="transcript" className="min-h-0 flex-1 px-4 pb-24 pt-3">
-            {summaryBlock}
-            <div className="mt-4 h-[min(70vh,600px)]">{transcriptColumn}</div>
-          </TabsContent>
-          <TabsContent value="soap" className="min-h-0 flex-1 px-4 pb-24 pt-3">
-            <div className="h-[min(70vh,600px)]">{soapColumn}</div>
-          </TabsContent>
-        </Tabs>
-      </div>
-
-      {/* Desktop layout */}
-      <div className="hidden min-h-0 flex-1 lg:flex">
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 xl:flex-row">
-          <div
-            className="flex min-h-0 flex-col gap-4 overflow-hidden"
-            style={{ width: `${split}%` }}
-          >
-            {summaryBlock}
-            <div className="min-h-0 flex-1">{transcriptColumn}</div>
-          </div>
-
-          <div
-            className="hidden w-1.5 shrink-0 cursor-col-resize items-center justify-center bg-transparent hover:bg-teal-100/80 lg:flex"
-            onMouseDown={() => { dragging.current = true; }}
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize panels"
-          >
-            <div className="h-12 w-1 rounded-full bg-slate-300" />
-          </div>
-
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-hidden">
-            <div className="min-h-0 flex-1">{soapColumn}</div>
-            <ProductivityInsightsCard metrics={metrics} className="shrink-0 xl:hidden" />
-          </div>
-
-          <ProductivityInsightsCard metrics={metrics} className="hidden w-64 shrink-0 xl:block" />
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-6 py-2">
+        <div className="flex items-center gap-3">
+          {toolbarLeft}
+          {onOpenSessions && (
+            <button type="button" className="cursor-pointer text-xs text-cyan-600 hover:underline" onClick={onOpenSessions}>
+              Sessions
+            </button>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <ApprovedStatusBadge approved={soapApproved} />
+          {sessionDate && (
+            <span className="text-xs text-gray-500">
+              {new Date(sessionDate).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
         </div>
       </div>
 
-      <ConsultationActionBar
-        {...actionBarProps}
-        onOpenVersions={() => setVersionsOpen(true)}
-        onOpenAudit={() => setAuditOpen(true)}
-      />
+      <ClinicalTimeline status={status} />
+
+      <PrescriptionPreview {...approveBanner} />
+
+      {/* 3-column layout — stacks below md (768px) */}
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
+        {/* LEFT — 260px history */}
+        <aside className="w-full shrink-0 border-b border-gray-200 bg-white md:w-[260px] md:border-b-0 md:border-r">
+          <PatientHistoryPanel patient={patient} />
+        </aside>
+
+        {/* CENTER — flex-1 SOAP + summary */}
+        <main className="min-w-0 flex-1 overflow-y-auto p-4 md:min-w-[500px]">
+          <div className="mx-auto max-w-3xl space-y-4">
+            <ConsultationSummary
+              summary={summary}
+              readOnly={readOnly}
+              {...summaryHandlers}
+            />
+            <CollapsibleTranscriptPanel
+              segments={transcriptSegments}
+              readOnly={transcriptReadOnly}
+              saving={transcriptSaving}
+              regenerating={transcriptRegenerating}
+              onRegenerateFromTranscript={onTranscriptRegenerate}
+            />
+            {soapProps.ready ? (
+              <SOAPEditor
+                {...soapProps.panel}
+                quality={quality}
+                evidenceMap={evidenceMap}
+                onEvidenceJump={handleEvidenceJump}
+                onRegenerate={soapProps.panel.onRegenerate}
+              />
+            ) : (
+              <SOAPEditorEmpty {...soapProps.empty} />
+            )}
+          </div>
+        </main>
+
+        {/* RIGHT — 300px insights */}
+        <aside className="w-full shrink-0 border-t border-gray-200 bg-white p-4 md:w-[300px] md:border-t-0 md:border-l">
+          <div className="space-y-3">
+            <ProductivityInsightsCard metrics={metrics} />
+            <AISuggestions
+              icd={insights?.icd}
+              rpm={insights?.rpm}
+              rpmEnabled={rpmEnabled}
+              icdOverride={icdOverride}
+              onIcdOverride={onIcdOverride}
+              onRpmToggle={onRpmToggle}
+              readOnly={readOnly}
+            />
+          </div>
+        </aside>
+      </div>
 
       <VersionHistoryDrawer
         open={versionsOpen}
-        onClose={() => setVersionsOpen(false)}
+        onClose={() => onVersionsOpenChange?.(false)}
         versions={versions}
-        readOnly={actionBarProps.readOnly}
+        readOnly={readOnly}
         restoring={soapProps.panel?.saving}
         onRestore={onRestoreVersion}
         onCompare={handleCompare}
       />
 
-      <AuditTrailDrawer
-        open={auditOpen}
-        onClose={() => setAuditOpen(false)}
-        sessionId={sessionId}
-      />
-
-      <PanelResizeHandler dragging={dragging} onResize={setSplit} />
+      <AuditTrailDrawer open={auditOpen} onClose={() => onAuditOpenChange?.(false)} sessionId={sessionId} />
     </div>
   );
-}
-
-function PanelResizeHandler({ dragging, onResize }) {
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!dragging.current) return;
-      const pct = (e.clientX / window.innerWidth) * 100;
-      onResize(Math.min(72, Math.max(38, pct)));
-    };
-    const onUp = () => {
-      dragging.current = false;
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, [dragging, onResize]);
-
-  return null;
 }

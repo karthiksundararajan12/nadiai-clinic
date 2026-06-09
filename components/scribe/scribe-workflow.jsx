@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
-import {
-  ConsultationWorkspace,
-  ScribeLiveSession,
-} from "@/features/scribe/consultation-workspace";
+import { useRecording } from "@/features/scribe/recording/use-recording.js";
+import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
+import { RecordingEngine } from "@/features/scribe/consultation-workspace/components/consultation/RecordingEngine.jsx";
+import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
 import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
@@ -24,10 +24,6 @@ const TRANSCRIBED_STATUSES = new Set([
   "SOAP_REVIEWING",
 ]);
 
-/**
- * Runs transcription inline via the doctor UI endpoint (no background worker required).
- * The queue-only path left sessions stuck at TRANSCRIPTION_QUEUED in local/dev.
- */
 async function runTranscriptionPipeline(sessionId, signal) {
   const res = await fetch(`/api/scribe/sessions/${sessionId}/transcription/run`, {
     method: "POST",
@@ -57,6 +53,8 @@ export function ScribeWorkflow() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [viewFromHistory, setViewFromHistory] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
+  const [selectedPatient, setSelectedPatient] = useState(null);
+  const [footerProps, setFooterProps] = useState({});
 
   const [activeSessions, setActiveSessions] = useState([]);
   const [historySessions, setHistorySessions] = useState([]);
@@ -75,6 +73,11 @@ export function ScribeWorkflow() {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  const recording = useRecording({
+    chunkIntervalMs: 5_000,
+    onError: (err) => setUploadError(err instanceof Error ? err : new Error(String(err))),
+  });
 
   const loadConsultations = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -156,6 +159,7 @@ export function ScribeWorkflow() {
         chunks,
         audioDurationSeconds,
         language,
+        patientId: selectedPatient?.id,
         onProgress: (event) => {
           if (event.phase === "uploading") {
             setPipelineMessage(`Uploading… ${event.progress ?? 0}%`);
@@ -188,7 +192,22 @@ export function ScribeWorkflow() {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
-  }, [language, runTranscription]);
+  }, [language, runTranscription, selectedPatient?.id]);
+
+  const handleStopRecording = useCallback(async () => {
+    try {
+      const chunks = await recording.stopRecording();
+      await handleRecordingComplete(chunks, recording.mimeType, recording.duration);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err : new Error(String(err)));
+    }
+  }, [handleRecordingComplete, recording]);
+
+  const recordState = useMemo(() => {
+    if (pipelineBusy) return "processing";
+    if (recording.isRecording || recording.isPaused) return "recording";
+    return "idle";
+  }, [pipelineBusy, recording.isRecording, recording.isPaused]);
 
   const goLive = useCallback(() => {
     setView("live");
@@ -196,6 +215,7 @@ export function ScribeWorkflow() {
     setViewFromHistory(false);
     setUploadError(null);
     setSessionsOpen(false);
+    setFooterProps({});
   }, []);
 
   const openSession = useCallback((sessionId, fromHistory = false) => {
@@ -231,9 +251,48 @@ export function ScribeWorkflow() {
     <LanguageToggle value={language} onChange={setLanguage} />
   );
 
+  const sessionsDrawer = (
+    <SessionsDrawer
+      open={sessionsOpen}
+      onClose={() => setSessionsOpen(false)}
+      activeSessions={activeSessions}
+      historySessions={historySessions}
+      loading={initialLoad}
+      refreshing={refreshing}
+      error={listError}
+      busySessionId={busySessionId}
+      lastRecordedSessionId={lastRecordedSessionId}
+      onRefresh={() => loadConsultations(true)}
+      onOpen={openSession}
+      onTranscribe={runTranscription}
+      onDelete={deleteSession}
+      canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
+    />
+  );
+
+  const recordingEngine = (
+    <RecordingEngine
+      patient={footerProps.patient ?? selectedPatient}
+      recordState={recordState}
+      onStartRecording={() => recording.startRecording()}
+      onStopRecording={handleStopRecording}
+      canApprove={footerProps.canApprove}
+      canSendWhatsApp={footerProps.canSendWhatsApp}
+      approving={footerProps.approving}
+      sendingWhatsApp={footerProps.sendingWhatsApp}
+      onApprove={footerProps.onApprove}
+      onSendWhatsApp={footerProps.onSendWhatsApp}
+      onExport={footerProps.onExport}
+      exporting={footerProps.exporting}
+      onOpenVersions={footerProps.onOpenVersions}
+      onOpenAudit={footerProps.onOpenAudit}
+      onReject={footerProps.onReject}
+    />
+  );
+
   if (view === "consultation" && activeSessionId) {
     return (
-      <div className="h-full min-h-0">
+      <div className="relative h-full min-h-0">
         <ConsultationWorkspace
           key={activeSessionId}
           sessionId={activeSessionId}
@@ -252,41 +311,36 @@ export function ScribeWorkflow() {
           autoGenerateNote={!viewFromHistory}
           onDelete={() => deleteSession(activeSessionId)}
           deleting={busySessionId === activeSessionId}
+          selectedPatient={selectedPatient}
+          onSelectedPatientChange={setSelectedPatient}
+          onFooterProps={setFooterProps}
         />
-        <SessionsDrawer
-          open={sessionsOpen}
-          onClose={() => setSessionsOpen(false)}
-          activeSessions={activeSessions}
-          historySessions={historySessions}
-          loading={initialLoad}
-          refreshing={refreshing}
-          error={listError}
-          busySessionId={busySessionId}
-          lastRecordedSessionId={lastRecordedSessionId}
-          onRefresh={() => loadConsultations(true)}
-          onOpen={openSession}
-          onTranscribe={runTranscription}
-          onDelete={deleteSession}
-          canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
-        />
+        {sessionsDrawer}
+        {recordingEngine}
       </div>
     );
   }
 
   return (
-    <div className="relative h-full min-h-0" data-testid="scribe-workflow">
-      <ScribeLiveSession
-        disabled={pipelineBusy}
-        pipelineMessage={pipelineMessage}
-        onRecordingComplete={handleRecordingComplete}
-        onError={(err) => setUploadError(err)}
-        onEndSession={goLive}
-        onOpenSessions={() => setSessionsOpen(true)}
-        toolbarLeft={languageToggle}
+    <div className="relative flex h-full min-h-0 flex-col pb-[72px]" data-testid="scribe-workflow">
+      <PatientSelector
+        patient={selectedPatient}
+        onSelect={setSelectedPatient}
+        onClear={() => setSelectedPatient(null)}
       />
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+        <h2 className="text-lg font-semibold text-gray-900">AI Medical Scribe</h2>
+        <p className="max-w-md text-sm text-gray-600">
+          Select a patient, then press <strong>Start Recording</strong> in the action bar below to begin the consultation.
+        </p>
+        {languageToggle}
+        <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setSessionsOpen(true)}>
+          View past sessions
+        </Button>
+      </div>
 
       {uploadError && (
-        <div className="absolute bottom-12 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4">
+        <div className="absolute bottom-20 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4">
           <UploadErrorBanner
             error={uploadError}
             onDismiss={() => setUploadError(null)}
@@ -302,22 +356,8 @@ export function ScribeWorkflow() {
         </div>
       )}
 
-      <SessionsDrawer
-        open={sessionsOpen}
-        onClose={() => setSessionsOpen(false)}
-        activeSessions={activeSessions}
-        historySessions={historySessions}
-        loading={initialLoad}
-        refreshing={refreshing}
-        error={listError}
-        busySessionId={busySessionId}
-        lastRecordedSessionId={lastRecordedSessionId}
-        onRefresh={() => loadConsultations(true)}
-        onOpen={openSession}
-        onTranscribe={runTranscription}
-        onDelete={deleteSession}
-        canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
-      />
+      {sessionsDrawer}
+      {recordingEngine}
     </div>
   );
 }
@@ -327,15 +367,15 @@ function UploadErrorBanner({ error, onDismiss, onRelease }) {
     /already active/i.test(error?.message ?? "");
 
   return (
-    <div className="rounded-xl border border-rose-200 bg-white px-4 py-3 text-center shadow-lg space-y-2">
-      <p className="text-[13px] text-rose-600">{error.message}</p>
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center space-y-2">
+      <p className="text-[13px] text-red-600">{error.message}</p>
       <div className="flex justify-center gap-2">
         {isBlocked && (
-          <Button type="button" variant="outline" size="sm" onClick={onRelease}>
+          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={onRelease}>
             Clear stuck session
           </Button>
         )}
-        <Button type="button" variant="ghost" size="sm" onClick={onDismiss}>
+        <Button type="button" variant="ghost" size="sm" className="cursor-pointer" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>

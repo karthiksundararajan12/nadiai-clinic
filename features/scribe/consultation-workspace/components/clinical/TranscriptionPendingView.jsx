@@ -19,7 +19,7 @@ export function TranscriptionPendingView({
   pipelineLabel,
 }) {
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[#f8fafc]" data-testid="consultation-workspace">
+    <div className="flex h-full min-h-0 flex-col bg-gray-50 pb-[72px]" data-testid="consultation-workspace">
       <PatientContextHeader
         patient={patient}
         sessionDate={sessionDate}

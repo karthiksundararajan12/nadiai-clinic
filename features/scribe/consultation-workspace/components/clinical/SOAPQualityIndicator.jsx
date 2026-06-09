@@ -13,7 +13,7 @@ export function SOAPQualityIndicator({ quality }) {
   const style = STYLES[quality.level] ?? STYLES.review;
 
   return (
-    <div className={cn("rounded-2xl border px-4 py-3", style.bg)}>
+    <div className={cn("rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-none", style.bg)}>
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SOAP Quality</p>
       <div className="mt-1 flex items-center gap-2">
         <span className={cn("h-2.5 w-2.5 rounded-full", style.dot)} />

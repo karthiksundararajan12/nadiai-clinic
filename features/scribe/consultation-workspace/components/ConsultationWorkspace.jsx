@@ -21,6 +21,9 @@ import { buildSoapEvidenceMap } from "../lib/soap-evidence.js";
 import { computeSoapQuality } from "../lib/soap-quality.js";
 import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
+import { deriveClinicalInsights } from "../lib/clinical-insights.js";
+import { attachPatientToSession } from "../services/patient.client.js";
+import { sendPrescriptionViaWhatsApp } from "../services/whatsapp-prescription.client.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -36,6 +39,9 @@ export function ConsultationWorkspace({
   onTranscriptionComplete,
   onStartTranscription,
   autoGenerateNote = true,
+  selectedPatient,
+  onSelectedPatientChange,
+  onFooterProps,
 }) {
   const statusPoll = useSessionStatus(sessionId, { enabled: Boolean(sessionId), intervalMs: 1500 });
 
@@ -53,7 +59,17 @@ export function ConsultationWorkspace({
   });
 
   const session = statusPoll.session ?? transcript.session;
-  const { patient } = usePatientForSession(session?.patient_id);
+  const { patient: sessionPatient } = usePatientForSession(session?.patient_id);
+  const patient = selectedPatient ?? sessionPatient;
+
+  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [approveBannerOpen, setApproveBannerOpen] = useState(false);
+  const [approving, setApproving] = useState(false);
+  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
+  const [whatsAppSentTo, setWhatsAppSentTo] = useState(null);
+  const [icdOverride, setIcdOverride] = useState(null);
+  const [rpmEnabled, setRpmEnabled] = useState(false);
 
   const readOnly = readOnlyProp ?? transcript.readOnly;
   const soapApproved =
@@ -163,9 +179,51 @@ export function ConsultationWorkspace({
   }, []);
 
   const handleApproveSOAP = useCallback(async () => {
-    await soap.approve();
-    onApproved?.();
-  }, [onApproved, soap]);
+    setApproving(true);
+    try {
+      await soap.approve();
+      setApproveBannerOpen(true);
+      void fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, { method: "POST" }).catch(() => {});
+      await statusPoll.refresh?.();
+    } finally {
+      setApproving(false);
+    }
+  }, [sessionId, soap, statusPoll]);
+
+  const handleSendWhatsApp = useCallback(async () => {
+    if (!patient?.phone) return;
+    setSendingWhatsApp(true);
+    try {
+      const result = await sendPrescriptionViaWhatsApp({
+        patientPhone: patient.phone,
+        prescriptionData: { plan: soap.draft.plan, assessment: soap.draft.assessment },
+        sessionId,
+      });
+      setWhatsAppSentTo(result.sentTo ?? patient.phone);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to send");
+    } finally {
+      setSendingWhatsApp(false);
+    }
+  }, [patient, sessionId, soap.draft]);
+
+  const handlePatientSelect = useCallback(async (p) => {
+    onSelectedPatientChange?.(p);
+    if (sessionId && p?.id) {
+      try { await attachPatientToSession(sessionId, p.id); } catch { /* non-blocking */ }
+    }
+  }, [sessionId, onSelectedPatientChange]);
+
+  const handleRpmToggle = useCallback((enabled) => {
+    setRpmEnabled(enabled);
+    if (enabled) {
+      const tag = "[RPM:ON] WhatsApp monitoring enabled. First check-in in 24 hours.";
+      const current = soap.draft.clinicalSummary ?? "";
+      if (!current.includes("[RPM:ON]")) {
+        soap.updateSection("clinicalSummary", `${tag}\n${current}`.trim());
+      }
+    }
+  }, [soap]);
 
   const handleSaveDraft = useCallback(async () => {
     if (transcript.hasChanges) await transcript.manualSave();
@@ -310,6 +368,49 @@ export function ConsultationWorkspace({
     [session, soap.note],
   );
 
+  const insights = useMemo(
+    () => deriveClinicalInsights(soap.draft, soap.note),
+    [soap.draft, soap.note],
+  );
+
+  const summaryHandlers = useMemo(() => ({
+    onUpdateChiefComplaint: (v) => {
+      soap.updateSection("chiefComplaint", v);
+      soap.updateSection("subjective", v);
+    },
+    onUpdateDuration: (v) => {
+      const hpi = soap.draft.historyOfPresentIllness ?? soap.draft.subjective ?? "";
+      soap.updateSection("historyOfPresentIllness", `${v}\n${hpi}`.trim());
+    },
+    onUpdateSymptoms: (symptoms) => {
+      soap.updateSection("historyOfPresentIllness", symptoms.map((s) => `• ${s}`).join("\n"));
+    },
+    onUpdateKeyFindings: (findings) => {
+      soap.updateSection("objective", findings.filter(Boolean).join("\n"));
+    },
+  }), [soap]);
+
+  useEffect(() => {
+    onFooterProps?.({
+      patient,
+      canApprove: canApproveSOAP && !blockingApproval,
+      canSendWhatsApp: soapApproved || approveBannerOpen,
+      approving,
+      sendingWhatsApp,
+      onApprove: handleApproveSOAP,
+      onSendWhatsApp: handleSendWhatsApp,
+      onExport: handleExportSOAP,
+      exporting,
+      onOpenVersions: () => setVersionsOpen(true),
+      onOpenAudit: () => setAuditOpen(true),
+      onReject: handleRejectSOAP,
+    });
+  }, [
+    onFooterProps, patient, canApproveSOAP, blockingApproval, soapApproved, approveBannerOpen,
+    approving, sendingWhatsApp, handleApproveSOAP, handleSendWhatsApp, handleExportSOAP,
+    exporting, handleRejectSOAP,
+  ]);
+
   if (waitingForTranscript) {
     return (
       <div className="h-full min-h-0">
@@ -332,41 +433,44 @@ export function ConsultationWorkspace({
       <ConsultationClinicalLayout
         sessionId={sessionId}
         patient={patient}
+        onPatientSelect={handlePatientSelect}
+        onPatientClear={() => onSelectedPatientChange?.(null)}
         sessionDate={session?.created_at}
         status={resolvedSessionStatus}
         summary={summary}
+        summaryHandlers={summaryHandlers}
         metrics={metrics}
         quality={quality}
+        insights={insights}
+        icdOverride={icdOverride}
+        onIcdOverride={setIcdOverride}
+        rpmEnabled={rpmEnabled}
+        onRpmToggle={handleRpmToggle}
         evidenceMap={evidenceMap}
+        readOnly={readOnly || soapApproved}
         toolbarLeft={toolbarLeft}
         onOpenSessions={onOpenSessions}
-        onEndSession={onEndSession}
-        onDelete={showDelete ? onDelete : undefined}
-        deleting={deleting}
-        saveStatus={!waitingForTranscript ? saveStatus : null}
-        hasUnsavedChanges={hasUnsavedChanges && !readOnly}
-        pipelineLabel={waitingForTranscript ? (pipelineMessage ?? "Transcribing…") : null}
+        transcriptSegments={transcript.segments}
+        transcriptReadOnly={readOnly}
+        transcriptSaving={transcript.saving}
+        transcriptRegenerating={soap.regenerating}
+        onTranscriptRegenerate={handleRegenerateSOAP}
+        onEvidenceJump={handlePlayFromHere}
         versions={soap.versions}
         onRestoreVersion={handleRestoreVersion}
         onCompareVersions={handleCompareVersions}
-        transcriptProps={{
-          sessionId,
-          segments: transcript.segments,
-          dirty: transcript.dirty,
-          readOnly,
-          saving: transcript.saving,
-          activeSegmentId,
-          pipelineMessage: transcriptPipelineMessage,
-          loadError: transcriptLoadError,
-          onChange: transcript.updateSegment,
-          onRetryLoad: transcript.load,
-          onSegmentClick: handleSegmentClick,
-          onPlayFromHere: handlePlayFromHere,
-          onAudioTimeUpdate: handleAudioTimeUpdate,
-          onSeekReady: handleSeekReady,
-          poorTranscription: showDelete,
-          onDelete: showDelete ? onDelete : undefined,
-          deleting,
+        versionsOpen={versionsOpen}
+        onVersionsOpenChange={setVersionsOpen}
+        auditOpen={auditOpen}
+        onAuditOpenChange={setAuditOpen}
+        approveBanner={{
+          open: approveBannerOpen,
+          sentTo: whatsAppSentTo,
+          sending: sendingWhatsApp,
+          onSendWhatsApp: handleSendWhatsApp,
+          onViewPrescription: () => window.open(`/scribe?rx=${sessionId}`, "_blank"),
+          onSkip: () => { setApproveBannerOpen(false); onApproved?.(); },
+          onDismiss: () => setApproveBannerOpen(false),
         }}
         soapProps={{
           ready: soapReady,
@@ -377,32 +481,18 @@ export function ConsultationWorkspace({
             saving: soap.saving,
             error: soap.error,
             generating: noteGenerating,
+            regenerating: soap.regenerating,
             activeSection: activeSoapSection ?? highlightedSoapSection,
             onChange: soap.updateSection,
             onRetry: soap.load,
             onSectionFocus: setActiveSoapSection,
+            onRegenerate: handleRegenerateSOAP,
           },
           empty: {
             generating: noteGenerating || (hasSoap && soap.loading),
             error: soap.error,
             onRetry: soap.load,
           },
-        }}
-        actionBarProps={{
-          readOnly: soapApproved,
-          canApprove: canApproveSOAP,
-          canRegenerate: canRegenerateSOAP,
-          canExport: canExportSOAP,
-          hasDirty: hasUnsavedChanges,
-          saving: transcript.saving || soap.saving,
-          regenerating: soap.regenerating,
-          exporting,
-          blockingApproval,
-          onApprove: handleApproveSOAP,
-          onSave: handleSaveDraft,
-          onRegenerate: handleRegenerateSOAP,
-          onExport: handleExportSOAP,
-          onReject: handleRejectSOAP,
         }}
       />
     </div>

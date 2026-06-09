@@ -108,7 +108,7 @@ export function RPMCard({ rpm, enabled, onToggle, readOnly }) {
       )}
 
       <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
-        <span className="text-sm font-medium text-gray-800">Enable WhatsApp Monitoring</span>
+        <span className="text-sm font-medium text-gray-800">Enable Remote Monitoring</span>
         <button
           type="button"
           role="switch"

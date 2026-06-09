@@ -13,8 +13,8 @@ import {
   Users,
   CalendarDays,
   Mic,
-  MessageCircle,
   Sparkles,
+  Settings,
   ArrowRight,
 } from "lucide-react";
 import Link from "next/link";
@@ -78,11 +78,11 @@ export default function DashboardPage() {
             icon={Mic}
           />
           <StatsCard
-            title="WhatsApp Bookings"
-            value="156"
-            change="23%"
+            title="Active Patients"
+            value="128"
+            change="12%"
             changeType="positive"
-            icon={MessageCircle}
+            icon={Users}
           />
         </div>
 
@@ -144,10 +144,10 @@ export default function DashboardPage() {
                     <span className="text-xs font-medium">Add Patient</span>
                   </button>
                 </Link>
-                <Link href="/whatsapp">
+                <Link href="/settings">
                   <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-background p-4 text-center transition-colors hover:bg-muted">
-                    <MessageCircle className="h-5 w-5 text-green-600" />
-                    <span className="text-xs font-medium">WhatsApp</span>
+                    <Settings className="h-5 w-5 text-primary" />
+                    <span className="text-xs font-medium">Settings</span>
                   </button>
                 </Link>
               </CardContent>

@@ -54,7 +54,6 @@ export default function OnboardingPage() {
     phone: "",
     clinic_name: "",
     clinic_address: "",
-    clinic_whatsapp_number: "",
     consultation_duration: "30",
     working_hours_start: "09:00",
     working_hours_end: "18:00",
@@ -110,7 +109,7 @@ export default function OnboardingPage() {
   };
 
   const canProceedStep1 = form.full_name && form.specialization && form.phone;
-  const canProceedStep2 = form.clinic_name && form.clinic_whatsapp_number;
+  const canProceedStep2 = form.clinic_name;
 
   return (
     <div className="flex min-h-screen flex-col items-center bg-background">
@@ -278,38 +277,6 @@ export default function OnboardingPage() {
             </div>
 
             <div className="space-y-2">
-              <Label>Clinic WhatsApp Business Number *</Label>
-              <div className="relative">
-                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="+91 XXXXX XXXXX"
-                  value={form.clinic_whatsapp_number}
-                  onChange={(e) =>
-                    updateForm("clinic_whatsapp_number", e.target.value)
-                  }
-                  className="pl-9"
-                />
-              </div>
-              <p className="text-[11px] text-muted-foreground">
-                Patients will message this clinic number directly after Meta
-                Cloud API connection is active.
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-border bg-card p-4">
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  WhatsApp Cloud API Activation
-                </p>
-                <p className="text-xs text-muted-foreground mt-1">
-                  After setup, Nadi AI will activate this number from our Meta
-                  business account. The clinic only receives and shares the OTP;
-                  no Meta login is required from the doctor.
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
               <Label>Default Consultation Duration</Label>
               <div className="flex gap-2">
                 {["15", "20", "30", "45", "60"].map((d) => (
@@ -362,8 +329,7 @@ export default function OnboardingPage() {
                 You&apos;re all set!
               </p>
               <p className="text-xs text-muted-foreground mt-1">
-                Complete setup now. You can connect WhatsApp here or from the
-                WhatsApp dashboard later.
+                Complete setup now and start using AI Scribe from your dashboard.
               </p>
             </div>
           </div>

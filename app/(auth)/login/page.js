@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Shield, Mic, MessageCircle, ArrowRight, Loader2 } from "lucide-react";
+import { Shield, Mic, CalendarDays, ArrowRight, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const FEATURES = [
@@ -13,9 +13,9 @@ const FEATURES = [
     desc: "Hinglish voice transcription with auto clinical notes",
   },
   {
-    icon: MessageCircle,
-    title: "WhatsApp Bot",
-    desc: "Automated appointment booking in Hindi & English",
+    icon: CalendarDays,
+    title: "Smart Scheduling",
+    desc: "Manage appointments and patient visits in one place",
   },
   {
     icon: Shield,
@@ -98,9 +98,8 @@ export default function LoginPage() {
             <span className="text-primary">doctors trust</span>
           </h2>
           <p className="text-base text-white/60 leading-relaxed mb-10">
-            Transform your practice with AI-powered clinical documentation,
-            WhatsApp appointment booking, and seamless patient management —
-            all in Hinglish.
+            Transform your practice with AI-powered clinical documentation
+            and seamless patient management — all in Hinglish.
           </p>
 
           <div className="space-y-5">

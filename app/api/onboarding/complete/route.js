@@ -1,10 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import {
-  normalizeIndianPhoneNumber,
-  WHATSAPP_SETUP_STATUS,
-} from "@/lib/whatsapp/clinic-setup";
 
 export async function POST(request) {
   try {
@@ -28,16 +24,9 @@ export async function POST(request) {
       consultation_duration,
       working_hours_start,
       working_hours_end,
-      clinic_whatsapp_number,
     } = body;
 
-    if (
-      !full_name ||
-      !specialization ||
-      !phone ||
-      !clinic_name ||
-      !clinic_whatsapp_number
-    ) {
+    if (!full_name || !specialization || !phone || !clinic_name) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -53,20 +42,8 @@ export async function POST(request) {
       .maybeSingle();
 
     let clinicId = existingProfile?.clinic_id;
-    const whatsappNumber = normalizeIndianPhoneNumber(clinic_whatsapp_number);
 
-    const clinicPayload = {
-      name: clinic_name,
-      whatsapp_provider: "meta",
-      whatsapp_display_number: whatsappNumber,
-      whatsapp_phone_number_id: null,
-      whatsapp_business_account_id: null,
-      meta_business_id: null,
-      whatsapp_setup_status: WHATSAPP_SETUP_STATUS.PENDING_VERIFICATION,
-      whatsapp_setup_requested_at: new Date().toISOString(),
-      whatsapp_verified_at: null,
-      whatsapp_setup_error: null,
-    };
+    const clinicPayload = { name: clinic_name };
 
     if (clinicId) {
       const { error: clinicErr } = await admin
@@ -117,12 +94,7 @@ export async function POST(request) {
       return NextResponse.json({ error: profileErr.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      clinicId,
-      whatsappLinked: false,
-      whatsappSetupStatus: WHATSAPP_SETUP_STATUS.PENDING_VERIFICATION,
-    });
+    return NextResponse.json({ success: true, clinicId });
   } catch (err) {
     console.error("[Onboarding] Error:", err);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

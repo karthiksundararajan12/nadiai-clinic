@@ -16,7 +16,7 @@ const jetbrainsMono = JetBrains_Mono({
 export const metadata = {
   title: "Nadi AI - Clinical Assistant",
   description:
-    "AI-powered clinical assistant with Hinglish scribe, WhatsApp appointment booking, and patient management for modern healthcare professionals.",
+    "AI-powered clinical assistant with Hinglish scribe and patient management for modern healthcare professionals.",
 };
 
 export default function RootLayout({ children }) {

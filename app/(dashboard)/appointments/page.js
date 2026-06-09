@@ -24,7 +24,6 @@ import {
   CalendarDays,
   Clock,
   User,
-  MessageCircle,
   Filter,
   ChevronLeft,
   ChevronRight,
@@ -114,9 +113,6 @@ export default function AppointmentsPage() {
                 <p className="text-sm font-medium truncate">
                   {apt.patient_name}
                 </p>
-                {apt.source === "whatsapp" && (
-                  <MessageCircle className="h-3 w-3 text-green-500 shrink-0" />
-                )}
               </div>
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">

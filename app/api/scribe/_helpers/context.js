@@ -135,11 +135,7 @@ async function backfillClinicId(admin, profile) {
 
   const { data: clinic, error: clinicError } = await admin
     .from("clinics")
-    .insert({
-      name: clinicName,
-      whatsapp_provider: "meta",
-      whatsapp_setup_status: "pending_verification",
-    })
+    .insert({ name: clinicName })
     .select("id")
     .single();
 

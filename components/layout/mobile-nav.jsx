@@ -9,7 +9,6 @@ import {
   Mic,
   CalendarDays,
   Users,
-  MessageCircle,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -21,7 +20,6 @@ const ICON_MAP = {
   Mic,
   CalendarDays,
   Users,
-  MessageCircle,
   Settings,
 };
 

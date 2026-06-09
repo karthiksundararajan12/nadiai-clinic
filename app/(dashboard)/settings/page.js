@@ -35,7 +35,6 @@ export default function SettingsPage() {
 
   const [notifications, setNotifications] = useState({
     appointments: true,
-    whatsapp: true,
     email: false,
     sms: true,
     scribeComplete: true,
@@ -302,11 +301,6 @@ export default function SettingsPage() {
                     key: "appointments",
                     title: "Appointment Reminders",
                     desc: "Get notified about upcoming appointments",
-                  },
-                  {
-                    key: "whatsapp",
-                    title: "WhatsApp Bot Alerts",
-                    desc: "Notifications when patients book via WhatsApp",
                   },
                   {
                     key: "sms",

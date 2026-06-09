@@ -14,7 +14,7 @@ const MOCK_APPOINTMENTS = [
     type: "Follow-up",
     status: "confirmed",
     notes: "Diabetes follow-up, check HbA1c levels",
-    source: "whatsapp",
+    source: "online",
   },
   {
     id: "apt-002",
@@ -40,7 +40,7 @@ const MOCK_APPOINTMENTS = [
     type: "Check-up",
     status: "in_progress",
     notes: "Cardiac evaluation, ECG review",
-    source: "whatsapp",
+    source: "online",
   },
   {
     id: "apt-004",
@@ -66,7 +66,7 @@ const MOCK_APPOINTMENTS = [
     type: "Consultation",
     status: "confirmed",
     notes: "Thyroid level check",
-    source: "whatsapp",
+    source: "online",
   },
   {
     id: "apt-006",
@@ -92,7 +92,7 @@ const MOCK_APPOINTMENTS = [
     type: "Check-up",
     status: "completed",
     notes: "Routine diabetes check",
-    source: "whatsapp",
+    source: "online",
   },
 ];
 

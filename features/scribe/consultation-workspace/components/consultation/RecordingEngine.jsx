@@ -6,7 +6,6 @@ import {
   Download,
   History,
   Loader2,
-  MessageCircle,
   Mic,
   MicOff,
   MoreHorizontal,
@@ -25,11 +24,8 @@ export function RecordingEngine({
   onStartRecording,
   onStopRecording,
   canApprove,
-  canSendWhatsApp,
   approving,
-  sendingWhatsApp,
   onApprove,
-  onSendWhatsApp,
   onExport,
   onOpenVersions,
   onOpenAudit,
@@ -99,17 +95,6 @@ export function RecordingEngine({
           >
             {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
             <span className="hidden md:inline">Approve SOAP</span>
-          </button>
-        )}
-        {canSendWhatsApp && (
-          <button
-            type="button"
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-green-600 px-3 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-green-700 disabled:opacity-50"
-            onClick={onSendWhatsApp}
-            disabled={sendingWhatsApp}
-          >
-            {sendingWhatsApp ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-            <span className="hidden lg:inline">Send WhatsApp</span>
           </button>
         )}
         <div className="relative">

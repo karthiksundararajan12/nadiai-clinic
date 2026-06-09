@@ -8,7 +8,6 @@ import {
   Mic,
   CalendarDays,
   Users,
-  MessageCircle,
   Settings,
   LogOut,
   ChevronLeft,
@@ -27,7 +26,6 @@ const ICON_MAP = {
   Mic,
   CalendarDays,
   Users,
-  MessageCircle,
   Settings,
 };
 

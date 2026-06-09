@@ -2,7 +2,7 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Clock, ArrowRight, MessageCircle } from "lucide-react";
+import { Clock, ArrowRight } from "lucide-react";
 import Link from "next/link";
 
 const UPCOMING = [
@@ -11,28 +11,24 @@ const UPCOMING = [
     time: "09:00 AM",
     type: "Follow-up",
     status: "confirmed",
-    source: "whatsapp",
   },
   {
     patient: "Priya Sharma",
     time: "09:30 AM",
     type: "Consultation",
     status: "scheduled",
-    source: "direct",
   },
   {
     patient: "Amit Patel",
     time: "10:00 AM",
     type: "Check-up",
     status: "in_progress",
-    source: "whatsapp",
   },
   {
     patient: "Vikram Singh",
     time: "11:00 AM",
     type: "Follow-up",
     status: "scheduled",
-    source: "direct",
   },
 ];
 
@@ -63,9 +59,6 @@ export function UpcomingAppointments() {
                   <p className="text-sm font-medium text-foreground truncate">
                     {apt.patient}
                   </p>
-                  {apt.source === "whatsapp" && (
-                    <MessageCircle className="h-3 w-3 text-green-500" />
-                  )}
                 </div>
                 <p className="text-xs text-muted-foreground">
                   {apt.time} &middot; {apt.type}

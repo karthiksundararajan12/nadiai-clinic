@@ -42,7 +42,7 @@ export function deriveClinicalInsights(draft = {}, note = null) {
   const plan = `${draft.plan ?? ""}`;
   const rpmRecommended =
     Boolean(meta.rpmRecommended) ||
-    /follow.?up|monitor|check.?in|whatsapp|remote/i.test(plan);
+    /follow.?up|monitor|check.?in|remote/i.test(plan);
 
   const rpmReason =
     meta.rpmReason ??

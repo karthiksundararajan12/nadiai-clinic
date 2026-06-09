@@ -23,7 +23,6 @@ import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
 import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
-import { sendPrescriptionViaWhatsApp } from "../services/whatsapp-prescription.client.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -66,8 +65,6 @@ export function ConsultationWorkspace({
   const [auditOpen, setAuditOpen] = useState(false);
   const [approveBannerOpen, setApproveBannerOpen] = useState(false);
   const [approving, setApproving] = useState(false);
-  const [sendingWhatsApp, setSendingWhatsApp] = useState(false);
-  const [whatsAppSentTo, setWhatsAppSentTo] = useState(null);
   const [icdOverride, setIcdOverride] = useState(null);
   const [rpmEnabled, setRpmEnabled] = useState(false);
 
@@ -190,23 +187,6 @@ export function ConsultationWorkspace({
     }
   }, [sessionId, soap, statusPoll]);
 
-  const handleSendWhatsApp = useCallback(async () => {
-    if (!patient?.phone) return;
-    setSendingWhatsApp(true);
-    try {
-      const result = await sendPrescriptionViaWhatsApp({
-        patientPhone: patient.phone,
-        prescriptionData: { plan: soap.draft.plan, assessment: soap.draft.assessment },
-        sessionId,
-      });
-      setWhatsAppSentTo(result.sentTo ?? patient.phone);
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to send");
-    } finally {
-      setSendingWhatsApp(false);
-    }
-  }, [patient, sessionId, soap.draft]);
-
   const handlePatientSelect = useCallback(async (p) => {
     onSelectedPatientChange?.(p);
     if (sessionId && p?.id) {
@@ -217,7 +197,7 @@ export function ConsultationWorkspace({
   const handleRpmToggle = useCallback((enabled) => {
     setRpmEnabled(enabled);
     if (enabled) {
-      const tag = "[RPM:ON] WhatsApp monitoring enabled. First check-in in 24 hours.";
+      const tag = "[RPM:ON] Remote monitoring enabled. First check-in in 24 hours.";
       const current = soap.draft.clinicalSummary ?? "";
       if (!current.includes("[RPM:ON]")) {
         soap.updateSection("clinicalSummary", `${tag}\n${current}`.trim());
@@ -394,11 +374,8 @@ export function ConsultationWorkspace({
     onFooterProps?.({
       patient,
       canApprove: canApproveSOAP && !blockingApproval,
-      canSendWhatsApp: soapApproved || approveBannerOpen,
       approving,
-      sendingWhatsApp,
       onApprove: handleApproveSOAP,
-      onSendWhatsApp: handleSendWhatsApp,
       onExport: handleExportSOAP,
       exporting,
       onOpenVersions: () => setVersionsOpen(true),
@@ -406,8 +383,8 @@ export function ConsultationWorkspace({
       onReject: handleRejectSOAP,
     });
   }, [
-    onFooterProps, patient, canApproveSOAP, blockingApproval, soapApproved, approveBannerOpen,
-    approving, sendingWhatsApp, handleApproveSOAP, handleSendWhatsApp, handleExportSOAP,
+    onFooterProps, patient, canApproveSOAP, blockingApproval,
+    approving, handleApproveSOAP, handleExportSOAP,
     exporting, handleRejectSOAP,
   ]);
 
@@ -465,9 +442,6 @@ export function ConsultationWorkspace({
         onAuditOpenChange={setAuditOpen}
         approveBanner={{
           open: approveBannerOpen,
-          sentTo: whatsAppSentTo,
-          sending: sendingWhatsApp,
-          onSendWhatsApp: handleSendWhatsApp,
           onViewPrescription: () => window.open(`/scribe?rx=${sessionId}`, "_blank"),
           onSkip: () => { setApproveBannerOpen(false); onApproved?.(); },
           onDismiss: () => setApproveBannerOpen(false),

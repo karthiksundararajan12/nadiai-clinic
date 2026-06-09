@@ -1,14 +1,9 @@
 "use client";
 
-import { useState } from "react";
-import { CheckCircle, FileText, Loader2, MessageCircle, X } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { CheckCircle, FileText, X } from "lucide-react";
 
 export function PrescriptionPreview({
   open,
-  sentTo,
-  sending,
-  onSendWhatsApp,
   onViewPrescription,
   onSkip,
   onDismiss,
@@ -21,21 +16,10 @@ export function PrescriptionPreview({
         <div className="flex items-center gap-2">
           <CheckCircle className="h-5 w-5 text-green-600" />
           <p className="text-sm font-medium text-green-800">
-            {sentTo ? `Sent to ${sentTo}` : "SOAP approved · Prescription auto-generated · Ready to send"}
+            SOAP approved · Prescription auto-generated
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          {!sentTo && (
-            <button
-              type="button"
-              className="flex cursor-pointer items-center gap-2 rounded-lg bg-[#25D366] px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:opacity-90 disabled:cursor-not-allowed"
-              onClick={onSendWhatsApp}
-              disabled={sending}
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageCircle className="h-4 w-4" />}
-              Send Prescription via WhatsApp
-            </button>
-          )}
           <button
             type="button"
             className="flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm transition-all duration-200 hover:bg-gray-50"
@@ -51,11 +35,9 @@ export function PrescriptionPreview({
           >
             Skip
           </button>
-          {sentTo && (
-            <button type="button" className="cursor-pointer rounded p-1 text-gray-500" onClick={onDismiss}>
-              <X className="h-4 w-4" />
-            </button>
-          )}
+          <button type="button" className="cursor-pointer rounded p-1 text-gray-500" onClick={onDismiss}>
+            <X className="h-4 w-4" />
+          </button>
         </div>
       </div>
     </div>

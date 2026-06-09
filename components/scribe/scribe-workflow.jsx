@@ -277,11 +277,8 @@ export function ScribeWorkflow() {
       onStartRecording={() => recording.startRecording()}
       onStopRecording={handleStopRecording}
       canApprove={footerProps.canApprove}
-      canSendWhatsApp={footerProps.canSendWhatsApp}
       approving={footerProps.approving}
-      sendingWhatsApp={footerProps.sendingWhatsApp}
       onApprove={footerProps.onApprove}
-      onSendWhatsApp={footerProps.onSendWhatsApp}
       onExport={footerProps.onExport}
       exporting={footerProps.exporting}
       onOpenVersions={footerProps.onOpenVersions}

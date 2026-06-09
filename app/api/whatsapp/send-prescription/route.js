@@ -4,7 +4,7 @@
  */
 
 import { NextResponse } from "next/server";
-import { createClient } from "@/lib/supabase/server";
+import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function POST(request) {
   try {
@@ -15,7 +15,7 @@ export async function POST(request) {
       return NextResponse.json({ error: "patientPhone is required" }, { status: 400 });
     }
 
-    const supabase = await createClient();
+    const supabase = await getSupabaseServerClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

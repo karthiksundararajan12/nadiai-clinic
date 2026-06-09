@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranscriptReview } from "../../transcript-review/hooks/use-transcript-review.js";
 import { useSOAPReview } from "../../soap-review/hooks/use-soap-review.js";
-import { SOAP_AVAILABLE_STATUSES } from "./SOAPPanel.jsx";
+import { SOAP_AVAILABLE_STATUSES } from "../lib/soap-availability.js";
 import { ConsultationClinicalLayout } from "./clinical/ConsultationClinicalLayout.jsx";
+import { TranscriptionPendingView } from "./clinical/TranscriptionPendingView.jsx";
 import { isPoorTranscription } from "../lib/transcription-quality.js";
 import { inferSoapSectionFromSegment } from "../lib/transcript-soap-link.js";
 import { exportSoapAsPdf } from "../services/scribe-export.client.js";
@@ -75,6 +76,7 @@ export function ConsultationWorkspace({
   const audioSeekRef = useRef(null);
   const autoPipelineAttemptedRef = useRef(false);
   const autoTranscribeAttemptedRef = useRef(false);
+  const parentTranscriptionRef = useRef(false);
 
   const poorTranscription = useMemo(
     () => {
@@ -103,14 +105,28 @@ export function ConsultationWorkspace({
 
   useEffect(() => {
     autoTranscribeAttemptedRef.current = false;
+    parentTranscriptionRef.current = false;
   }, [sessionId]);
 
   useEffect(() => {
-    if (readOnly || !onStartTranscription || !transcriptionPending || pipelineBusy) return;
-    if (autoTranscribeAttemptedRef.current) return;
+    if (pipelineBusy || pipelineMessage) {
+      parentTranscriptionRef.current = true;
+    }
+  }, [pipelineBusy, pipelineMessage]);
+
+  useEffect(() => {
+    if (readOnly || !onStartTranscription || !transcriptionPending || pipelineBusy || pipelineMessage) return;
+    if (autoTranscribeAttemptedRef.current || parentTranscriptionRef.current) return;
     autoTranscribeAttemptedRef.current = true;
     onStartTranscription(sessionId);
-  }, [sessionId, transcriptionPending, readOnly, onStartTranscription, pipelineBusy]);
+  }, [
+    sessionId,
+    transcriptionPending,
+    readOnly,
+    onStartTranscription,
+    pipelineBusy,
+    pipelineMessage,
+  ]);
 
   useEffect(() => {
     if (!pipelineBusy) return;
@@ -141,6 +157,10 @@ export function ConsultationWorkspace({
     );
     if (match) setActiveSegmentId(match.id);
   }, [transcript.segments]);
+
+  const handleSeekReady = useCallback((fn) => {
+    audioSeekRef.current = fn;
+  }, []);
 
   const handleApproveSOAP = useCallback(async () => {
     await soap.approve();
@@ -290,6 +310,23 @@ export function ConsultationWorkspace({
     [session, soap.note],
   );
 
+  if (waitingForTranscript) {
+    return (
+      <div className="h-full min-h-0">
+        <TranscriptionPendingView
+          patient={patient}
+          sessionDate={session?.created_at}
+          status={resolvedSessionStatus}
+          message={transcriptPipelineMessage ?? pipelineMessage ?? "Transcribing…"}
+          toolbarLeft={toolbarLeft}
+          onOpenSessions={onOpenSessions}
+          onEndSession={onEndSession}
+          pipelineLabel={pipelineMessage ?? "Transcribing…"}
+        />
+      </div>
+    );
+  }
+
   return (
     <div className="h-full min-h-0">
       <ConsultationClinicalLayout
@@ -326,7 +363,7 @@ export function ConsultationWorkspace({
           onSegmentClick: handleSegmentClick,
           onPlayFromHere: handlePlayFromHere,
           onAudioTimeUpdate: handleAudioTimeUpdate,
-          onSeekReady: (fn) => { audioSeekRef.current = fn; },
+          onSeekReady: handleSeekReady,
           poorTranscription: showDelete,
           onDelete: showDelete ? onDelete : undefined,
           deleting,

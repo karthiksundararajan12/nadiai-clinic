@@ -26,11 +26,12 @@ export function useSessionStatus(sessionId, { enabled = true, intervalMs = 2000 
     if (!sessionId || !enabled) return null;
     try {
       const data = await fetchSessionStatus(sessionId);
+      const session = data?.session ?? data;
       if (mountedRef.current) {
-        setSession(data);
+        setSession(session?.id || session?.status ? session : null);
         setError(null);
       }
-      return data;
+      return session;
     } catch (err) {
       if (mountedRef.current) setError(err);
       return null;

@@ -14,7 +14,7 @@ const STEPS = [
 function stepState(step, status) {
   if (step.doneFrom?.includes(status)) return "complete";
   if (step.actionFrom?.includes(status)) return "action";
-  if (step.from.includes(status)) return "complete";
+  if (step.from?.includes(status)) return "complete";
   return "pending";
 }
 

@@ -22,8 +22,8 @@ function isDoctor(segment) {
 
 export function ChatTranscriptPanel({
   sessionId,
-  segments,
-  dirty,
+  segments = [],
+  dirty = {},
   readOnly,
   saving,
   activeSegmentId,

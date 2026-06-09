@@ -40,7 +40,6 @@ export function ConsultationWorkspace({
   autoGenerateNote = true,
   selectedPatient,
   onSelectedPatientChange,
-  onFooterProps,
 }) {
   const statusPoll = useSessionStatus(sessionId, { enabled: Boolean(sessionId), intervalMs: 1500 });
 
@@ -370,36 +369,12 @@ export function ConsultationWorkspace({
     },
   }), [soap]);
 
-  useEffect(() => {
-    onFooterProps?.({
-      patient,
-      canApprove: canApproveSOAP && !blockingApproval,
-      approving,
-      onApprove: handleApproveSOAP,
-      onExport: handleExportSOAP,
-      exporting,
-      onOpenVersions: () => setVersionsOpen(true),
-      onOpenAudit: () => setAuditOpen(true),
-      onReject: handleRejectSOAP,
-    });
-  }, [
-    onFooterProps, patient, canApproveSOAP, blockingApproval,
-    approving, handleApproveSOAP, handleExportSOAP,
-    exporting, handleRejectSOAP,
-  ]);
-
   if (waitingForTranscript) {
     return (
       <div className="h-full min-h-0">
         <TranscriptionPendingView
-          patient={patient}
-          sessionDate={session?.created_at}
-          status={resolvedSessionStatus}
           message={transcriptPipelineMessage ?? pipelineMessage ?? "Transcribing…"}
-          toolbarLeft={toolbarLeft}
           onOpenSessions={onOpenSessions}
-          onEndSession={onEndSession}
-          pipelineLabel={pipelineMessage ?? "Transcribing…"}
         />
       </div>
     );
@@ -409,29 +384,13 @@ export function ConsultationWorkspace({
     <div className="h-full min-h-0">
       <ConsultationClinicalLayout
         sessionId={sessionId}
-        patient={patient}
-        onPatientSelect={handlePatientSelect}
-        onPatientClear={() => onSelectedPatientChange?.(null)}
         sessionDate={session?.created_at}
         status={resolvedSessionStatus}
-        summary={summary}
-        summaryHandlers={summaryHandlers}
-        metrics={metrics}
         quality={quality}
-        insights={insights}
-        icdOverride={icdOverride}
-        onIcdOverride={setIcdOverride}
-        rpmEnabled={rpmEnabled}
-        onRpmToggle={handleRpmToggle}
         evidenceMap={evidenceMap}
         readOnly={readOnly || soapApproved}
         toolbarLeft={toolbarLeft}
         onOpenSessions={onOpenSessions}
-        transcriptSegments={transcript.segments}
-        transcriptReadOnly={readOnly}
-        transcriptSaving={transcript.saving}
-        transcriptRegenerating={soap.regenerating}
-        onTranscriptRegenerate={handleRegenerateSOAP}
         onEvidenceJump={handlePlayFromHere}
         versions={soap.versions}
         onRestoreVersion={handleRestoreVersion}
@@ -440,6 +399,14 @@ export function ConsultationWorkspace({
         onVersionsOpenChange={setVersionsOpen}
         auditOpen={auditOpen}
         onAuditOpenChange={setAuditOpen}
+        canApprove={canApproveSOAP && !blockingApproval}
+        approving={approving}
+        onApprove={handleApproveSOAP}
+        onExport={handleExportSOAP}
+        exporting={exporting}
+        onOpenVersions={() => setVersionsOpen(true)}
+        onOpenAudit={() => setAuditOpen(true)}
+        onReject={handleRejectSOAP}
         approveBanner={{
           open: approveBannerOpen,
           onViewPrescription: () => window.open(`/scribe?rx=${sessionId}`, "_blank"),

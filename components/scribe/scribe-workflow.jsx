@@ -6,8 +6,8 @@ import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
 import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
-import { RecordingEngine } from "@/features/scribe/consultation-workspace/components/consultation/RecordingEngine.jsx";
-import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
+import { ScribeRecordPanel } from "@/features/scribe/consultation-workspace/components/consultation/ScribeRecordPanel.jsx";
+import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
 import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
@@ -49,12 +49,10 @@ async function fetchConsultations(bucket) {
 
 export function ScribeWorkflow() {
   const [language, setLanguage] = useState("english");
-  const [view, setView] = useState("live");
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [viewFromHistory, setViewFromHistory] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
-  const [footerProps, setFooterProps] = useState({});
 
   const [activeSessions, setActiveSessions] = useState([]);
   const [historySessions, setHistorySessions] = useState([]);
@@ -121,7 +119,6 @@ export function ScribeWorkflow() {
       if (TRANSCRIBED_STATUSES.has(status)) {
         setViewFromHistory(false);
         setActiveSessionId(sessionId);
-        setView("consultation");
         setSessionsOpen(false);
       }
       return payload;
@@ -175,7 +172,6 @@ export function ScribeWorkflow() {
       setLastRecordedSessionId(sessionId);
       setActiveSessionId(sessionId);
       setViewFromHistory(false);
-      setView("consultation");
       setPipelineMessage("Transcribing…");
 
       void logSessionEvent(sessionId, "recording_started", {}).catch(() => {});
@@ -188,7 +184,7 @@ export function ScribeWorkflow() {
       const wrapped = err instanceof Error ? err : new Error(String(err));
       if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
       setUploadError(wrapped);
-      setView("live");
+      setActiveSessionId(null);
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
@@ -210,18 +206,15 @@ export function ScribeWorkflow() {
   }, [pipelineBusy, recording.isRecording, recording.isPaused]);
 
   const goLive = useCallback(() => {
-    setView("live");
     setActiveSessionId(null);
     setViewFromHistory(false);
     setUploadError(null);
     setSessionsOpen(false);
-    setFooterProps({});
   }, []);
 
   const openSession = useCallback((sessionId, fromHistory = false) => {
     setViewFromHistory(fromHistory);
     setActiveSessionId(sessionId);
-    setView("consultation");
     setSessionsOpen(false);
   }, []);
 
@@ -270,74 +263,69 @@ export function ScribeWorkflow() {
     />
   );
 
-  const recordingEngine = (
-    <RecordingEngine
-      patient={footerProps.patient ?? selectedPatient}
-      recordState={recordState}
-      onStartRecording={() => recording.startRecording()}
-      onStopRecording={handleStopRecording}
-      canApprove={footerProps.canApprove}
-      approving={footerProps.approving}
-      onApprove={footerProps.onApprove}
-      onExport={footerProps.onExport}
-      exporting={footerProps.exporting}
-      onOpenVersions={footerProps.onOpenVersions}
-      onOpenAudit={footerProps.onOpenAudit}
-      onReject={footerProps.onReject}
+  const recordPanelFooter = (
+    <div className="space-y-3">
+      {languageToggle}
+      <Button
+        variant="outline"
+        size="sm"
+        className="w-full cursor-pointer"
+        onClick={() => setSessionsOpen(true)}
+      >
+        View past sessions
+      </Button>
+    </div>
+  );
+
+  const rightPanel = activeSessionId ? (
+    <ConsultationWorkspace
+      key={activeSessionId}
+      sessionId={activeSessionId}
+      onApproved={handleSOAPApproved}
+      onEndSession={goLive}
+      onOpenSessions={() => setSessionsOpen(true)}
+      readOnly={viewFromHistory}
+      pipelineBusy={pipelineBusy}
+      pipelineMessage={pipelineMessage}
+      onTranscriptionComplete={() => {
+        setPipelineBusy(false);
+        setPipelineMessage(null);
+      }}
+      onStartTranscription={runTranscription}
+      autoGenerateNote={!viewFromHistory}
+      onDelete={() => deleteSession(activeSessionId)}
+      deleting={busySessionId === activeSessionId}
+      selectedPatient={selectedPatient}
+      onSelectedPatientChange={setSelectedPatient}
+    />
+  ) : (
+    <ScribeSoapPlaceholder
+      processing={pipelineBusy}
+      message={pipelineMessage ?? "Processing…"}
     />
   );
 
-  if (view === "consultation" && activeSessionId) {
-    return (
-      <div className="relative h-full min-h-0">
-        <ConsultationWorkspace
-          key={activeSessionId}
-          sessionId={activeSessionId}
-          onApproved={handleSOAPApproved}
-          onEndSession={goLive}
-          onOpenSessions={() => setSessionsOpen(true)}
-          toolbarLeft={languageToggle}
-          readOnly={viewFromHistory}
-          pipelineBusy={pipelineBusy}
-          pipelineMessage={pipelineMessage}
-          onTranscriptionComplete={() => {
-            setPipelineBusy(false);
-            setPipelineMessage(null);
-          }}
-          onStartTranscription={runTranscription}
-          autoGenerateNote={!viewFromHistory}
-          onDelete={() => deleteSession(activeSessionId)}
-          deleting={busySessionId === activeSessionId}
-          selectedPatient={selectedPatient}
-          onSelectedPatientChange={setSelectedPatient}
-          onFooterProps={setFooterProps}
-        />
-        {sessionsDrawer}
-        {recordingEngine}
-      </div>
-    );
-  }
-
   return (
-    <div className="relative flex h-full min-h-0 flex-col pb-[72px]" data-testid="scribe-workflow">
-      <PatientSelector
-        patient={selectedPatient}
-        onSelect={setSelectedPatient}
-        onClear={() => setSelectedPatient(null)}
+    <div
+      className="relative flex h-full min-h-0 flex-col md:flex-row"
+      data-testid="scribe-workflow"
+    >
+      <ScribeRecordPanel
+        recordState={recordState}
+        durationLabel={recording.formattedDuration}
+        statusMessage={pipelineMessage}
+        disabled={Boolean(activeSessionId)}
+        onStart={() => recording.startRecording()}
+        onStop={handleStopRecording}
+        footer={recordPanelFooter}
       />
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
-        <h2 className="text-lg font-semibold text-gray-900">AI Medical Scribe</h2>
-        <p className="max-w-md text-sm text-gray-600">
-          Select a patient, then press <strong>Start Recording</strong> in the action bar below to begin the consultation.
-        </p>
-        {languageToggle}
-        <Button variant="outline" size="sm" className="cursor-pointer" onClick={() => setSessionsOpen(true)}>
-          View past sessions
-        </Button>
-      </div>
+
+      <main className="min-h-0 min-w-0 flex-1">
+        {rightPanel}
+      </main>
 
       {uploadError && (
-        <div className="absolute bottom-20 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4">
+        <div className="absolute bottom-4 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4 md:left-[calc(140px+50%)]">
           <UploadErrorBanner
             error={uploadError}
             onDismiss={() => setUploadError(null)}
@@ -354,7 +342,6 @@ export function ScribeWorkflow() {
       )}
 
       {sessionsDrawer}
-      {recordingEngine}
     </div>
   );
 }
@@ -364,7 +351,7 @@ function UploadErrorBanner({ error, onDismiss, onRelease }) {
     /already active/i.test(error?.message ?? "");
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center space-y-2">
+    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center space-y-2 shadow-lg">
       <p className="text-[13px] text-red-600">{error.message}</p>
       <div className="flex justify-center gap-2">
         {isBlocked && (

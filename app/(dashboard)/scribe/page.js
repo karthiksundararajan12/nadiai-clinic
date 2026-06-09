@@ -51,7 +51,7 @@ export default function ScribePage() {
 
   return (
     <>
-      <Header title="AI Scribe" subtitle="Voice consultation & clinical notes" />
+      <Header title="AI Scribe" subtitle="Record on the left · SOAP note on the right" />
       <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden">
         <ScribeWorkflow />
       </div>

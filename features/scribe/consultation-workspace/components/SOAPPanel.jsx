@@ -43,21 +43,37 @@ export { SOAP_AVAILABLE_STATUSES };
 export function SOAPEmptyPanel({ generating, error, onRetry }) {
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 py-10 text-center">
         {error ? (
           <>
-            <p className="text-sm text-rose-600">{error.message}</p>
+            <div className="rounded-full bg-destructive/10 p-3">
+              <XCircle className="h-8 w-8 text-destructive" />
+            </div>
+            <p className="text-sm text-destructive font-medium">{error.message}</p>
             {onRetry && (
-              <Button variant="outline" size="sm" onClick={onRetry}>Retry</Button>
+              <Button variant="default" size="sm" onClick={onRetry} className="mt-2">
+                <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                Try Again
+              </Button>
             )}
           </>
         ) : generating ? (
           <>
-            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
-            <p className="text-sm text-slate-600">Generating SOAP note…</p>
+            <div className="rounded-full bg-primary/10 p-3">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-foreground">Generating SOAP note</p>
+              <p className="text-xs text-muted-foreground mt-1">Analyzing transcript and generating clinical documentation…</p>
+            </div>
           </>
         ) : (
-          <p className="text-sm text-slate-500">SOAP note will generate after recording.</p>
+          <>
+            <div className="rounded-full bg-muted p-3">
+              <span className="text-2xl">📋</span>
+            </div>
+            <p className="text-sm text-muted-foreground">SOAP note will generate after recording and transcript review.</p>
+          </>
         )}
       </div>
     </div>

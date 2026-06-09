@@ -35,6 +35,7 @@ import {
   resolveClinicalSpeaker,
 } from "../../lib/speaker-diarization.js";
 import { createLogger }             from "../../logger.js";
+import { correctMedicalTerms } from "../medical-term-processor.js";
 
 const DEEPGRAM_API_URL = "https://api.deepgram.com/v1/listen";
 const log = createLogger({ component: "DeepgramProvider" });
@@ -183,13 +184,15 @@ export class DeepgramProvider extends TranscriptionProvider {
     let segments = utterances.map((utt, index) => {
       const role       = resolveClinicalSpeaker(utt.speaker, appearanceMap);
       const confidence = clamp(utt.confidence ?? 0.9);
+      const rawText = String(utt.transcript ?? "").trim();
+      const correctedText = correctMedicalTerms(rawText);
 
       return {
         id:                String(utt.id ?? index),
         index,
         start:             roundSeconds(utt.start ?? 0),
         end:               roundSeconds(utt.end   ?? 0),
-        text:              String(utt.transcript  ?? "").trim(),
+        text:              correctedText,
         speaker:           role.key,
         speaker_label:     role.label,
         confidence,
@@ -199,6 +202,7 @@ export class DeepgramProvider extends TranscriptionProvider {
           channel:          utt.channel ?? 0,
           word_count:       utt.words?.length ?? 0,
           source:           "utterance",
+          original_text:    rawText !== correctedText ? rawText : null,
         },
       };
     });

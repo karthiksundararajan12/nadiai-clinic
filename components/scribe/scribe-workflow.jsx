@@ -320,7 +320,7 @@ export function ScribeWorkflow() {
         footer={recordPanelFooter}
       />
 
-      <main className="min-h-0 min-w-0 flex-1">
+      <main className="min-h-0 min-w-0 flex-1 basis-0">
         {rightPanel}
       </main>
 

@@ -22,7 +22,7 @@ export function ScribeRecordPanel({
   };
 
   return (
-    <aside className="flex h-full w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[280px]">
+    <aside className="flex h-full min-w-0 flex-1 basis-0 flex-col border-r border-gray-200 bg-gray-50">
       <div className="flex flex-1 flex-col items-center justify-center gap-5 px-6 py-8">
         <button
           type="button"

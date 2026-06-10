@@ -11,6 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatClinicalDateTime } from "../../lib/format-datetime.js";
 import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
 import { PrescriptionPreview, ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
@@ -68,14 +69,9 @@ export function ConsultationClinicalLayout({
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">SOAP Note</h2>
-            {sessionDate && (
+            {formatClinicalDateTime(sessionDate) && (
               <p className="text-xs text-gray-500">
-                {new Date(sessionDate).toLocaleString(undefined, {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                Generated {formatClinicalDateTime(sessionDate)}
               </p>
             )}
           </div>

@@ -10,20 +10,50 @@ export async function exportSoapAsPdf(sessionId) {
   }
 
   const html = await res.text();
-  const printWindow = window.open("", "_blank", "noopener,noreferrer,width=800,height=900");
-  if (!printWindow) {
-    throw new Error("Pop-up blocked. Allow pop-ups to export PDF.");
-  }
-
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-
-  printWindow.onload = () => {
-    printWindow.print();
-  };
-
+  await printHtmlDocument(html);
   return { sessionId };
+}
+
+function printHtmlDocument(html) {
+  return new Promise((resolve, reject) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("title", "SOAP export");
+    iframe.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;";
+    document.body.appendChild(iframe);
+
+    const frameWindow = iframe.contentWindow;
+    const frameDoc = frameWindow?.document;
+    if (!frameWindow || !frameDoc) {
+      document.body.removeChild(iframe);
+      reject(new Error("Could not open print preview."));
+      return;
+    }
+
+    const cleanup = () => {
+      setTimeout(() => {
+        if (iframe.parentNode) document.body.removeChild(iframe);
+      }, 1000);
+    };
+
+    frameWindow.onafterprint = () => {
+      cleanup();
+      resolve();
+    };
+
+    frameDoc.open();
+    frameDoc.write(html);
+    frameDoc.close();
+
+    setTimeout(() => {
+      try {
+        frameWindow.focus();
+        frameWindow.print();
+      } catch (err) {
+        cleanup();
+        reject(err instanceof Error ? err : new Error(String(err)));
+      }
+    }, 400);
+  });
 }
 
 export async function logSessionEvent(sessionId, action, metadata = {}) {

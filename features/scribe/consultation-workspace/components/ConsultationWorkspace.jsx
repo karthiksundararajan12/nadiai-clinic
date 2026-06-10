@@ -23,6 +23,7 @@ import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
 import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
+import { resolveSoapDisplayDate } from "../lib/format-datetime.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -40,6 +41,7 @@ export function ConsultationWorkspace({
   autoGenerateNote = true,
   selectedPatient,
   onSelectedPatientChange,
+  onWorkspaceStateChange,
 }) {
   const statusPoll = useSessionStatus(sessionId, { enabled: Boolean(sessionId), intervalMs: 1500 });
 
@@ -245,10 +247,24 @@ export function ConsultationWorkspace({
     setExporting(true);
     try {
       await exportSoapAsPdf(sessionId);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Export failed");
     } finally {
       setExporting(false);
     }
   }, [sessionId]);
+
+  const soapDisplayDate = useMemo(
+    () => resolveSoapDisplayDate({ note: soap.note, session }),
+    [soap.note, session],
+  );
+
+  const sessionComplete =
+    soapApproved ||
+    resolvedSessionStatus === "SOAP_APPROVED" ||
+    resolvedSessionStatus === "COMPLETED" ||
+    resolvedSessionStatus === "READY_FOR_PRESCRIPTION" ||
+    resolvedSessionStatus === "PRESCRIPTION_APPROVED";
 
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
@@ -313,6 +329,25 @@ export function ConsultationWorkspace({
       : transcript.loading && !transcript.segments.length
         ? "Loading transcript…"
         : null;
+
+  useEffect(() => {
+    onWorkspaceStateChange?.({
+      segments: waitingForTranscript ? [] : transcript.segments,
+      transcriptLoading: waitingForTranscript || (transcript.loading && !transcript.segments.length),
+      transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
+      sessionComplete,
+      status: resolvedSessionStatus,
+    });
+  }, [
+    onWorkspaceStateChange,
+    transcript.segments,
+    waitingForTranscript,
+    transcript.loading,
+    transcriptPipelineMessage,
+    pipelineMessage,
+    sessionComplete,
+    resolvedSessionStatus,
+  ]);
 
   const transcriptLoadError = waitingForTranscript ? null : transcript.error;
 
@@ -384,7 +419,7 @@ export function ConsultationWorkspace({
     <div className="h-full min-h-0">
       <ConsultationClinicalLayout
         sessionId={sessionId}
-        sessionDate={session?.created_at}
+        sessionDate={soapDisplayDate}
         status={resolvedSessionStatus}
         quality={quality}
         evidenceMap={evidenceMap}

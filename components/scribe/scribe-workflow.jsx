@@ -65,6 +65,12 @@ export function ScribeWorkflow() {
   const [uploadError, setUploadError] = useState(null);
   const [busySessionId, setBusySessionId] = useState(null);
   const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
+  const [workspaceState, setWorkspaceState] = useState({
+    segments: [],
+    transcriptLoading: false,
+    transcriptLoadingMessage: null,
+    sessionComplete: false,
+  });
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -210,7 +216,14 @@ export function ScribeWorkflow() {
     setViewFromHistory(false);
     setUploadError(null);
     setSessionsOpen(false);
-  }, []);
+    setWorkspaceState({
+      segments: [],
+      transcriptLoading: false,
+      transcriptLoadingMessage: null,
+      sessionComplete: false,
+    });
+    recording.resetRecording?.();
+  }, [recording.resetRecording]);
 
   const openSession = useCallback((sessionId, fromHistory = false) => {
     setViewFromHistory(fromHistory);
@@ -297,6 +310,7 @@ export function ScribeWorkflow() {
       deleting={busySessionId === activeSessionId}
       selectedPatient={selectedPatient}
       onSelectedPatientChange={setSelectedPatient}
+      onWorkspaceStateChange={setWorkspaceState}
     />
   ) : (
     <ScribeSoapPlaceholder
@@ -315,12 +329,18 @@ export function ScribeWorkflow() {
         durationLabel={recording.formattedDuration}
         statusMessage={pipelineMessage}
         disabled={Boolean(activeSessionId)}
+        analyserNode={recording.analyserNode}
+        transcriptSegments={workspaceState.segments}
+        transcriptLoading={workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId))}
+        transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
+        canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}
         onStart={() => recording.startRecording()}
         onStop={handleStopRecording}
+        onNewSession={goLive}
         footer={recordPanelFooter}
       />
 
-      <main className="min-h-0 min-w-0 flex-1 basis-0">
+      <main className="min-h-0 min-w-0 w-full md:w-[60%]">
         {rightPanel}
       </main>
 

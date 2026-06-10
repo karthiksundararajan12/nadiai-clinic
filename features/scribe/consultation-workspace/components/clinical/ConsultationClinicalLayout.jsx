@@ -17,6 +17,10 @@ import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
 import { ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
 import { AuditTrailDrawer } from "./AuditTrailDrawer.jsx";
+import { SoapReviewModal } from "./SoapReviewModal.jsx";
+import { SoapFeedbackModal } from "./SoapFeedbackModal.jsx";
+import { SoapManualEditBar } from "./SoapManualEditBar.jsx";
+import { SoapRegeneratingOverlay } from "./SoapRegeneratingOverlay.jsx";
 
 export function ConsultationClinicalLayout({
   sessionId,
@@ -45,7 +49,20 @@ export function ConsultationClinicalLayout({
   exporting,
   onOpenVersions,
   onOpenAudit,
-  onReject,
+  onOpenSoapReview,
+  reviewModalOpen,
+  onReviewModalOpenChange,
+  onRegenerateFromReview,
+  onEditManuallyFromReview,
+  manualEditMode,
+  onSaveManualEdits,
+  onCancelManualEdit,
+  feedbackModalOpen,
+  onFeedbackModalOpenChange,
+  onSubmitFeedback,
+  feedbackSubmitting,
+  soapNoteStatus,
+  soapDoctorEditedAt,
   canGeneratePrescription,
   generatingPrescription,
   onGeneratePrescription,
@@ -91,6 +108,21 @@ export function ConsultationClinicalLayout({
         </div>
         <div className="flex items-center gap-2">
           <ApprovedStatusBadge approved={approved} />
+          {soapNoteStatus === "edited" && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+              Edited by Doctor
+              {soapDoctorEditedAt && (
+                <span className="ml-1 font-normal text-amber-700">
+                  · {new Date(soapDoctorEditedAt).toLocaleString()}
+                </span>
+              )}
+            </span>
+          )}
+          {soapNoteStatus === "regenerated" && !approved && (
+            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+              Regenerated
+            </span>
+          )}
           {canApprove && (
             <button
               type="button"
@@ -161,8 +193,7 @@ export function ConsultationClinicalLayout({
                       destructive
                       onClick={() => {
                         setMenuOpen(false);
-                        const reason = window.prompt("Reason for rejecting this SOAP note:");
-                        if (reason?.trim()) onReject?.(reason.trim());
+                        onOpenSoapReview?.();
                       }}
                       testId="soap-reject"
                     />
@@ -174,12 +205,20 @@ export function ConsultationClinicalLayout({
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="relative min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+        <SoapRegeneratingOverlay visible={soapProps.panel?.regenerating} />
         <div className="mx-auto max-w-3xl">
+          {manualEditMode && (
+            <SoapManualEditBar
+              saving={soapProps.panel?.saving}
+              onSave={onSaveManualEdits}
+              onCancel={onCancelManualEdit}
+            />
+          )}
           {soapProps.ready ? (
             <SOAPEditor
               {...soapProps.panel}
-              quality={approved ? null : quality}
+              quality={approved || manualEditMode ? null : quality}
               evidenceMap={evidenceMap}
               onEvidenceJump={handleEvidenceJump}
               onRegenerate={soapProps.panel.onRegenerate}
@@ -189,6 +228,19 @@ export function ConsultationClinicalLayout({
           )}
         </div>
       </div>
+
+      <SoapReviewModal
+        open={reviewModalOpen}
+        onOpenChange={onReviewModalOpenChange}
+        onRegenerate={onRegenerateFromReview}
+        onEditManually={onEditManuallyFromReview}
+      />
+      <SoapFeedbackModal
+        open={feedbackModalOpen}
+        onOpenChange={onFeedbackModalOpenChange}
+        onSubmit={onSubmitFeedback}
+        submitting={feedbackSubmitting}
+      />
 
       <VersionHistoryDrawer
         open={versionsOpen}

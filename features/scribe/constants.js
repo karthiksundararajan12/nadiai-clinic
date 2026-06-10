@@ -282,7 +282,47 @@ export const SOAP_NOTE_STATUS = Object.freeze({
   REVIEWING:        "reviewing",
   APPROVED:         "approved",
   REJECTED:         "rejected",
+  REGENERATED:      "regenerated",
+  EDITED:           "edited",
   FAILED:           "failed",
+});
+
+/** Optional doctor feedback after SOAP review actions. */
+export const SOAP_FEEDBACK_REASONS = Object.freeze([
+  "missing_information",
+  "incorrect_symptoms",
+  "incorrect_diagnosis",
+  "incorrect_assessment",
+  "incorrect_plan",
+  "too_short",
+  "too_detailed",
+  "formatting_issues",
+  "hallucinated_information",
+  "other",
+]);
+
+export const SOAP_FEEDBACK_REASON_LABELS = Object.freeze({
+  missing_information: "Missing Information",
+  incorrect_symptoms: "Incorrect Symptoms",
+  incorrect_diagnosis: "Incorrect Diagnosis",
+  incorrect_assessment: "Incorrect Assessment",
+  incorrect_plan: "Incorrect Plan",
+  too_short: "Too Short",
+  too_detailed: "Too Detailed",
+  formatting_issues: "Formatting Issues",
+  hallucinated_information: "Hallucinated Information",
+  other: "Other",
+});
+
+export const SOAP_VERSION_SOURCE_LABELS = Object.freeze({
+  ai_generated: "Original",
+  pre_regeneration: "Archived",
+  regenerated: "Regenerated",
+  doctor_edited: "Edited by Doctor",
+  manual_save: "Manual Save",
+  autosave: "Autosave",
+  approved: "Approved",
+  rejected: "Rejected",
 });
 
 export const SOAP_SECTION = Object.freeze({
@@ -379,6 +419,8 @@ export const AUDIT_ACTION = Object.freeze({
   SOAP_MANUAL_SAVE:          "soap_manual_save",
   SOAP_APPROVED:             "soap_approved",
   SOAP_REJECTED:             "soap_rejected",
+  SOAP_DOCTOR_EDITED:        "soap_doctor_edited",
+  SOAP_REVIEW_FEEDBACK:      "soap_review_feedback",
   PRESCRIPTION_GENERATION_STARTED:  "prescription_generation_started",
   PRESCRIPTION_GENERATED:           "prescription_generated",
   PRESCRIPTION_GENERATION_FAILED:   "prescription_generation_failed",

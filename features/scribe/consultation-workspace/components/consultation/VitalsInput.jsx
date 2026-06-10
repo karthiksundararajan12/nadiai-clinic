@@ -1,12 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const EMPTY = { bpSys: "", bpDia: "", hr: "", temp: "", spo2: "", weight: "" };
 
+function normalizeVitalPart(part) {
+  const t = String(part ?? "")
+    .trim()
+    .replace(/\s*mmHg.*$/i, "")
+    .trim();
+  if (!t || t === "—" || t === "-" || t === "–") return "";
+  return t;
+}
+
 export function formatVitalsString(vitals) {
   const parts = [];
-  if (vitals.bpSys || vitals.bpDia) parts.push(`BP: ${vitals.bpSys || "—"}/${vitals.bpDia || "—"} mmHg`);
+  if (vitals.bpSys || vitals.bpDia) {
+    parts.push(`BP: ${vitals.bpSys || "—"}/${vitals.bpDia || "—"} mmHg`);
+  }
   if (vitals.hr) parts.push(`HR: ${vitals.hr} bpm`);
   if (vitals.temp) parts.push(`Temp: ${vitals.temp} °F`);
   if (vitals.spo2) parts.push(`SpO2: ${vitals.spo2}%`);
@@ -18,8 +29,13 @@ export function parseVitalsFromObjective(text = "") {
   const line = String(text).split("\n").find((l) => l.startsWith("Vitals:"));
   if (!line) return { ...EMPTY };
   const vitals = { ...EMPTY };
-  const bp = line.match(/BP:\s*(\d+)\/(\d+)/);
-  if (bp) { vitals.bpSys = bp[1]; vitals.bpDia = bp[2]; }
+
+  const bp = line.match(/BP:\s*([^/|]+)\/([^|]+)/);
+  if (bp) {
+    vitals.bpSys = normalizeVitalPart(bp[1]);
+    vitals.bpDia = normalizeVitalPart(bp[2]);
+  }
+
   const hr = line.match(/HR:\s*(\d+)/);
   if (hr) vitals.hr = hr[1];
   const temp = line.match(/Temp:\s*([\d.]+)/);
@@ -39,6 +55,13 @@ export function stripVitalsFromObjective(text = "") {
     .trim();
 }
 
+export function buildObjectiveWithVitals(vitals, objectiveText = "") {
+  const formatted = formatVitalsString(vitals);
+  const body = stripVitalsFromObjective(objectiveText);
+  if (!formatted) return body;
+  return body ? `Vitals: ${formatted}\n\n${body}` : `Vitals: ${formatted}`;
+}
+
 function Field({ label, children }) {
   return (
     <div className="min-w-0 flex-1">
@@ -53,19 +76,20 @@ const inputCls =
 
 export function VitalsInput({ value, onChange, disabled }) {
   const [vitals, setVitals] = useState(() => parseVitalsFromObjective(value));
+  const lastEmittedRef = useRef(value ?? "");
 
   useEffect(() => {
-    setVitals(parseVitalsFromObjective(value));
+    const external = value ?? "";
+    if (external === lastEmittedRef.current) return;
+    setVitals(parseVitalsFromObjective(external));
+    lastEmittedRef.current = external;
   }, [value]);
 
   const update = (patch) => {
     const next = { ...vitals, ...patch };
     setVitals(next);
-    const formatted = formatVitalsString(next);
-    const body = stripVitalsFromObjective(value);
-    const combined = formatted
-      ? `Vitals: ${formatted}${body ? `\n\n${body}` : ""}`
-      : body;
+    const combined = buildObjectiveWithVitals(next, value);
+    lastEmittedRef.current = combined;
     onChange?.(combined);
   };
 
@@ -80,7 +104,7 @@ export function VitalsInput({ value, onChange, disabled }) {
             placeholder="120"
             value={vitals.bpSys}
             disabled={disabled}
-            onChange={(e) => update({ bpSys: e.target.value })}
+            onChange={(e) => update({ bpSys: e.target.value.replace(/[^\d]/g, "") })}
           />
           <span className="text-gray-400">/</span>
           <input
@@ -90,21 +114,49 @@ export function VitalsInput({ value, onChange, disabled }) {
             placeholder="80"
             value={vitals.bpDia}
             disabled={disabled}
-            onChange={(e) => update({ bpDia: e.target.value })}
+            onChange={(e) => update({ bpDia: e.target.value.replace(/[^\d]/g, "") })}
           />
         </div>
       </Field>
       <Field label="HR (bpm)">
-        <input type="text" inputMode="numeric" className={inputCls} value={vitals.hr} disabled={disabled} onChange={(e) => update({ hr: e.target.value })} />
+        <input
+          type="text"
+          inputMode="numeric"
+          className={inputCls}
+          value={vitals.hr}
+          disabled={disabled}
+          onChange={(e) => update({ hr: e.target.value.replace(/[^\d]/g, "") })}
+        />
       </Field>
       <Field label="Temp (°F)">
-        <input type="text" inputMode="decimal" className={inputCls} value={vitals.temp} disabled={disabled} onChange={(e) => update({ temp: e.target.value })} />
+        <input
+          type="text"
+          inputMode="decimal"
+          className={inputCls}
+          value={vitals.temp}
+          disabled={disabled}
+          onChange={(e) => update({ temp: e.target.value.replace(/[^\d.]/g, "") })}
+        />
       </Field>
       <Field label="SpO2 (%)">
-        <input type="text" inputMode="numeric" className={inputCls} value={vitals.spo2} disabled={disabled} onChange={(e) => update({ spo2: e.target.value })} />
+        <input
+          type="text"
+          inputMode="numeric"
+          className={inputCls}
+          value={vitals.spo2}
+          disabled={disabled}
+          onChange={(e) => update({ spo2: e.target.value.replace(/[^\d]/g, "") })}
+        />
       </Field>
       <Field label="Weight (kg)">
-        <input type="text" inputMode="decimal" className={inputCls} value={vitals.weight} disabled={disabled} onChange={(e) => update({ weight: e.target.value })} />
+        <input
+          type="text"
+          inputMode="decimal"
+          className={inputCls}
+          value={vitals.weight}
+          disabled={disabled}
+          onChange={(e) => update({ weight: e.target.value.replace(/[^\d.]/g, "") })}
+        />
       </Field>
     </div>
   );

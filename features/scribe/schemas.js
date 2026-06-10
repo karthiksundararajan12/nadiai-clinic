@@ -386,7 +386,7 @@ export const UpdateSOAPSectionSchema = z.object({
 /** @typedef {z.infer<typeof UpdateSOAPSectionSchema>} UpdateSOAPSectionInput */
 
 export const SaveSOAPVersionSchema = z.object({
-  source: z.enum(["autosave", "manual_save"]).default("manual_save"),
+  source: z.enum(["autosave", "manual_save", "doctor_edited"]).default("manual_save"),
   label: z.string().min(1).max(120).optional(),
 });
 
@@ -406,10 +406,43 @@ export const ApproveSOAPNoteSchema = z.object({
 /** @typedef {z.infer<typeof ApproveSOAPNoteSchema>} ApproveSOAPNoteInput */
 
 export const RejectSOAPNoteSchema = z.object({
-  reason: z.string().min(1).max(1000),
+  reason: z.string().min(1).max(1000).optional(),
+  action: z.enum(["regenerated", "manual_edit", "rejected"]).optional(),
 });
 
 /** @typedef {z.infer<typeof RejectSOAPNoteSchema>} RejectSOAPNoteInput */
+
+export const SaveDoctorSOAPEditsSchema = z.object({
+  subjective: z.string().max(6000).optional(),
+  objective: z.string().max(6000).optional(),
+  assessment: z.string().max(6000).optional(),
+  plan: z.string().max(6000).optional(),
+  chiefComplaint: z.string().max(6000).optional(),
+  historyOfPresentIllness: z.string().max(6000).optional(),
+  clinicalSummary: z.string().max(6000).optional(),
+});
+
+/** @typedef {z.infer<typeof SaveDoctorSOAPEditsSchema>} SaveDoctorSOAPEditsInput */
+
+export const SubmitSOAPReviewFeedbackSchema = z.object({
+  review_action: z.enum(["regenerated", "manual_edit", "rejected"]),
+  feedback_reasons: z.array(z.enum([
+    "missing_information",
+    "incorrect_symptoms",
+    "incorrect_diagnosis",
+    "incorrect_assessment",
+    "incorrect_plan",
+    "too_short",
+    "too_detailed",
+    "formatting_issues",
+    "hallucinated_information",
+    "other",
+  ])).optional().default([]),
+  other_reason: z.string().max(1000).optional(),
+  soap_version_id: z.string().uuid().optional(),
+});
+
+/** @typedef {z.infer<typeof SubmitSOAPReviewFeedbackSchema>} SubmitSOAPReviewFeedbackInput */
 
 export const RestoreSOAPVersionSchema = z.object({
   version_id: uuid,

@@ -29,7 +29,7 @@ export function ScribeConversationChat({
 
   if (loading) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 px-4 py-6 text-center">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-6 text-center">
         <Loader2 className="h-6 w-6 animate-spin text-cyan-600" />
         <p className="text-xs text-gray-500">{loadingMessage ?? "Processing conversation…"}</p>
       </div>
@@ -38,7 +38,7 @@ export function ScribeConversationChat({
 
   if (!segments.length) {
     return (
-      <div className="flex flex-1 items-center justify-center px-4 py-6 text-center">
+      <div className="flex flex-1 items-center justify-center bg-white px-4 py-6 text-center">
         <p className="text-xs text-gray-400">
           Conversation will appear here after transcription.
         </p>
@@ -47,7 +47,7 @@ export function ScribeConversationChat({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto bg-[#e5ddd5] px-3 py-3" data-testid="transcript-review-workspace">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-white px-3 py-3" data-testid="transcript-review-workspace">
       <div className="space-y-2">
         {segments.map((segment) => {
           const doctor = isDoctor(segment);
@@ -71,8 +71,8 @@ export function ScribeConversationChat({
                   className={cn(
                     "relative rounded-lg px-3 py-2 text-xs leading-relaxed shadow-sm",
                     doctor
-                      ? "rounded-tr-none bg-[#dcf8c6] text-gray-900"
-                      : "rounded-tl-none bg-white text-gray-900",
+                      ? "rounded-tr-none bg-cyan-50 text-gray-900"
+                      : "rounded-tl-none border border-gray-200 bg-gray-50 text-gray-900",
                   )}
                 >
                   <p className="whitespace-pre-wrap">{segment.text}</p>

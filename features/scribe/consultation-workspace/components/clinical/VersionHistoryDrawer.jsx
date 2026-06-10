@@ -3,6 +3,7 @@
 import { GitCompare, History, RotateCcw, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { resolveSoapVersionLabel } from "../../lib/soap-version-labels.js";
 
 export function VersionHistoryDrawer({
   open,
@@ -64,16 +65,13 @@ export function VersionHistoryDrawer({
                   <div className="flex items-start justify-between gap-2">
                     <div>
                       <p className="text-sm font-semibold text-slate-900">
-                        Version {version.version_number}
+                        {resolveSoapVersionLabel(version)}
                         {version.is_approved_version && (
                           <span className="ml-2 text-xs font-normal text-emerald-700">Approved</span>
                         )}
                       </p>
                       <p className="text-xs text-slate-500">
                         {new Date(version.created_at).toLocaleString()}
-                      </p>
-                      <p className="text-xs text-slate-400 capitalize">
-                        {version.source?.replace(/_/g, " ") ?? "ai generated"}
                       </p>
                     </div>
                   </div>

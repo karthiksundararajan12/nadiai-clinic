@@ -97,6 +97,19 @@ export class SOAPGenerationService {
       }
     }
 
+    const existingNote = await this._soap.getNoteBySession(sessionId);
+    let archivedVersion = null;
+    if (input.force && existingNote?.note && Object.keys(existingNote.note).length > 0) {
+      const versions = await this._soap.getVersions(sessionId);
+      const latest = versions?.[0];
+      const differsFromLatest =
+        !latest ||
+        JSON.stringify(latest.note ?? {}) !== JSON.stringify(existingNote.note ?? {});
+      if (differsFromLatest) {
+        archivedVersion = await this._archiveNoteBeforeRegeneration(existingNote, ctx);
+      }
+    }
+
     const recoveryStatus = context.session.status === SESSION_STATUS.SOAP_READY
       ? SESSION_STATUS.SOAP_REVIEW_REQUIRED
       : context.session.status;
@@ -128,6 +141,10 @@ export class SOAPGenerationService {
       const noteObject = parseAndValidateSOAP(generated.text);
       const generatedAt = new Date().toISOString();
 
+      const noteStatus = input.force
+        ? SOAP_NOTE_STATUS.REGENERATED
+        : SOAP_NOTE_STATUS.REVIEW_REQUIRED;
+
       const note = await this._soap.upsertNote({
         session_id: sessionId,
         transcript_version_id: transcriptVersion.id,
@@ -135,8 +152,10 @@ export class SOAPGenerationService {
         doctor_id: ctx.doctorId,
         patient_id: context.session.patient_id,
         appointment_id: context.session.appointment_id,
-        status: SOAP_NOTE_STATUS.REVIEW_REQUIRED,
+        status: noteStatus,
         note: noteObject,
+        original_note: existingNote?.original_note ?? existingNote?.note ?? noteObject,
+        edited_note: null,
         subjective: noteObject.subjective,
         objective: noteObject.objective,
         assessment: noteObject.assessment,
@@ -158,7 +177,8 @@ export class SOAPGenerationService {
         generated_at: generatedAt,
       });
 
-      const version = await this._createVersion(note, transcriptVersion, ctx, generated);
+      const versionSource = input.force ? "regenerated" : "ai_generated";
+      const version = await this._createVersion(note, transcriptVersion, ctx, generated, versionSource);
 
       await this._sessions.transitionStatus(
         sessionId,
@@ -189,7 +209,7 @@ export class SOAPGenerationService {
         },
       });
 
-      return { note, version, reused: false };
+      return { note, version, archivedVersion, reused: false };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this._soap.upsertNote({
@@ -270,8 +290,53 @@ export class SOAPGenerationService {
     throw lastError ?? new SOAPGenerationError("SOAP generation failed");
   }
 
-  async _createVersion(note, transcriptVersion, ctx, generated) {
+  async _archiveNoteBeforeRegeneration(note, ctx) {
     const versionNumber = await this._soap.getNextVersionNumber(note.id);
+    const version = await this._soap.createVersion({
+      soap_note_id: note.id,
+      session_id: note.session_id,
+      transcript_version_id: note.transcript_version_id,
+      clinic_id: ctx.clinicId,
+      doctor_id: ctx.doctorId,
+      version_number: versionNumber,
+      note: note.note,
+      provider: note.provider,
+      model: note.model,
+      prompt_version: note.prompt_version,
+      input_hash: note.input_hash,
+      generation_metadata: {
+        ...(note.generation_metadata ?? {}),
+        archivedBeforeRegeneration: true,
+      },
+      source: "pre_regeneration",
+      diff_metadata: {
+        label: versionNumber === 1 ? "Original" : `Version ${versionNumber}`,
+      },
+      created_by: ctx.actorId,
+    });
+
+    await this._audit.log({
+      action: AUDIT_ACTION.SOAP_VERSION_CREATED,
+      sessionId: note.session_id,
+      ctx,
+      metadata: {
+        soapNoteId: note.id,
+        versionId: version.id,
+        versionNumber,
+        source: "pre_regeneration",
+      },
+    });
+
+    return version;
+  }
+
+  async _createVersion(note, transcriptVersion, ctx, generated, source = "ai_generated") {
+    const versionNumber = await this._soap.getNextVersionNumber(note.id);
+    const label = source === "regenerated"
+      ? "Regenerated"
+      : source === "ai_generated"
+        ? "Original"
+        : source;
     const version = await this._soap.createVersion({
       soap_note_id: note.id,
       session_id: note.session_id,
@@ -285,6 +350,8 @@ export class SOAPGenerationService {
       prompt_version: note.prompt_version,
       input_hash: note.input_hash,
       generation_metadata: note.generation_metadata,
+      source,
+      diff_metadata: { label: `${label} (v${versionNumber})` },
       created_by: ctx.actorId,
     });
 

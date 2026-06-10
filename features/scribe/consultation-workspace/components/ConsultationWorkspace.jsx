@@ -105,6 +105,12 @@ export function ConsultationWorkspace({
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const [activeSoapSection, setActiveSoapSection] = useState(null);
   const [highlightedSoapSection, setHighlightedSoapSection] = useState(null);
+  const [reviewModalOpen, setReviewModalOpen] = useState(false);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [feedbackAction, setFeedbackAction] = useState(null);
+  const [feedbackSubmitting, setFeedbackSubmitting] = useState(false);
+  const [manualEditMode, setManualEditMode] = useState(false);
+  const pendingVersionIdRef = useRef(null);
   const audioSeekRef = useRef(null);
   const autoPipelineAttemptedRef = useRef(false);
   const autoTranscribeAttemptedRef = useRef(false);
@@ -207,10 +213,13 @@ export function ConsultationWorkspace({
 
   const handleApproveSOAP = useCallback(async () => {
     setApproving(true);
+    setApprovalLocked(true);
     try {
       await soap.approve();
-      setApprovalLocked(true);
       void statusPoll.refresh?.();
+    } catch (err) {
+      setApprovalLocked(false);
+      window.alert(err instanceof Error ? err.message : "Failed to approve SOAP");
     } finally {
       setApproving(false);
     }
@@ -268,10 +277,72 @@ export function ConsultationWorkspace({
     if (soap.hasChanges) await soap.manualSave();
   }, [transcript, soap]);
 
-  const handleRejectSOAP = useCallback(async (reason) => {
-    await soap.reject(reason);
-    await transcript.load();
-  }, [soap, transcript]);
+  const handleOpenSoapReview = useCallback(() => {
+    setReviewModalOpen(true);
+  }, []);
+
+  const handleRegenerateFromReview = useCallback(async () => {
+    setReviewModalOpen(false);
+    try {
+      const result = await soap.regenerate();
+      pendingVersionIdRef.current = result?.version?.id ?? null;
+      setFeedbackAction("regenerated");
+      setFeedbackModalOpen(true);
+      void statusPoll.refresh?.();
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to regenerate SOAP note");
+    }
+  }, [soap, statusPoll]);
+
+  const handleEditManuallyFromReview = useCallback(() => {
+    setReviewModalOpen(false);
+    setManualEditMode(true);
+  }, []);
+
+  const handleCancelManualEdit = useCallback(async () => {
+    setManualEditMode(false);
+    await soap.load({ silent: true });
+  }, [soap]);
+
+  const handleSaveManualEdits = useCallback(async () => {
+    try {
+      const result = await soap.saveDoctorEdits({
+        subjective: soap.draft.subjective ?? "",
+        objective: soap.draft.objective ?? "",
+        assessment: soap.draft.assessment ?? "",
+        plan: soap.draft.plan ?? "",
+      });
+      setManualEditMode(false);
+      pendingVersionIdRef.current = result?.version?.id ?? null;
+      setFeedbackAction("manual_edit");
+      setFeedbackModalOpen(true);
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to save SOAP edits");
+    }
+  }, [soap]);
+
+  const handleSubmitFeedback = useCallback(async ({ feedback_reasons, other_reason }) => {
+    if (!feedbackAction) {
+      setFeedbackModalOpen(false);
+      return;
+    }
+    setFeedbackSubmitting(true);
+    try {
+      if ((feedback_reasons?.length ?? 0) > 0 || other_reason) {
+        await soap.submitReviewFeedback({
+          review_action: feedbackAction,
+          feedback_reasons: feedback_reasons ?? [],
+          other_reason,
+          soap_version_id: pendingVersionIdRef.current ?? undefined,
+        });
+      }
+      setFeedbackModalOpen(false);
+      setFeedbackAction(null);
+      pendingVersionIdRef.current = null;
+    } finally {
+      setFeedbackSubmitting(false);
+    }
+  }, [feedbackAction, soap]);
 
   const handleRegenerateSOAP = useCallback(async () => {
     await soap.regenerate();
@@ -412,7 +483,15 @@ export function ConsultationWorkspace({
           ? "saving"
           : null;
 
-  const soapReady = soapApproved || (hasSoap && !soap.loading && !soap.error && !noteGenerating);
+  const hasDraftContent = useMemo(
+    () => Object.values(soap.draft ?? {}).some((v) => String(v ?? "").trim()),
+    [soap.draft],
+  );
+
+  const soapReady =
+    soapApproved ||
+    approving ||
+    (hasSoap && hasDraftContent && !soap.error);
   const soapWarnings = useMemo(() => getSoapClinicalWarnings(soap.draft), [soap.draft]);
   const blockingApproval = hasBlockingSoapWarnings(soapWarnings);
 
@@ -527,14 +606,27 @@ export function ConsultationWorkspace({
         onVersionsOpenChange={setVersionsOpen}
         auditOpen={auditOpen}
         onAuditOpenChange={setAuditOpen}
-        canApprove={canApproveSOAP && !blockingApproval}
+        canApprove={canApproveSOAP && !blockingApproval && !manualEditMode}
         approving={approving}
         onApprove={handleApproveSOAP}
         onExport={handleExportSOAP}
         exporting={exporting}
         onOpenVersions={() => setVersionsOpen(true)}
         onOpenAudit={() => setAuditOpen(true)}
-        onReject={handleRejectSOAP}
+        onOpenSoapReview={handleOpenSoapReview}
+        reviewModalOpen={reviewModalOpen}
+        onReviewModalOpenChange={setReviewModalOpen}
+        onRegenerateFromReview={handleRegenerateFromReview}
+        onEditManuallyFromReview={handleEditManuallyFromReview}
+        manualEditMode={manualEditMode}
+        onSaveManualEdits={handleSaveManualEdits}
+        onCancelManualEdit={handleCancelManualEdit}
+        feedbackModalOpen={feedbackModalOpen}
+        onFeedbackModalOpenChange={setFeedbackModalOpen}
+        onSubmitFeedback={handleSubmitFeedback}
+        feedbackSubmitting={feedbackSubmitting}
+        soapNoteStatus={soap.note?.status}
+        soapDoctorEditedAt={soap.note?.doctor_edited_at}
         canGeneratePrescription={canGeneratePrescription}
         generatingPrescription={prescriptionGenerating}
         onGeneratePrescription={handleGeneratePrescription}
@@ -557,7 +649,10 @@ export function ConsultationWorkspace({
             onRegenerate: handleRegenerateSOAP,
           },
           empty: {
-            generating: soapApproved ? false : noteGenerating || (hasSoap && soap.loading),
+            generating:
+              soapApproved || approving || hasDraftContent
+                ? false
+                : noteGenerating || (hasSoap && soap.loading),
             error: soap.error,
             onRetry: soap.load,
           },

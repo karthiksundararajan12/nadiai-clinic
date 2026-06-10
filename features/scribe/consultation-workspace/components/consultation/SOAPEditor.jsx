@@ -57,7 +57,7 @@ export function SOAPEditor({
           value={draft[key] ?? ""}
           confidence={CONFIDENCE[key] ?? 80}
           showConfidence={!readOnly}
-          readOnly={readOnly || saving}
+          readOnly={readOnly}
           saving={saving}
           regenerating={regenerating}
           isActive={activeSection === key}

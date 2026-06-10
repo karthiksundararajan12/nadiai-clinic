@@ -10,7 +10,9 @@ import {
   rejectSOAPNote,
   regenerateSOAPNote,
   restoreSOAPVersion,
+  saveDoctorSOAPEdits,
   saveSOAPVersion,
+  submitSOAPReviewFeedback,
   updateSOAPSection,
 } from "../services/soap-review.client.js";
 import { useSOAPRealtime } from "./use-soap-realtime.js";
@@ -42,16 +44,26 @@ function reducer(state, action) {
   switch (action.type) {
     case "RESET":
       return initialState;
-    case "LOAD":
+    case "LOAD": {
+      const serverDraft = action.payload.note?.note ?? {};
+      const dirtyKeys = Object.keys(state.dirty);
+      const draft =
+        dirtyKeys.length > 0
+          ? {
+              ...serverDraft,
+              ...Object.fromEntries(dirtyKeys.map((key) => [key, state.draft[key] ?? ""])),
+            }
+          : serverDraft;
       return {
         ...state,
         ...action.payload,
-        draft: action.payload.note?.note ?? {},
+        draft,
         original: action.payload.note?.original_note ?? action.payload.note?.note ?? {},
-        dirty: {},
-        undoStack: [],
-        redoStack: [],
+        dirty: dirtyKeys.length > 0 ? state.dirty : {},
+        undoStack: dirtyKeys.length > 0 ? state.undoStack : [],
+        redoStack: dirtyKeys.length > 0 ? state.redoStack : [],
       };
+    }
     case "UPDATE_SECTION": {
       const before = state.draft[action.sectionKey] ?? "";
       const after = action.value;
@@ -68,6 +80,16 @@ function reducer(state, action) {
       for (const key of action.sectionKeys) delete dirty[key];
       return { ...state, dirty, note: action.note ?? state.note };
     }
+    case "APPROVED":
+      return {
+        ...state,
+        session: action.payload.session ?? state.session,
+        note: action.payload.note ?? state.note,
+        draft: state.draft,
+        dirty: {},
+        undoStack: [],
+        redoStack: [],
+      };
     case "VERSIONS":
       return { ...state, versions: action.versions };
     case "COMPARISON":
@@ -118,10 +140,11 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     setError(null);
   }, [enabled, sessionId]);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (options = {}) => {
+    const silent = options?.silent === true;
     if (!sessionId || !enabled) return;
     const requestId = ++loadRequestRef.current;
-    setLoading(true);
+    if (!silent) setLoading(true);
     setError(null);
     try {
       const data = await fetchSOAPReviewWorkspace(sessionId);
@@ -129,9 +152,9 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
       dispatch({ type: "LOAD", payload: data });
     } catch (err) {
       if (requestId !== loadRequestRef.current) return;
-      setError(err);
+      if (!silent) setError(err);
     } finally {
-      if (requestId === loadRequestRef.current) setLoading(false);
+      if (requestId === loadRequestRef.current && !silent) setLoading(false);
     }
   }, [enabled, sessionId]);
 
@@ -188,7 +211,10 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
       await saveSections(dirtyKeys, "manual");
     }
     const result = await approveSOAPNote(sessionId);
-    await load();
+    dispatch({
+      type: "APPROVED",
+      payload: { session: result?.session, note: result?.note },
+    });
     return result;
   }, [dirtyKeys, load, saveSections, sessionId]);
 
@@ -215,7 +241,7 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     setError(null);
     try {
       const result = await regenerateSOAPNote(sessionId);
-      await load();
+      await load({ silent: true });
       return result;
     } catch (err) {
       setError(err);
@@ -224,6 +250,25 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
       setRegenerating(false);
     }
   }, [dirtyKeys, load, saveSections, sessionId]);
+
+  const saveDoctorEdits = useCallback(async (sections) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const result = await saveDoctorSOAPEdits(sessionId, sections);
+      await load({ silent: true });
+      return result;
+    } catch (err) {
+      setError(err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }, [load, sessionId]);
+
+  const submitReviewFeedback = useCallback(async (payload) => {
+    return submitSOAPReviewFeedback(sessionId, payload);
+  }, [sessionId]);
 
   const restoreVersion = useCallback(async (versionId) => {
     setSaving(true);
@@ -240,7 +285,7 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
   }, [load, sessionId]);
 
   useSOAPRealtime(sessionId, useCallback(() => {
-    if (!dirtyKeys.length) load();
+    if (!dirtyKeys.length) load({ silent: true });
   }, [dirtyKeys.length, load]));
 
   useEffect(() => {
@@ -285,6 +330,8 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     approve,
     reject,
     regenerate,
+    saveDoctorEdits,
+    submitReviewFeedback,
     restoreVersion,
     compare,
     undo: () => dispatch({ type: "UNDO" }),

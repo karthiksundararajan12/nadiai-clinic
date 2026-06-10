@@ -130,7 +130,7 @@ export class SOAPRepository extends BaseRepository {
           .select("*")
           .eq("session_id", sessionId)
           .eq("input_hash", inputHash)
-          .in("status", ["ready", "review_required", "approved"])
+          .in("status", ["ready", "review_required", "reviewing", "regenerated", "edited", "approved"])
           .single(),
       "findReusableSoapNote",
     );
@@ -257,6 +257,32 @@ export class SOAPRepository extends BaseRepository {
           .eq("session_id", sessionId)
           .order("created_at", { ascending: false }),
       "getSoapNoteEdits",
+    );
+  }
+
+  /** @param {Record<string, unknown>} data */
+  async insertFeedback(data) {
+    return this._run(
+      () =>
+        this._db
+          .from("soap_note_feedback")
+          .insert(data)
+          .select("*")
+          .single(),
+      "insertSoapNoteFeedback",
+    );
+  }
+
+  /** @param {string} sessionId */
+  async getFeedback(sessionId) {
+    return this._run(
+      () =>
+        this._db
+          .from("soap_note_feedback")
+          .select("*")
+          .eq("session_id", sessionId)
+          .order("created_at", { ascending: false }),
+      "getSoapNoteFeedback",
     );
   }
 }

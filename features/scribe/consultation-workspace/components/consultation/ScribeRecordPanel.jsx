@@ -83,8 +83,8 @@ export function ScribeRecordPanel({
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col">
-        <div className="shrink-0 border-b border-gray-200 px-4 py-2">
+      <div className="flex min-h-0 flex-1 flex-col bg-white">
+        <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Conversation</p>
         </div>
         <ScribeConversationChat

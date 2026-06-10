@@ -15,7 +15,9 @@ import {
   CompareSOAPVersionsSchema,
   RejectSOAPNoteSchema,
   RestoreSOAPVersionSchema,
+  SaveDoctorSOAPEditsSchema,
   SaveSOAPVersionSchema,
+  SubmitSOAPReviewFeedbackSchema,
   UpdateSOAPSectionSchema,
 } from "../schemas.js";
 import { createLogger } from "../logger.js";
@@ -70,7 +72,7 @@ export class SOAPReviewService {
         SESSION_STATUS.SOAP_REVIEWING,
       );
       note = await this._soap.updateNote(note.id, {
-        status: SOAP_NOTE_STATUS.REVIEWING,
+        status: preserveReviewNoteStatus(note.status),
         reviewer_id: ctx.actorId,
         review_started_at: new Date().toISOString(),
         original_note: note.original_note ?? note.note,
@@ -95,7 +97,7 @@ export class SOAPReviewService {
         SESSION_STATUS.SOAP_REVIEWING,
       );
       note = await this._soap.updateNote(note.id, {
-        status: SOAP_NOTE_STATUS.REVIEWING,
+        status: preserveReviewNoteStatus(note.status),
         reviewer_id: ctx.actorId,
         review_started_at: new Date().toISOString(),
         original_note: note.original_note ?? note.note,
@@ -370,12 +372,17 @@ export class SOAPReviewService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
     const { session, note } = await this._assertReviewing(sessionId, ctx);
 
+    await this._createVersion(note, ctx, "rejected", {
+      diff: summarizeDiff(note.original_note ?? note.note, note.note),
+      label: "Before rejection",
+    });
+
     const rejectedAt = new Date().toISOString();
     const updatedNote = await this._soap.updateNote(note.id, {
       status: SOAP_NOTE_STATUS.REJECTED,
       reviewer_id: ctx.actorId,
       rejected_at: rejectedAt,
-      rejection_reason: parsed.data.reason,
+      rejection_reason: parsed.data.reason ?? "SOAP note not approved",
     });
     const updatedSession = await this._sessions.transitionStatus(
       sessionId,
@@ -407,6 +414,119 @@ export class SOAPReviewService {
     return { session: updatedSession, note: updatedNote };
   }
 
+  /** @param {string} sessionId @param {Record<string, unknown>} rawInput @param {import("../models/session.model.js").RequestContext} ctx */
+  async saveDoctorEdits(sessionId, rawInput, ctx) {
+    const parsed = SaveDoctorSOAPEditsSchema.safeParse(rawInput);
+    if (!parsed.success) throw new SessionValidationError(parsed.error);
+
+    const patches = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, value]) => value !== undefined),
+    );
+    if (!Object.keys(patches).length) {
+      throw new SessionValidationError("At least one SOAP section is required to save edits");
+    }
+
+    const { session, note } = await this._assertReviewing(sessionId, ctx);
+    const generatedSoap = note.original_note ?? note.note ?? {};
+    const nextNote = { ...(note.note ?? {}), ...patches };
+    const editedAt = new Date().toISOString();
+
+    const updated = await this._soap.updateNote(note.id, {
+      note: nextNote,
+      subjective: nextNote.subjective ?? note.subjective ?? "",
+      objective: nextNote.objective ?? note.objective ?? "",
+      assessment: nextNote.assessment ?? note.assessment ?? "",
+      plan: nextNote.plan ?? note.plan ?? "",
+      chief_complaint: nextNote.chiefComplaint ?? note.chief_complaint ?? "",
+      history_of_present_illness: nextNote.historyOfPresentIllness ?? note.history_of_present_illness ?? "",
+      clinical_summary: nextNote.clinicalSummary ?? note.clinical_summary ?? "",
+      status: SOAP_NOTE_STATUS.EDITED,
+      original_note: note.original_note ?? note.note ?? generatedSoap,
+      edited_note: nextNote,
+      doctor_edited_at: editedAt,
+      reviewer_id: ctx.actorId,
+      reviewed_at: editedAt,
+      modification_summary: summarizeDiff(generatedSoap, nextNote),
+    });
+
+    const version = await this._createVersion(updated, ctx, "doctor_edited", {
+      diff: summarizeDiff(generatedSoap, nextNote),
+      label: "Edited by Doctor",
+    });
+
+    await this._soap.insertEdit({
+      soap_note_id: note.id,
+      session_id: session.id,
+      clinic_id: ctx.clinicId,
+      doctor_id: ctx.doctorId,
+      actor_id: ctx.actorId,
+      section_key: null,
+      edit_type: "doctor_edited",
+      before_value: { generated: generatedSoap },
+      after_value: { edited: nextNote, version_id: version.id },
+      diff_metadata: version.diff_metadata,
+    });
+
+    await this._audit.log({
+      action: AUDIT_ACTION.SOAP_DOCTOR_EDITED,
+      sessionId,
+      ctx,
+      metadata: { soapNoteId: note.id, versionId: version.id },
+    });
+
+    return { session, note: updated, version };
+  }
+
+  /** @param {string} sessionId @param {Record<string, unknown>} rawInput @param {import("../models/session.model.js").RequestContext} ctx */
+  async submitFeedback(sessionId, rawInput, ctx) {
+    const parsed = SubmitSOAPReviewFeedbackSchema.safeParse(rawInput);
+    if (!parsed.success) throw new SessionValidationError(parsed.error);
+
+    const { session, note } = await this._assertAccessible(sessionId, ctx);
+    const feedback = await this._soap.insertFeedback({
+      session_id: sessionId,
+      soap_note_id: note.id,
+      transcript_version_id: note.transcript_version_id,
+      soap_version_id: parsed.data.soap_version_id ?? null,
+      review_action: parsed.data.review_action,
+      feedback_reasons: parsed.data.feedback_reasons ?? [],
+      other_reason: parsed.data.other_reason ?? null,
+      generated_soap: note.original_note ?? note.note,
+      edited_soap: note.edited_note ?? note.note,
+      note_status: mapFeedbackNoteStatus(note.status),
+    });
+
+    await this._soap.insertEdit({
+      soap_note_id: note.id,
+      session_id: session.id,
+      clinic_id: ctx.clinicId,
+      doctor_id: ctx.doctorId,
+      actor_id: ctx.actorId,
+      section_key: null,
+      edit_type: "review_feedback",
+      before_value: null,
+      after_value: {
+        review_action: parsed.data.review_action,
+        feedback_reasons: parsed.data.feedback_reasons ?? [],
+      },
+      diff_metadata: { feedback_id: feedback.id },
+    });
+
+    await this._audit.log({
+      action: AUDIT_ACTION.SOAP_REVIEW_FEEDBACK,
+      sessionId,
+      ctx,
+      metadata: {
+        soapNoteId: note.id,
+        feedbackId: feedback.id,
+        reviewAction: parsed.data.review_action,
+        reasons: parsed.data.feedback_reasons ?? [],
+      },
+    });
+
+    return feedback;
+  }
+
   async _createVersion(note, ctx, source, metadata = {}) {
     const versionNumber = await this._soap.getNextVersionNumber(note.id);
     return this._soap.createVersion({
@@ -423,7 +543,10 @@ export class SOAPReviewService {
       input_hash: note.input_hash,
       generation_metadata: note.generation_metadata,
       source,
-      diff_metadata: metadata.diff ?? {},
+      diff_metadata: {
+        ...(metadata.diff ?? {}),
+        ...(metadata.label ? { label: metadata.label } : {}),
+      },
       reviewer_id: ctx.actorId,
       approved_at: metadata.approvedAt ?? null,
       is_approved_version: metadata.isApprovedVersion ?? source === "approved",
@@ -494,4 +617,19 @@ function describeSectionDiff(before, after, source) {
     afterLength: String(after ?? "").length,
     delta: String(after ?? "").length - String(before ?? "").length,
   };
+}
+
+function preserveReviewNoteStatus(status) {
+  if (status === SOAP_NOTE_STATUS.REGENERATED || status === SOAP_NOTE_STATUS.EDITED) {
+    return status;
+  }
+  return SOAP_NOTE_STATUS.REVIEWING;
+}
+
+function mapFeedbackNoteStatus(status) {
+  if (status === SOAP_NOTE_STATUS.APPROVED) return "approved";
+  if (status === SOAP_NOTE_STATUS.REJECTED) return "rejected";
+  if (status === SOAP_NOTE_STATUS.REGENERATED) return "regenerated";
+  if (status === SOAP_NOTE_STATUS.EDITED) return "edited";
+  return "pending_review";
 }

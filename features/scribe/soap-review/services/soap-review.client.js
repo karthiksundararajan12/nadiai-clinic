@@ -57,6 +57,20 @@ export async function restoreSOAPVersion(sessionId, versionId) {
   );
 }
 
+export async function saveDoctorSOAPEdits(sessionId, sections) {
+  return requestJson(`/api/scribe/sessions/${sessionId}/soap/review/save-edits`, {
+    method: "POST",
+    body: sections,
+  });
+}
+
+export async function submitSOAPReviewFeedback(sessionId, payload) {
+  return requestJson(`/api/scribe/sessions/${sessionId}/soap/review/feedback`, {
+    method: "POST",
+    body: payload,
+  });
+}
+
 async function requestJson(url, options = {}) {
   const res = await fetch(url, {
     method: options.method ?? "GET",

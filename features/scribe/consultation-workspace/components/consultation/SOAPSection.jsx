@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Edit2, Loader2, RefreshCw } from "lucide-react";
+import { ChevronDown, ChevronUp, Copy, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VitalsInput } from "./VitalsInput.jsx";
+import { VitalsInput, stripVitalsFromObjective, buildObjectiveWithVitals, parseVitalsFromObjective } from "./VitalsInput.jsx";
 
 const SECTION_STYLES = {
   subjective: { border: "border-l-blue-500", text: "text-blue-600", ring: "focus:ring-blue-500/30" },
@@ -32,13 +32,12 @@ export function SOAPSection({
   showVitals,
 }) {
   const style = SECTION_STYLES[sectionKey] ?? SECTION_STYLES.subjective;
-  const [editing, setEditing] = useState(false);
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef(null);
 
   const isLong = String(value).length > COLLAPSE_LEN;
-  const showCollapsed = isLong && !expanded && !editing;
+  const showCollapsed = readOnly && isLong && !expanded;
   const displayValue = showCollapsed ? `${String(value).slice(0, COLLAPSE_LEN)}…` : value;
 
   const autoResize = useCallback(() => {
@@ -49,8 +48,14 @@ export function SOAPSection({
   }, []);
 
   useEffect(() => {
-    if (editing) autoResize();
-  }, [editing, value, autoResize]);
+    if (!readOnly) autoResize();
+  }, [readOnly, value, autoResize]);
+
+  useEffect(() => {
+    if (isActive && !readOnly && textareaRef.current) {
+      textareaRef.current.focus();
+    }
+  }, [isActive, readOnly]);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(value ?? "");
@@ -77,16 +82,6 @@ export function SOAPSection({
           )}
         </div>
         <div className="flex items-center gap-1">
-          {!readOnly && (
-            <button
-              type="button"
-              className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-800"
-              onClick={() => { setEditing((v) => !v); onFocus?.(sectionKey); }}
-              aria-label={`Edit ${label}`}
-            >
-              <Edit2 className="h-3.5 w-3.5" />
-            </button>
-          )}
           <button
             type="button"
             className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-800"
@@ -112,10 +107,30 @@ export function SOAPSection({
 
       <div className="px-4 py-3">
         {showVitals && !readOnly && (
-          <VitalsInput value={value} onChange={(v) => onChange?.(sectionKey, v)} disabled={saving} />
+          <>
+            <VitalsInput
+              value={value}
+              onChange={(v) => onChange?.(sectionKey, v)}
+              disabled={false}
+            />
+            <textarea
+              value={stripVitalsFromObjective(value)}
+              onChange={(e) => {
+                const vitals = parseVitalsFromObjective(value);
+                onChange?.(sectionKey, buildObjectiveWithVitals(vitals, e.target.value));
+              }}
+              onFocus={() => onFocus?.(sectionKey)}
+              rows={3}
+              placeholder="Additional objective findings (e.g. BP discussion, exam notes)…"
+              className={cn(
+                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
+                style.ring,
+              )}
+            />
+          </>
         )}
 
-        {editing && !readOnly ? (
+        {!readOnly && !showVitals ? (
           <textarea
             ref={textareaRef}
             value={value}
@@ -123,12 +138,14 @@ export function SOAPSection({
             onFocus={() => onFocus?.(sectionKey)}
             disabled={saving}
             rows={3}
+            placeholder={`Enter ${label.toLowerCase()}…`}
             className={cn(
-              "w-full resize-none overflow-hidden rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
+              "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
               style.ring,
+              saving && "opacity-80",
             )}
           />
-        ) : (
+        ) : !showVitals ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
             {displayValue || (
               <span className="italic text-gray-400">
@@ -136,9 +153,13 @@ export function SOAPSection({
               </span>
             )}
           </p>
-        )}
+        ) : stripVitalsFromObjective(value) ? (
+          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
+            {stripVitalsFromObjective(value)}
+          </p>
+        ) : null}
 
-        {isLong && !editing && (
+        {readOnly && isLong && (
           <button
             type="button"
             className="mt-2 flex cursor-pointer items-center gap-1 text-xs font-medium text-cyan-600 transition-all duration-200 hover:text-cyan-700"

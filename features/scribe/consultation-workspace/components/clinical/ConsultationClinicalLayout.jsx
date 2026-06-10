@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatClinicalDateTime, resolveSoapDateLabel } from "../../lib/format-datetime.js";
+import { resolveSoapWorkflowAction } from "../../../lib/soap-db-compat.js";
 import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
 import { ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
@@ -61,6 +62,7 @@ export function ConsultationClinicalLayout({
   onFeedbackModalOpenChange,
   onSubmitFeedback,
   feedbackSubmitting,
+  soapNote,
   soapNoteStatus,
   soapDoctorEditedAt,
   canGeneratePrescription,
@@ -91,6 +93,7 @@ export function ConsultationClinicalLayout({
     status === "READY_FOR_PRESCRIPTION";
 
   const formattedDate = formatClinicalDateTime(sessionDate);
+  const workflowAction = resolveSoapWorkflowAction(soapNote);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace">
@@ -108,17 +111,17 @@ export function ConsultationClinicalLayout({
         </div>
         <div className="flex items-center gap-2">
           <ApprovedStatusBadge approved={approved} />
-          {soapNoteStatus === "edited" && (
+          {(soapNoteStatus === "edited" || workflowAction === "doctor_edited") && (
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
               Edited by Doctor
-              {soapDoctorEditedAt && (
+              {(soapDoctorEditedAt || soapNote?.reviewed_at) && (
                 <span className="ml-1 font-normal text-amber-700">
-                  · {new Date(soapDoctorEditedAt).toLocaleString()}
+                  · {new Date(soapDoctorEditedAt ?? soapNote.reviewed_at).toLocaleString()}
                 </span>
               )}
             </span>
           )}
-          {soapNoteStatus === "regenerated" && !approved && (
+          {(soapNoteStatus === "regenerated" || workflowAction === "regenerated") && !approved && (
             <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
               Regenerated
             </span>

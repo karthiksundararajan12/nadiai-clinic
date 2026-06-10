@@ -21,6 +21,12 @@ import {
   UpdateSOAPSectionSchema,
 } from "../schemas.js";
 import { createLogger } from "../logger.js";
+import {
+  resolveSoapWorkflowAction,
+  toDbSoapNoteStatus,
+  toDbSoapVersionSource,
+  withSoapWorkflowMetadata,
+} from "../lib/soap-db-compat.js";
 
 const SECTION_TO_COLUMN = {
   chiefComplaint: "chief_complaint",
@@ -72,7 +78,7 @@ export class SOAPReviewService {
         SESSION_STATUS.SOAP_REVIEWING,
       );
       note = await this._soap.updateNote(note.id, {
-        status: preserveReviewNoteStatus(note.status),
+        status: preserveReviewNoteStatus(note),
         reviewer_id: ctx.actorId,
         review_started_at: new Date().toISOString(),
         original_note: note.original_note ?? note.note,
@@ -97,7 +103,7 @@ export class SOAPReviewService {
         SESSION_STATUS.SOAP_REVIEWING,
       );
       note = await this._soap.updateNote(note.id, {
-        status: preserveReviewNoteStatus(note.status),
+        status: preserveReviewNoteStatus(note),
         reviewer_id: ctx.actorId,
         review_started_at: new Date().toISOString(),
         original_note: note.original_note ?? note.note,
@@ -431,6 +437,13 @@ export class SOAPReviewService {
     const nextNote = { ...(note.note ?? {}), ...patches };
     const editedAt = new Date().toISOString();
 
+    const modificationSummary = {
+      ...summarizeDiff(generatedSoap, nextNote),
+      doctor_edited: true,
+      edited_snapshot: nextNote,
+      edited_at: editedAt,
+    };
+
     const updated = await this._soap.updateNote(note.id, {
       note: nextNote,
       subjective: nextNote.subjective ?? note.subjective ?? "",
@@ -440,18 +453,18 @@ export class SOAPReviewService {
       chief_complaint: nextNote.chiefComplaint ?? note.chief_complaint ?? "",
       history_of_present_illness: nextNote.historyOfPresentIllness ?? note.history_of_present_illness ?? "",
       clinical_summary: nextNote.clinicalSummary ?? note.clinical_summary ?? "",
-      status: SOAP_NOTE_STATUS.EDITED,
+      status: toDbSoapNoteStatus("doctor_edited"),
       original_note: note.original_note ?? note.note ?? generatedSoap,
-      edited_note: nextNote,
-      doctor_edited_at: editedAt,
       reviewer_id: ctx.actorId,
       reviewed_at: editedAt,
-      modification_summary: summarizeDiff(generatedSoap, nextNote),
+      modification_summary: modificationSummary,
+      generation_metadata: withSoapWorkflowMetadata(note.generation_metadata, "doctor_edited"),
     });
 
-    const version = await this._createVersion(updated, ctx, "doctor_edited", {
-      diff: summarizeDiff(generatedSoap, nextNote),
+    const version = await this._createVersion(updated, ctx, toDbSoapVersionSource("doctor_edited"), {
+      diff: modificationSummary,
       label: "Edited by Doctor",
+      workflow_source: "doctor_edited",
     });
 
     await this._soap.insertEdit({
@@ -492,7 +505,7 @@ export class SOAPReviewService {
       feedback_reasons: parsed.data.feedback_reasons ?? [],
       other_reason: parsed.data.other_reason ?? null,
       generated_soap: note.original_note ?? note.note,
-      edited_soap: note.edited_note ?? note.note,
+      edited_soap: note.edited_note ?? note.modification_summary?.edited_snapshot ?? note.note,
       note_status: mapFeedbackNoteStatus(note.status),
     });
 
@@ -619,9 +632,13 @@ function describeSectionDiff(before, after, source) {
   };
 }
 
-function preserveReviewNoteStatus(status) {
-  if (status === SOAP_NOTE_STATUS.REGENERATED || status === SOAP_NOTE_STATUS.EDITED) {
-    return status;
+function preserveReviewNoteStatus(note) {
+  const action = resolveSoapWorkflowAction(note);
+  if (action === "regenerated" || action === "doctor_edited") {
+    return note?.status ?? SOAP_NOTE_STATUS.REVIEWING;
+  }
+  if (note?.status === SOAP_NOTE_STATUS.REGENERATED || note?.status === SOAP_NOTE_STATUS.EDITED) {
+    return note.status;
   }
   return SOAP_NOTE_STATUS.REVIEWING;
 }

@@ -95,11 +95,14 @@ export class DeepgramProvider extends TranscriptionProvider {
     const model       = MODEL_MAP[language]    ?? (process.env.DEEPGRAM_MODEL ?? "nova-2-medical");
     const deepgramLang = LANGUAGE_MAP[language] ?? "en";
 
-    // Concatenate all chunks — Deepgram processes the full audio at once for
-    // the most accurate cross-utterance speaker diarization.
-    const audioBlob = audioBlobs.length === 1
-      ? audioBlobs[0]
-      : new Blob(audioBlobs, { type: mimeType ?? "audio/webm" });
+    if (audioBlobs.length > 1) {
+      log.warn("DeepgramProvider received multiple blobs; only the first is used. Merge chunks upstream.", {
+        sessionId,
+        chunkCount: audioBlobs.length,
+      });
+    }
+
+    const audioBlob = audioBlobs[0];
 
     const params = new URLSearchParams({
       model,

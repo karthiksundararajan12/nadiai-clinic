@@ -115,6 +115,7 @@ export function ConsultationWorkspace({
   const autoPipelineAttemptedRef = useRef(false);
   const autoTranscribeAttemptedRef = useRef(false);
   const parentTranscriptionRef = useRef(false);
+  const prevPipelineBusyRef = useRef(false);
 
   const poorTranscription = useMemo(
     () => {
@@ -178,13 +179,23 @@ export function ConsultationWorkspace({
   ]);
 
   useEffect(() => {
-    if (!pipelineBusy) return;
-    if (statusPoll.isTranscribed && isTranscriptWorkspaceAvailable(polledStatus)) {
-      onTranscriptionComplete?.();
-    } else if (statusPoll.isFailed) {
+    if (prevPipelineBusyRef.current && !pipelineBusy && sessionId) {
+      void statusPoll.refresh();
+    }
+    prevPipelineBusyRef.current = pipelineBusy;
+  }, [pipelineBusy, sessionId, statusPoll]);
+
+  useEffect(() => {
+    if (!statusPoll.isTranscribed) return;
+    void transcript.load();
+    if (pipelineBusy) onTranscriptionComplete?.();
+  }, [statusPoll.isTranscribed, pipelineBusy, onTranscriptionComplete, transcript.load]);
+
+  useEffect(() => {
+    if (statusPoll.isFailed && pipelineBusy) {
       onTranscriptionComplete?.();
     }
-  }, [pipelineBusy, statusPoll.isTranscribed, statusPoll.isFailed, polledStatus, onTranscriptionComplete]);
+  }, [statusPoll.isFailed, pipelineBusy, onTranscriptionComplete]);
 
   const handleSegmentClick = useCallback((segment) => {
     const section = inferSoapSectionFromSegment(segment);
@@ -449,8 +460,9 @@ export function ConsultationWorkspace({
         : null;
 
   useEffect(() => {
+    const hideSegments = waitingForTranscript && transcript.segments.length === 0;
     onWorkspaceStateChange?.({
-      segments: waitingForTranscript ? [] : transcript.segments,
+      segments: hideSegments ? [] : transcript.segments,
       transcriptLoading: !soapApproved && (waitingForTranscript || (transcript.loading && !transcript.segments.length)),
       transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
       sessionComplete,
@@ -625,6 +637,7 @@ export function ConsultationWorkspace({
         onFeedbackModalOpenChange={setFeedbackModalOpen}
         onSubmitFeedback={handleSubmitFeedback}
         feedbackSubmitting={feedbackSubmitting}
+        soapNote={soap.note}
         soapNoteStatus={soap.note?.status}
         soapDoctorEditedAt={soap.note?.doctor_edited_at}
         canGeneratePrescription={canGeneratePrescription}

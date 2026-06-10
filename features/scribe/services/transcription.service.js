@@ -43,6 +43,7 @@ import {
   failInlineTranscriptionJob,
   isInlineTranscriptionJob,
 } from "../lib/transcription-jobs.js";
+import { mergeTranscriptionResults } from "../lib/merge-transcription-results.js";
 
 export class TranscriptionService {
   /**
@@ -325,22 +326,24 @@ export class TranscriptionService {
 
       if (
         session.status !== SESSION_STATUS.TRANSCRIPTION_QUEUED &&
-        session.status !== SESSION_STATUS.UPLOADED
+        session.status !== SESSION_STATUS.UPLOADED &&
+        session.status !== SESSION_STATUS.TRANSCRIBING
       ) {
         throw new TranscriptionNotReadyError(
           `Session status '${session.status}' is not ready for transcription`,
         );
       }
 
-      // TRANSCRIPTION_QUEUED → TRANSCRIBING
-      const fromStatus = session.status;
-      await this._sessions.transitionStatus(
-        session.id,
-        session.doctor_id,
-        fromStatus,
-        SESSION_STATUS.TRANSCRIBING,
-        { error_message: null },
-      );
+      if (session.status !== SESSION_STATUS.TRANSCRIBING) {
+        const fromStatus = session.status;
+        await this._sessions.transitionStatus(
+          session.id,
+          session.doctor_id,
+          fromStatus,
+          SESSION_STATUS.TRANSCRIBING,
+          { error_message: null },
+        );
+      }
 
       await this._transcriptions.upsertTranscription({
         session_id:    session.id,
@@ -467,24 +470,58 @@ export class TranscriptionService {
       chunkCount: chunks.length,
     });
 
-    // Download all chunks in order
-    const audioBlobs = await Promise.all(
-      chunks.map((chunk) => this._downloadChunk(chunk.storage_path)),
-    );
-
-    // Infer MIME type from storage path extension
-    const ext      = chunks[0].storage_path.slice(chunks[0].storage_path.lastIndexOf(".") + 1);
+    const ext = chunks[0].storage_path.slice(chunks[0].storage_path.lastIndexOf(".") + 1);
     const mimeType = MIME_TYPES[ext] ?? "audio/webm";
 
-    const result = await this._provider.transcribe({
-      audioBlobs,
-      mimeType,
-      language:        session.language,
-      sessionId:       session.id,
-      durationSeconds: session.audio_duration_seconds ?? null,
+    if (chunks.length === 1) {
+      const audioBlob = await this._downloadChunk(chunks[0].storage_path);
+      const result = await this._provider.transcribe({
+        audioBlobs: [audioBlob],
+        mimeType,
+        language: session.language,
+        sessionId: session.id,
+        durationSeconds: session.audio_duration_seconds ?? null,
+      });
+      return { ...result, chunkCount: 1 };
+    }
+
+    // WebM/Ogg chunks from MediaRecorder are independent containers — concatenating
+    // raw bytes produces corrupt audio. Transcribe each chunk and merge timelines.
+    this._log.info("Transcribing session in per-chunk mode", {
+      sessionId: session.id,
+      chunkCount: chunks.length,
     });
 
-    return { ...result, chunkCount: chunks.length };
+    /** @type {import('./transcription-providers/transcription-provider.js').TranscriptionResult[]} */
+    const chunkResults = [];
+    const timeOffsets = [];
+    let cumulativeOffset = 0;
+
+    for (const chunk of chunks) {
+      timeOffsets.push(cumulativeOffset);
+      const audioBlob = await this._downloadChunk(chunk.storage_path);
+      const chunkDurationSeconds =
+        chunk.duration_ms != null ? Number(chunk.duration_ms) / 1000 : null;
+
+      const result = await this._provider.transcribe({
+        audioBlobs: [audioBlob],
+        mimeType,
+        language: session.language,
+        sessionId: session.id,
+        durationSeconds: chunkDurationSeconds,
+      });
+
+      chunkResults.push(result);
+      const advance =
+        result.durationSeconds ??
+        chunkDurationSeconds ??
+        (chunkResults.length === chunks.length
+          ? 0
+          : (session.audio_duration_seconds ?? 0) / chunks.length);
+      cumulativeOffset += advance;
+    }
+
+    return mergeTranscriptionResults(chunkResults, timeOffsets);
   }
 
   /**

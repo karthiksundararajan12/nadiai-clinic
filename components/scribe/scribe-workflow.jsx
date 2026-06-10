@@ -131,11 +131,13 @@ export function ScribeWorkflow() {
     } catch (err) {
       const message =
         err instanceof Error && err.name === "AbortError"
-          ? "Transcription timed out."
+          ? "Transcription timed out. Open Sessions and tap Transcribe to retry."
           : err instanceof Error
             ? err.message
             : "Transcription failed";
-      setListError(new Error(message));
+      const wrapped = new Error(message);
+      setListError(wrapped);
+      setUploadError(wrapped);
     } finally {
       clearTimeout(timeout);
       setBusySessionId(null);

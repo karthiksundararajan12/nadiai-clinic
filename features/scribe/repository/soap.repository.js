@@ -130,7 +130,7 @@ export class SOAPRepository extends BaseRepository {
           .select("*")
           .eq("session_id", sessionId)
           .eq("input_hash", inputHash)
-          .in("status", ["ready", "review_required", "reviewing", "regenerated", "edited", "approved"])
+          .in("status", ["ready", "review_required", "reviewing", "approved"])
           .single(),
       "findReusableSoapNote",
     );

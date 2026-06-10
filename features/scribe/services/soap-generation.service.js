@@ -26,6 +26,11 @@ import {
 import { createLogger } from "../logger.js";
 import { buildSOAPPrompt, SOAP_JSON_SCHEMA } from "./soap-prompt.js";
 import { createSOAPAIProvider } from "./ai-providers/provider-factory.js";
+import {
+  toDbSoapNoteStatus,
+  toDbSoapVersionSource,
+  withSoapWorkflowMetadata,
+} from "../lib/soap-db-compat.js";
 
 export class SOAPGenerationService {
   /**
@@ -141,9 +146,8 @@ export class SOAPGenerationService {
       const noteObject = parseAndValidateSOAP(generated.text);
       const generatedAt = new Date().toISOString();
 
-      const noteStatus = input.force
-        ? SOAP_NOTE_STATUS.REGENERATED
-        : SOAP_NOTE_STATUS.REVIEW_REQUIRED;
+      const workflowAction = input.force ? "regenerated" : "generated";
+      const noteStatus = toDbSoapNoteStatus(workflowAction);
 
       const note = await this._soap.upsertNote({
         session_id: sessionId,
@@ -155,7 +159,6 @@ export class SOAPGenerationService {
         status: noteStatus,
         note: noteObject,
         original_note: existingNote?.original_note ?? existingNote?.note ?? noteObject,
-        edited_note: null,
         subjective: noteObject.subjective,
         objective: noteObject.objective,
         assessment: noteObject.assessment,
@@ -166,19 +169,26 @@ export class SOAPGenerationService {
         provider: generated.provider,
         model: generated.model,
         prompt_version: SOAP_GENERATION_CONFIG.PROMPT_VERSION,
-        generation_metadata: {
+        generation_metadata: withSoapWorkflowMetadata({
           usage: generated.usage,
           responseId: generated.response?.id ?? null,
           latencyMs: Date.now() - startedAt,
           attempts: generated.attempts,
-        },
+        }, workflowAction),
         input_hash: inputHash,
         error_message: null,
         generated_at: generatedAt,
       });
 
-      const versionSource = input.force ? "regenerated" : "ai_generated";
-      const version = await this._createVersion(note, transcriptVersion, ctx, generated, versionSource);
+      const versionSource = toDbSoapVersionSource(input.force ? "regenerated" : "ai_generated");
+      const version = await this._createVersion(
+        note,
+        transcriptVersion,
+        ctx,
+        generated,
+        versionSource,
+        input.force ? "Regenerated" : "Original",
+      );
 
       await this._sessions.transitionStatus(
         sessionId,
@@ -308,9 +318,10 @@ export class SOAPGenerationService {
         ...(note.generation_metadata ?? {}),
         archivedBeforeRegeneration: true,
       },
-      source: "pre_regeneration",
+      source: toDbSoapVersionSource("pre_regeneration"),
       diff_metadata: {
         label: versionNumber === 1 ? "Original" : `Version ${versionNumber}`,
+        workflow_source: "pre_regeneration",
       },
       created_by: ctx.actorId,
     });
@@ -330,13 +341,9 @@ export class SOAPGenerationService {
     return version;
   }
 
-  async _createVersion(note, transcriptVersion, ctx, generated, source = "ai_generated") {
+  async _createVersion(note, transcriptVersion, ctx, generated, source = "ai_generated", labelOverride) {
     const versionNumber = await this._soap.getNextVersionNumber(note.id);
-    const label = source === "regenerated"
-      ? "Regenerated"
-      : source === "ai_generated"
-        ? "Original"
-        : source;
+    const label = labelOverride ?? (source === "ai_generated" ? "Original" : source);
     const version = await this._soap.createVersion({
       soap_note_id: note.id,
       session_id: note.session_id,

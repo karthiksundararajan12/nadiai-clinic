@@ -3,9 +3,12 @@ import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "./clinical-saf
 /**
  * @param {Record<string, string>} draft
  * @param {Array<{ confidence?: number; is_low_confidence?: boolean }>} segments
- * @returns {{ level: "high"|"review"|"low"; label: string; description: string }}
+ * @returns {{ level: "high"|"review"|"low"; label: string; description: string } | null}
  */
 export function computeSoapQuality(draft, segments = []) {
+  const hasDraftContent = Object.values(draft ?? {}).some((v) => String(v ?? "").trim());
+  if (!hasDraftContent || segments.length === 0) return null;
+
   const warnings = getSoapClinicalWarnings(draft);
   const blocking = hasBlockingSoapWarnings(warnings);
   const emptyCount = warnings.length;
@@ -13,10 +16,11 @@ export function computeSoapQuality(draft, segments = []) {
   const withConf = segments.filter((s) => typeof s.confidence === "number");
   const avgConf = withConf.length
     ? withConf.reduce((s, x) => s + x.confidence, 0) / withConf.length
-    : 1;
+    : 0.85;
   const lowSegs = segments.filter((s) => s.is_low_confidence).length;
+  const lowRatio = segments.length > 0 ? lowSegs / segments.length : 0;
 
-  if (blocking || emptyCount >= 3 || avgConf < 0.45 || lowSegs > segments.length * 0.4) {
+  if (blocking || emptyCount >= 3 || avgConf < 0.45 || lowRatio > 0.4) {
     return {
       level: "low",
       label: "Low Confidence",

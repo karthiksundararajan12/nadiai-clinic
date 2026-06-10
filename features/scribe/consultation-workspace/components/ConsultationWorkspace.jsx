@@ -67,7 +67,9 @@ export function ConsultationWorkspace({
   const [approveBannerOpen, setApproveBannerOpen] = useState(false);
   const [approvalLocked, setApprovalLocked] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [frozenQuality, setFrozenQuality] = useState(null);
   const frozenDateRef = useRef({ sessionId: null, value: null });
+  const qualityDebounceRef = useRef(null);
   const [icdOverride, setIcdOverride] = useState(null);
   const [rpmEnabled, setRpmEnabled] = useState(false);
 
@@ -76,6 +78,10 @@ export function ConsultationWorkspace({
     resolvedSessionStatus === "SOAP_APPROVED" ||
     resolvedSessionStatus === "COMPLETED" ||
     resolvedSessionStatus === "READY_FOR_PRESCRIPTION" ||
+    resolvedSessionStatus === "GENERATING_PRESCRIPTION" ||
+    resolvedSessionStatus === "PRESCRIPTION_DRAFT_READY" ||
+    resolvedSessionStatus === "PRESCRIPTION_REVIEW_REQUIRED" ||
+    resolvedSessionStatus === "PRESCRIPTION_REVIEWING" ||
     resolvedSessionStatus === "PRESCRIPTION_APPROVED";
 
   const soapApproved = approvalLocked || soap.readOnly || statusApproved;
@@ -126,7 +132,9 @@ export function ConsultationWorkspace({
     parentTranscriptionRef.current = false;
     setApprovalLocked(false);
     setApproveBannerOpen(false);
+    setFrozenQuality(null);
     frozenDateRef.current = { sessionId, value: null };
+    if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
   }, [sessionId]);
 
   useEffect(() => {
@@ -370,7 +378,7 @@ export function ConsultationWorkspace({
           ? "saving"
           : null;
 
-  const soapReady = soapApproved || (hasSoap && !soap.loading && !soap.error);
+  const soapReady = soapApproved || (hasSoap && !soap.loading && !soap.error && !noteGenerating);
   const soapWarnings = useMemo(() => getSoapClinicalWarnings(soap.draft), [soap.draft]);
   const blockingApproval = hasBlockingSoapWarnings(soapWarnings);
 
@@ -379,10 +387,36 @@ export function ConsultationWorkspace({
     () => buildSoapEvidenceMap(transcript.segments),
     [transcript.segments],
   );
-  const quality = useMemo(
-    () => (soapApproved ? null : computeSoapQuality(soap.draft, transcript.segments)),
-    [soap.draft, transcript.segments, soapApproved],
-  );
+  const qualityBusy =
+    soapApproved ||
+    noteGenerating ||
+    soap.regenerating ||
+    soap.loading ||
+    !hasSoap;
+
+  useEffect(() => {
+    if (qualityBusy) {
+      if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
+      if (soapApproved) setFrozenQuality(null);
+      return;
+    }
+
+    if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
+    qualityDebounceRef.current = setTimeout(() => {
+      const computed = computeSoapQuality(soap.draft, transcript.segments);
+      if (computed) setFrozenQuality((prev) => prev ?? computed);
+    }, 600);
+
+    return () => {
+      if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
+    };
+  }, [qualityBusy, soapApproved, soap.draft, transcript.segments]);
+
+  useEffect(() => {
+    if (soap.regenerating) setFrozenQuality(null);
+  }, [soap.regenerating]);
+
+  const quality = soapApproved ? null : frozenQuality;
 
   const soapDisplayCandidate = resolveSoapDisplayDate({
     note: soap.note,
@@ -481,7 +515,7 @@ export function ConsultationWorkspace({
             readOnly: soapApproved,
             saving: soap.saving,
             error: soap.error,
-            generating: false,
+            generating: soapApproved ? false : noteGenerating,
             regenerating: soapApproved ? false : soap.regenerating,
             activeSection: activeSoapSection ?? highlightedSoapSection,
             onChange: soap.updateSection,

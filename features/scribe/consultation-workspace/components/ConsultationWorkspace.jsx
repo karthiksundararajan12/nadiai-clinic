@@ -25,6 +25,14 @@ import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
 import { resolveSoapDisplayDate, resolveSoapDateLabel } from "../lib/format-datetime.js";
 
+const PRESCRIPTION_READY_STATUSES = new Set([
+  "PRESCRIPTION_DRAFT_READY",
+  "PRESCRIPTION_REVIEW_REQUIRED",
+  "PRESCRIPTION_REVIEWING",
+  "PRESCRIPTION_APPROVED",
+  "COMPLETED",
+]);
+
 export function ConsultationWorkspace({
   sessionId,
   onApproved,
@@ -64,9 +72,9 @@ export function ConsultationWorkspace({
 
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
-  const [approveBannerOpen, setApproveBannerOpen] = useState(false);
   const [approvalLocked, setApprovalLocked] = useState(false);
   const [approving, setApproving] = useState(false);
+  const [generatingPrescription, setGeneratingPrescription] = useState(false);
   const [frozenQuality, setFrozenQuality] = useState(null);
   const frozenDateRef = useRef({ sessionId: null, value: null });
   const qualityDebounceRef = useRef(null);
@@ -131,7 +139,7 @@ export function ConsultationWorkspace({
     autoTranscribeAttemptedRef.current = false;
     parentTranscriptionRef.current = false;
     setApprovalLocked(false);
-    setApproveBannerOpen(false);
+    setGeneratingPrescription(false);
     setFrozenQuality(null);
     frozenDateRef.current = { sessionId, value: null };
     if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
@@ -140,7 +148,6 @@ export function ConsultationWorkspace({
   useEffect(() => {
     if (statusApproved && !approvalLocked) {
       setApprovalLocked(true);
-      setApproveBannerOpen(true);
     }
   }, [statusApproved, approvalLocked]);
 
@@ -203,13 +210,40 @@ export function ConsultationWorkspace({
     try {
       await soap.approve();
       setApprovalLocked(true);
-      setApproveBannerOpen(true);
-      void fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, { method: "POST" }).catch(() => {});
       void statusPoll.refresh?.();
     } finally {
       setApproving(false);
     }
   }, [sessionId, soap, statusPoll]);
+
+  const prescriptionReady = PRESCRIPTION_READY_STATUSES.has(resolvedSessionStatus);
+  const prescriptionGenerating =
+    generatingPrescription || resolvedSessionStatus === "GENERATING_PRESCRIPTION";
+  const canGeneratePrescription =
+    soapApproved && !prescriptionReady && !prescriptionGenerating;
+
+  const handleGeneratePrescription = useCallback(async () => {
+    setGeneratingPrescription(true);
+    try {
+      const res = await fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, {
+        method: "POST",
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(payload?.error || `Failed to generate prescription (${res.status})`);
+      }
+      await statusPoll.refresh?.();
+      window.open(`/scribe?rx=${sessionId}`, "_blank");
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to generate prescription");
+    } finally {
+      setGeneratingPrescription(false);
+    }
+  }, [sessionId, statusPoll]);
+
+  const handleViewPrescription = useCallback(() => {
+    window.open(`/scribe?rx=${sessionId}`, "_blank");
+  }, [sessionId]);
 
   const handlePatientSelect = useCallback(async (p) => {
     onSelectedPatientChange?.(p);
@@ -501,12 +535,11 @@ export function ConsultationWorkspace({
         onOpenVersions={() => setVersionsOpen(true)}
         onOpenAudit={() => setAuditOpen(true)}
         onReject={handleRejectSOAP}
-        approveBanner={{
-          open: approveBannerOpen,
-          onViewPrescription: () => window.open(`/scribe?rx=${sessionId}`, "_blank"),
-          onSkip: () => { setApproveBannerOpen(false); onApproved?.(); },
-          onDismiss: () => setApproveBannerOpen(false),
-        }}
+        canGeneratePrescription={canGeneratePrescription}
+        generatingPrescription={prescriptionGenerating}
+        onGeneratePrescription={handleGeneratePrescription}
+        prescriptionReady={prescriptionReady}
+        onViewPrescription={handleViewPrescription}
         soapProps={{
           ready: soapReady,
           panel: {

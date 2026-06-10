@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import {
   CheckCircle,
   Download,
+  FileText,
   History,
   Loader2,
   MoreHorizontal,
@@ -13,7 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatClinicalDateTime, resolveSoapDateLabel } from "../../lib/format-datetime.js";
 import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
-import { PrescriptionPreview, ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
+import { ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
 import { AuditTrailDrawer } from "./AuditTrailDrawer.jsx";
 
@@ -29,7 +30,6 @@ export function ConsultationClinicalLayout({
   soapApproved,
   toolbarLeft,
   onOpenSessions,
-  approveBanner,
   versions,
   onRestoreVersion,
   onCompareVersions,
@@ -46,6 +46,11 @@ export function ConsultationClinicalLayout({
   onOpenVersions,
   onOpenAudit,
   onReject,
+  canGeneratePrescription,
+  generatingPrescription,
+  onGeneratePrescription,
+  prescriptionReady,
+  onViewPrescription,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -98,15 +103,35 @@ export function ConsultationClinicalLayout({
               Approve
             </button>
           )}
-          {onOpenSessions && (
+          {approved && canGeneratePrescription && (
             <button
               type="button"
-              className="cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"
-              onClick={onOpenSessions}
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:bg-green-700 disabled:opacity-50"
+              onClick={onGeneratePrescription}
+              disabled={generatingPrescription}
+              data-testid="generate-prescription"
             >
-              Sessions
+              {generatingPrescription ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
+              Generate Prescription
             </button>
           )}
+          {approved && prescriptionReady && (
+            <button
+              type="button"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"
+              onClick={onViewPrescription}
+            >
+              <FileText className="h-4 w-4" />
+              View Prescription
+            </button>
+          )}
+          <button
+            type="button"
+            className="cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"
+            onClick={onOpenSessions}
+          >
+            Sessions
+          </button>
           <div className="relative">
             <button
               type="button"
@@ -148,8 +173,6 @@ export function ConsultationClinicalLayout({
           </div>
         </div>
       </div>
-
-      <PrescriptionPreview {...approveBanner} />
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto max-w-3xl">

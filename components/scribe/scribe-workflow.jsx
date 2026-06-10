@@ -316,6 +316,7 @@ export function ScribeWorkflow() {
     <ScribeSoapPlaceholder
       processing={pipelineBusy}
       message={pipelineMessage ?? "Processing…"}
+      onOpenSessions={() => setSessionsOpen(true)}
     />
   );
 

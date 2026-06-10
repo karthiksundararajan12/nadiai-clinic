@@ -23,7 +23,7 @@ import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
 import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
-import { resolveSoapDisplayDate } from "../lib/format-datetime.js";
+import { resolveSoapDisplayDate, resolveSoapDateLabel } from "../lib/format-datetime.js";
 
 export function ConsultationWorkspace({
   sessionId,
@@ -65,16 +65,20 @@ export function ConsultationWorkspace({
   const [versionsOpen, setVersionsOpen] = useState(false);
   const [auditOpen, setAuditOpen] = useState(false);
   const [approveBannerOpen, setApproveBannerOpen] = useState(false);
+  const [approvalLocked, setApprovalLocked] = useState(false);
   const [approving, setApproving] = useState(false);
+  const frozenDateRef = useRef({ sessionId: null, value: null });
   const [icdOverride, setIcdOverride] = useState(null);
   const [rpmEnabled, setRpmEnabled] = useState(false);
 
   const readOnly = readOnlyProp ?? transcript.readOnly;
-  const soapApproved =
-    soap.readOnly ||
+  const statusApproved =
     resolvedSessionStatus === "SOAP_APPROVED" ||
     resolvedSessionStatus === "COMPLETED" ||
-    resolvedSessionStatus === "READY_FOR_PRESCRIPTION";
+    resolvedSessionStatus === "READY_FOR_PRESCRIPTION" ||
+    resolvedSessionStatus === "PRESCRIPTION_APPROVED";
+
+  const soapApproved = approvalLocked || soap.readOnly || statusApproved;
 
   const canApproveSOAP = !soapApproved && resolvedSessionStatus === "SOAP_REVIEWING";
   const canRegenerateSOAP = !soapApproved && !readOnly && hasSoap;
@@ -120,7 +124,17 @@ export function ConsultationWorkspace({
   useEffect(() => {
     autoTranscribeAttemptedRef.current = false;
     parentTranscriptionRef.current = false;
+    setApprovalLocked(false);
+    setApproveBannerOpen(false);
+    frozenDateRef.current = { sessionId, value: null };
   }, [sessionId]);
+
+  useEffect(() => {
+    if (statusApproved && !approvalLocked) {
+      setApprovalLocked(true);
+      setApproveBannerOpen(true);
+    }
+  }, [statusApproved, approvalLocked]);
 
   useEffect(() => {
     if (pipelineBusy || pipelineMessage) {
@@ -180,9 +194,10 @@ export function ConsultationWorkspace({
     setApproving(true);
     try {
       await soap.approve();
+      setApprovalLocked(true);
       setApproveBannerOpen(true);
       void fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, { method: "POST" }).catch(() => {});
-      await statusPoll.refresh?.();
+      void statusPoll.refresh?.();
     } finally {
       setApproving(false);
     }
@@ -254,17 +269,7 @@ export function ConsultationWorkspace({
     }
   }, [sessionId]);
 
-  const soapDisplayDate = useMemo(
-    () => resolveSoapDisplayDate({ note: soap.note, session }),
-    [soap.note, session],
-  );
-
-  const sessionComplete =
-    soapApproved ||
-    resolvedSessionStatus === "SOAP_APPROVED" ||
-    resolvedSessionStatus === "COMPLETED" ||
-    resolvedSessionStatus === "READY_FOR_PRESCRIPTION" ||
-    resolvedSessionStatus === "PRESCRIPTION_APPROVED";
+  const sessionComplete = soapApproved;
 
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
@@ -333,7 +338,7 @@ export function ConsultationWorkspace({
   useEffect(() => {
     onWorkspaceStateChange?.({
       segments: waitingForTranscript ? [] : transcript.segments,
-      transcriptLoading: waitingForTranscript || (transcript.loading && !transcript.segments.length),
+      transcriptLoading: !soapApproved && (waitingForTranscript || (transcript.loading && !transcript.segments.length)),
       transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
       sessionComplete,
       status: resolvedSessionStatus,
@@ -347,11 +352,12 @@ export function ConsultationWorkspace({
     pipelineMessage,
     sessionComplete,
     resolvedSessionStatus,
+    soapApproved,
   ]);
 
   const transcriptLoadError = waitingForTranscript ? null : transcript.error;
 
-  const noteGenerating = waitingForTranscript || autoPipelineRunning || generatingSOAP;
+  const noteGenerating = !soapApproved && (waitingForTranscript || autoPipelineRunning || generatingSOAP);
 
   const saveStatus = transcript.saving || soap.saving
     ? "saving"
@@ -364,7 +370,7 @@ export function ConsultationWorkspace({
           ? "saving"
           : null;
 
-  const soapReady = hasSoap && !soap.loading && !soap.error;
+  const soapReady = soapApproved || (hasSoap && !soap.loading && !soap.error);
   const soapWarnings = useMemo(() => getSoapClinicalWarnings(soap.draft), [soap.draft]);
   const blockingApproval = hasBlockingSoapWarnings(soapWarnings);
 
@@ -374,9 +380,26 @@ export function ConsultationWorkspace({
     [transcript.segments],
   );
   const quality = useMemo(
-    () => computeSoapQuality(soap.draft, transcript.segments),
-    [soap.draft, transcript.segments],
+    () => (soapApproved ? null : computeSoapQuality(soap.draft, transcript.segments)),
+    [soap.draft, transcript.segments, soapApproved],
   );
+
+  const soapDisplayCandidate = resolveSoapDisplayDate({
+    note: soap.note,
+    session,
+    isApproved: soapApproved,
+  });
+  if (frozenDateRef.current.sessionId !== sessionId) {
+    frozenDateRef.current = { sessionId, value: null };
+  }
+  if (soapDisplayCandidate && !frozenDateRef.current.value) {
+    frozenDateRef.current.value = soapDisplayCandidate;
+  }
+  if (soapApproved && soap.note?.approved_at) {
+    frozenDateRef.current.value = soap.note.approved_at;
+  }
+  const soapDisplayDate = frozenDateRef.current.value ?? soapDisplayCandidate;
+  const soapDateLabel = resolveSoapDateLabel(soapApproved);
   const metrics = useMemo(
     () => buildProductivityMetrics(session, soap.note),
     [session, soap.note],
@@ -420,10 +443,12 @@ export function ConsultationWorkspace({
       <ConsultationClinicalLayout
         sessionId={sessionId}
         sessionDate={soapDisplayDate}
+        sessionDateLabel={soapDateLabel}
         status={resolvedSessionStatus}
         quality={quality}
         evidenceMap={evidenceMap}
         readOnly={readOnly || soapApproved}
+        soapApproved={soapApproved}
         toolbarLeft={toolbarLeft}
         onOpenSessions={onOpenSessions}
         onEvidenceJump={handlePlayFromHere}
@@ -456,8 +481,8 @@ export function ConsultationWorkspace({
             readOnly: soapApproved,
             saving: soap.saving,
             error: soap.error,
-            generating: noteGenerating,
-            regenerating: soap.regenerating,
+            generating: false,
+            regenerating: soapApproved ? false : soap.regenerating,
             activeSection: activeSoapSection ?? highlightedSoapSection,
             onChange: soap.updateSection,
             onRetry: soap.load,
@@ -465,7 +490,7 @@ export function ConsultationWorkspace({
             onRegenerate: handleRegenerateSOAP,
           },
           empty: {
-            generating: noteGenerating || (hasSoap && soap.loading),
+            generating: soapApproved ? false : noteGenerating || (hasSoap && soap.loading),
             error: soap.error,
             onRetry: soap.load,
           },

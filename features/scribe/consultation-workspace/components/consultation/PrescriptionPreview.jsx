@@ -11,7 +11,7 @@ export function PrescriptionPreview({
   if (!open) return null;
 
   return (
-    <div className="mx-6 mb-3 animate-in slide-in-from-top-2">
+    <div className="mx-6 mb-3 mt-4 animate-in slide-in-from-top-2">
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 px-4 py-3">
         <div className="flex items-center gap-2">
           <CheckCircle className="h-5 w-5 text-green-600" />

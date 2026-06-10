@@ -15,15 +15,15 @@ export function formatClinicalDateTime(dateStr) {
 }
 
 /**
- * Best display time for a SOAP note header.
+ * Stable display time for SOAP header (avoids jumping when note autosaves).
  */
-export function resolveSoapDisplayDate({ note, session } = {}) {
-  return (
-    note?.generated_at ??
-    note?.updated_at ??
-    note?.approved_at ??
-    session?.updated_at ??
-    session?.created_at ??
-    null
-  );
+export function resolveSoapDisplayDate({ note, session, isApproved } = {}) {
+  if (isApproved && note?.approved_at) return note.approved_at;
+  if (note?.generated_at) return note.generated_at;
+  if (session?.created_at) return session.created_at;
+  return null;
+}
+
+export function resolveSoapDateLabel(isApproved) {
+  return isApproved ? "Approved" : "Generated";
 }

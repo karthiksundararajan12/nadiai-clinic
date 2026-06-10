@@ -1,13 +1,17 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Loader2, Stethoscope, User } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../../transcript-review/components/Timestamp.jsx";
 
 function isDoctor(segment) {
   const label = segment.speaker_label ?? segment.speaker ?? "";
   return label === "Doctor" || label === "A";
+}
+
+function speakerLabel(segment) {
+  return isDoctor(segment) ? "Doctor" : "Patient";
 }
 
 export function ScribeConversationChat({
@@ -43,42 +47,43 @@ export function ScribeConversationChat({
   }
 
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3" data-testid="transcript-review-workspace">
-      <div className="space-y-3">
+    <div className="min-h-0 flex-1 overflow-y-auto bg-[#e5ddd5] px-3 py-3" data-testid="transcript-review-workspace">
+      <div className="space-y-2">
         {segments.map((segment) => {
           const doctor = isDoctor(segment);
+          const label = speakerLabel(segment);
           return (
             <div
               key={segment.id}
               id={`chat-segment-${segment.id}`}
-              className={cn("flex gap-2", doctor ? "flex-row-reverse" : "flex-row")}
+              className={cn("flex w-full", doctor ? "justify-end" : "justify-start")}
             >
-              <div
-                className={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                  doctor ? "bg-cyan-100 text-cyan-700" : "bg-gray-100 text-gray-600",
-                )}
-              >
-                {doctor ? <Stethoscope className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
-              </div>
-              <div className={cn("max-w-[82%] min-w-0", doctor && "text-right")}>
-                <div className={cn("mb-0.5 flex items-center gap-1.5", doctor && "justify-end")}>
-                  <span className="text-[10px] font-semibold text-gray-600">
-                    {segment.speaker_label ?? (doctor ? "Doctor" : "Patient")}
-                  </span>
-                  <span className="font-mono text-[9px] text-gray-400">
-                    {formatTimestamp(segment.start_seconds)}
-                  </span>
-                </div>
+              <div className={cn("max-w-[88%] min-w-0", doctor ? "items-end" : "items-start")}>
+                <p
+                  className={cn(
+                    "mb-0.5 px-1 text-[10px] font-semibold text-gray-600",
+                    doctor && "text-right",
+                  )}
+                >
+                  {label}:
+                </p>
                 <div
                   className={cn(
-                    "rounded-2xl px-3 py-2 text-xs leading-relaxed",
+                    "relative rounded-lg px-3 py-2 text-xs leading-relaxed shadow-sm",
                     doctor
-                      ? "rounded-tr-sm bg-cyan-600 text-white"
-                      : "rounded-tl-sm border border-gray-200 bg-white text-gray-800",
+                      ? "rounded-tr-none bg-[#dcf8c6] text-gray-900"
+                      : "rounded-tl-none bg-white text-gray-900",
                   )}
                 >
                   <p className="whitespace-pre-wrap">{segment.text}</p>
+                  <span
+                    className={cn(
+                      "mt-1 block text-[9px] text-gray-500",
+                      doctor ? "text-right" : "text-left",
+                    )}
+                  >
+                    {formatTimestamp(segment.start_seconds)}
+                  </span>
                 </div>
               </div>
             </div>

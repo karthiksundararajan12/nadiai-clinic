@@ -11,7 +11,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatClinicalDateTime } from "../../lib/format-datetime.js";
+import { formatClinicalDateTime, resolveSoapDateLabel } from "../../lib/format-datetime.js";
 import { SOAPEditor, SOAPEditorEmpty } from "../consultation/SOAPEditor.jsx";
 import { PrescriptionPreview, ApprovedStatusBadge } from "../consultation/PrescriptionPreview.jsx";
 import { VersionHistoryDrawer } from "./VersionHistoryDrawer.jsx";
@@ -20,11 +20,13 @@ import { AuditTrailDrawer } from "./AuditTrailDrawer.jsx";
 export function ConsultationClinicalLayout({
   sessionId,
   sessionDate,
+  sessionDateLabel = "Generated",
   status,
   quality,
   evidenceMap,
   soapProps,
   readOnly,
+  soapApproved,
   toolbarLeft,
   onOpenSessions,
   approveBanner,
@@ -60,8 +62,13 @@ export function ConsultationClinicalLayout({
     await onCompareVersions?.(fromId, toId);
   }, [onCompareVersions]);
 
-  const soapApproved =
-    status === "SOAP_APPROVED" || status === "COMPLETED" || status === "READY_FOR_PRESCRIPTION";
+  const approved =
+    soapApproved ||
+    status === "SOAP_APPROVED" ||
+    status === "COMPLETED" ||
+    status === "READY_FOR_PRESCRIPTION";
+
+  const formattedDate = formatClinicalDateTime(sessionDate);
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace">
@@ -69,25 +76,16 @@ export function ConsultationClinicalLayout({
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">SOAP Note</h2>
-            {formatClinicalDateTime(sessionDate) && (
+            {formattedDate && (
               <p className="text-xs text-gray-500">
-                Generated {formatClinicalDateTime(sessionDate)}
+                {sessionDateLabel} {formattedDate}
               </p>
             )}
           </div>
           {toolbarLeft}
-          {onOpenSessions && (
-            <button
-              type="button"
-              className="cursor-pointer text-xs text-cyan-600 hover:underline"
-              onClick={onOpenSessions}
-            >
-              Sessions
-            </button>
-          )}
         </div>
         <div className="flex items-center gap-2">
-          <ApprovedStatusBadge approved={soapApproved} />
+          <ApprovedStatusBadge approved={approved} />
           {canApprove && (
             <button
               type="button"
@@ -98,6 +96,15 @@ export function ConsultationClinicalLayout({
             >
               {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
               Approve
+            </button>
+          )}
+          {onOpenSessions && (
+            <button
+              type="button"
+              className="cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"
+              onClick={onOpenSessions}
+            >
+              Sessions
             </button>
           )}
           <div className="relative">
@@ -149,7 +156,7 @@ export function ConsultationClinicalLayout({
           {soapProps.ready ? (
             <SOAPEditor
               {...soapProps.panel}
-              quality={quality}
+              quality={approved ? null : quality}
               evidenceMap={evidenceMap}
               onEvidenceJump={handleEvidenceJump}
               onRegenerate={soapProps.panel.onRegenerate}

@@ -19,6 +19,7 @@ export function SOAPSection({
   label,
   value = "",
   confidence = 85,
+  showConfidence = true,
   readOnly,
   saving,
   regenerating,
@@ -69,9 +70,11 @@ export function SOAPSection({
       <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-2.5">
         <div className="flex items-center gap-2">
           <span className={cn("text-xs font-bold uppercase tracking-wide", style.text)}>{label}</span>
-          <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
-            {confidence}%
-          </span>
+          {showConfidence && (
+            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+              {confidence}%
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1">
           {!readOnly && (

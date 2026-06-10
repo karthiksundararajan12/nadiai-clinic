@@ -17,7 +17,7 @@ const TRANSCRIBED = new Set([
 /**
  * Polls session status while background processing runs.
  */
-export function useSessionStatus(sessionId, { enabled = true, intervalMs = 2000 } = {}) {
+export function useSessionStatus(sessionId, { enabled = true, intervalMs = 3000 } = {}) {
   const [session, setSession] = useState(null);
   const [error, setError] = useState(null);
   const mountedRef = useRef(true);

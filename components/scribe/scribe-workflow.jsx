@@ -255,6 +255,11 @@ export function ScribeWorkflow() {
     loadConsultations(true);
   }, [goLive, loadConsultations]);
 
+  const handleTranscriptionComplete = useCallback(() => {
+    setPipelineBusy(false);
+    setPipelineMessage(null);
+  }, []);
+
   const languageToggle = (
     <LanguageToggle value={language} onChange={setLanguage} />
   );
@@ -302,10 +307,7 @@ export function ScribeWorkflow() {
       readOnly={viewFromHistory}
       pipelineBusy={pipelineBusy}
       pipelineMessage={pipelineMessage}
-      onTranscriptionComplete={() => {
-        setPipelineBusy(false);
-        setPipelineMessage(null);
-      }}
+      onTranscriptionComplete={handleTranscriptionComplete}
       onStartTranscription={runTranscription}
       autoGenerateNote={!viewFromHistory}
       onDelete={() => deleteSession(activeSessionId)}

@@ -284,9 +284,18 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     }
   }, [load, sessionId]);
 
+  const soapRealtimeTimerRef = useRef(null);
   useSOAPRealtime(sessionId, useCallback(() => {
-    if (!dirtyKeys.length) load({ silent: true });
+    if (dirtyKeys.length) return;
+    if (soapRealtimeTimerRef.current) clearTimeout(soapRealtimeTimerRef.current);
+    soapRealtimeTimerRef.current = setTimeout(() => {
+      void load({ silent: true });
+    }, 400);
   }, [dirtyKeys.length, load]));
+
+  useEffect(() => () => {
+    if (soapRealtimeTimerRef.current) clearTimeout(soapRealtimeTimerRef.current);
+  }, []);
 
   useEffect(() => {
     if (!enabled) return;

@@ -176,11 +176,27 @@ export function useTranscriptReview(sessionId, { enabled = true } = {}) {
     return result;
   }, [load, sessionId]);
 
-  const onRealtimeChange = useCallback(() => {
-    load();
-  }, [load]);
+  const dirtyRef = useRef(state.dirty);
+  const realtimeTimerRef = useRef(null);
 
-  useTranscriptRealtime(sessionId, onRealtimeChange);
+  useEffect(() => {
+    dirtyRef.current = state.dirty;
+  }, [state.dirty]);
+
+  const onRealtimeChange = useCallback(() => {
+    if (!enabled) return;
+    if (Object.keys(dirtyRef.current).length > 0) return;
+    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+    realtimeTimerRef.current = setTimeout(() => {
+      void load();
+    }, 400);
+  }, [enabled, load]);
+
+  useEffect(() => () => {
+    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
+  }, []);
+
+  useTranscriptRealtime(sessionId, enabled ? onRealtimeChange : undefined);
 
   useEffect(() => {
     if (!enabled) {

@@ -51,7 +51,10 @@ export function ConsultationWorkspace({
   onSelectedPatientChange,
   onWorkspaceStateChange,
 }) {
-  const statusPoll = useSessionStatus(sessionId, { enabled: Boolean(sessionId), intervalMs: 1500 });
+  const statusPoll = useSessionStatus(sessionId, {
+    enabled: Boolean(sessionId),
+    intervalMs: pipelineBusy ? 2000 : 5000,
+  });
 
   const polledStatus = statusPoll.session?.status ?? "";
   const transcript = useTranscriptReview(sessionId, {
@@ -116,6 +119,7 @@ export function ConsultationWorkspace({
   const autoTranscribeAttemptedRef = useRef(false);
   const parentTranscriptionRef = useRef(false);
   const prevPipelineBusyRef = useRef(false);
+  const transcriptionCompleteHandledRef = useRef(false);
 
   const poorTranscription = useMemo(
     () => {
@@ -145,6 +149,7 @@ export function ConsultationWorkspace({
   useEffect(() => {
     autoTranscribeAttemptedRef.current = false;
     parentTranscriptionRef.current = false;
+    transcriptionCompleteHandledRef.current = false;
     setApprovalLocked(false);
     setGeneratingPrescription(false);
     setFrozenQuality(null);
@@ -183,19 +188,14 @@ export function ConsultationWorkspace({
       void statusPoll.refresh();
     }
     prevPipelineBusyRef.current = pipelineBusy;
-  }, [pipelineBusy, sessionId, statusPoll]);
+  }, [pipelineBusy, sessionId, statusPoll.refresh]);
 
   useEffect(() => {
-    if (!statusPoll.isTranscribed) return;
-    void transcript.load();
+    if (!statusPoll.isTranscribed && !statusPoll.isFailed) return;
+    if (transcriptionCompleteHandledRef.current) return;
+    transcriptionCompleteHandledRef.current = true;
     if (pipelineBusy) onTranscriptionComplete?.();
-  }, [statusPoll.isTranscribed, pipelineBusy, onTranscriptionComplete, transcript.load]);
-
-  useEffect(() => {
-    if (statusPoll.isFailed && pipelineBusy) {
-      onTranscriptionComplete?.();
-    }
-  }, [statusPoll.isFailed, pipelineBusy, onTranscriptionComplete]);
+  }, [statusPoll.isTranscribed, statusPoll.isFailed, pipelineBusy, onTranscriptionComplete]);
 
   const handleSegmentClick = useCallback((segment) => {
     const section = inferSoapSectionFromSegment(segment);
@@ -423,7 +423,7 @@ export function ConsultationWorkspace({
         await transcript.generateSOAP();
         await soap.load();
       } catch {
-        autoPipelineAttemptedRef.current = false;
+        // Do not reset — avoids infinite auto-generate retry loop on API errors.
       } finally {
         setAutoPipelineRunning(false);
       }

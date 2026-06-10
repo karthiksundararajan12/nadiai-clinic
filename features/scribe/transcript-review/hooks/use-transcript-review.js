@@ -11,7 +11,6 @@ import {
   updateTranscriptSegment,
 } from "../services/transcript-review.client.js";
 import { useAutosave } from "./use-autosave.js";
-import { useTranscriptRealtime } from "./use-transcript-realtime.js";
 
 const initialState = {
   session: null,
@@ -84,12 +83,13 @@ export function useTranscriptReview(sessionId, { enabled = true } = {}) {
   const [generatingSOAP, setGeneratingSOAP] = useState(false);
   const [error, setError] = useState(null);
   const loadRequestRef = useRef(0);
+  const fetchedSessionRef = useRef(null);
 
   useEffect(() => {
     dispatch({ type: "RESET" });
-    setLoading(Boolean(sessionId && enabled));
     setError(null);
-  }, [sessionId, enabled]);
+    fetchedSessionRef.current = null;
+  }, [sessionId]);
 
   const load = useCallback(async () => {
     if (!sessionId || !enabled) return;
@@ -176,35 +176,15 @@ export function useTranscriptReview(sessionId, { enabled = true } = {}) {
     return result;
   }, [load, sessionId]);
 
-  const dirtyRef = useRef(state.dirty);
-  const realtimeTimerRef = useRef(null);
-
   useEffect(() => {
-    dirtyRef.current = state.dirty;
-  }, [state.dirty]);
-
-  const onRealtimeChange = useCallback(() => {
-    if (!enabled) return;
-    if (Object.keys(dirtyRef.current).length > 0) return;
-    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-    realtimeTimerRef.current = setTimeout(() => {
-      void load();
-    }, 400);
-  }, [enabled, load]);
-
-  useEffect(() => () => {
-    if (realtimeTimerRef.current) clearTimeout(realtimeTimerRef.current);
-  }, []);
-
-  useTranscriptRealtime(sessionId, enabled ? onRealtimeChange : undefined);
-
-  useEffect(() => {
-    if (!enabled) {
+    if (!enabled || !sessionId) {
       setLoading(false);
       return;
     }
-    queueMicrotask(() => load());
-  }, [load, enabled]);
+    if (fetchedSessionRef.current === sessionId) return;
+    fetchedSessionRef.current = sessionId;
+    void load();
+  }, [enabled, sessionId, load]);
 
   return {
     ...state,

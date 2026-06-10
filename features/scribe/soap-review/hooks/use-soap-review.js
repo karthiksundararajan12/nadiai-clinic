@@ -15,7 +15,6 @@ import {
   submitSOAPReviewFeedback,
   updateSOAPSection,
 } from "../services/soap-review.client.js";
-import { useSOAPRealtime } from "./use-soap-realtime.js";
 
 export const SOAP_SECTIONS = [
   ["chiefComplaint", "Chief Complaint"],
@@ -129,6 +128,7 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
   const [error, setError] = useState(null);
   const loadRequestRef = useRef(0);
   const dirtyRef = useRef({});
+  const fetchedSessionRef = useRef(null);
 
   useEffect(() => {
     dirtyRef.current = state.dirty;
@@ -136,9 +136,9 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
 
   useEffect(() => {
     dispatch({ type: "RESET" });
-    setLoading(enabled && Boolean(sessionId));
     setError(null);
-  }, [enabled, sessionId]);
+    fetchedSessionRef.current = null;
+  }, [sessionId]);
 
   const load = useCallback(async (options = {}) => {
     const silent = options?.silent === true;
@@ -284,23 +284,15 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     }
   }, [load, sessionId]);
 
-  const soapRealtimeTimerRef = useRef(null);
-  useSOAPRealtime(sessionId, useCallback(() => {
-    if (dirtyKeys.length) return;
-    if (soapRealtimeTimerRef.current) clearTimeout(soapRealtimeTimerRef.current);
-    soapRealtimeTimerRef.current = setTimeout(() => {
-      void load({ silent: true });
-    }, 400);
-  }, [dirtyKeys.length, load]));
-
-  useEffect(() => () => {
-    if (soapRealtimeTimerRef.current) clearTimeout(soapRealtimeTimerRef.current);
-  }, []);
-
   useEffect(() => {
-    if (!enabled) return;
-    queueMicrotask(() => load());
-  }, [enabled, load]);
+    if (!enabled || !sessionId) {
+      setLoading(false);
+      return;
+    }
+    if (fetchedSessionRef.current === sessionId) return;
+    fetchedSessionRef.current = sessionId;
+    void load();
+  }, [enabled, sessionId, load]);
 
   useEffect(() => {
     const handler = (event) => {

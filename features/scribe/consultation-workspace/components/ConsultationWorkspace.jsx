@@ -51,25 +51,41 @@ export function ConsultationWorkspace({
   onSelectedPatientChange,
   onWorkspaceStateChange,
 }) {
+  const lastKnownStatusRef = useRef("");
+
+  const pauseStatusPoll =
+    Boolean(sessionId) &&
+    !pipelineBusy &&
+    ["SOAP_REVIEWING", "SOAP_APPROVED", "COMPLETED"].includes(lastKnownStatusRef.current);
+
   const statusPoll = useSessionStatus(sessionId, {
-    enabled: Boolean(sessionId),
-    intervalMs: pipelineBusy ? 2000 : 5000,
+    enabled: Boolean(sessionId) && !pauseStatusPoll,
+    intervalMs: 8000,
   });
 
   const polledStatus = statusPoll.session?.status ?? "";
+  const statusForWorkspace = polledStatus || lastKnownStatusRef.current || "";
+
   const transcript = useTranscriptReview(sessionId, {
-    enabled: isTranscriptWorkspaceAvailable(polledStatus),
+    enabled: isTranscriptWorkspaceAvailable(statusForWorkspace),
   });
-  const resolvedSessionStatus = polledStatus || transcript.session?.status || "";
+
+  const resolvedSessionStatus =
+    polledStatus || transcript.session?.status || lastKnownStatusRef.current || "";
+
+  if (resolvedSessionStatus) {
+    lastKnownStatusRef.current = resolvedSessionStatus;
+  }
+
   const transcriptionPending = isTranscriptionPending(resolvedSessionStatus);
   const waitingForTranscript = pipelineBusy || transcriptionPending;
 
   const hasSoap = SOAP_AVAILABLE_STATUSES.has(resolvedSessionStatus);
   const soap = useSOAPReview(sessionId, {
-    enabled: hasSoap && !transcript.loading && !waitingForTranscript,
+    enabled: hasSoap && !waitingForTranscript,
   });
 
-  const session = statusPoll.session ?? transcript.session;
+  const session = statusPoll.session ?? transcript.session ?? soap.session;
   const { patient: sessionPatient } = usePatientForSession(session?.patient_id);
   const patient = selectedPatient ?? sessionPatient;
 

@@ -29,6 +29,7 @@ import {
   SessionValidationError,
   StorageError,
   TranscriptionNotReadyError,
+  TranscriptionProviderError,
   TranscriptionRetryExhaustedError,
 } from "../errors.js";
 import {
@@ -43,7 +44,10 @@ import {
   failInlineTranscriptionJob,
   isInlineTranscriptionJob,
 } from "../lib/transcription-jobs.js";
-import { mergeTranscriptionResults } from "../lib/merge-transcription-results.js";
+import {
+  mergeAudioChunkBlobs,
+  resolveChunkMimeType,
+} from "../lib/merge-audio-chunks.js";
 
 export class TranscriptionService {
   /**
@@ -470,58 +474,30 @@ export class TranscriptionService {
       chunkCount: chunks.length,
     });
 
-    const ext = chunks[0].storage_path.slice(chunks[0].storage_path.lastIndexOf(".") + 1);
-    const mimeType = MIME_TYPES[ext] ?? "audio/webm";
+    const mimeType = resolveChunkMimeType(chunks);
 
-    if (chunks.length === 1) {
-      const audioBlob = await this._downloadChunk(chunks[0].storage_path);
-      const result = await this._provider.transcribe({
-        audioBlobs: [audioBlob],
-        mimeType,
-        language: session.language,
-        sessionId: session.id,
-        durationSeconds: session.audio_duration_seconds ?? null,
-      });
-      return { ...result, chunkCount: 1 };
-    }
+    const audioBlobs = await Promise.all(
+      chunks.map((chunk) => this._downloadChunk(chunk.storage_path)),
+    );
 
-    // WebM/Ogg chunks from MediaRecorder are independent containers — concatenating
-    // raw bytes produces corrupt audio. Transcribe each chunk and merge timelines.
-    this._log.info("Transcribing session in per-chunk mode", {
+    const mergedAudio = mergeAudioChunkBlobs(audioBlobs, mimeType);
+
+    this._log.info("Transcribing merged session audio", {
       sessionId: session.id,
       chunkCount: chunks.length,
+      mergedBytes: mergedAudio.size,
+      mimeType,
     });
 
-    /** @type {import('./transcription-providers/transcription-provider.js').TranscriptionResult[]} */
-    const chunkResults = [];
-    const timeOffsets = [];
-    let cumulativeOffset = 0;
+    const result = await this._provider.transcribe({
+      audioBlobs: [mergedAudio],
+      mimeType,
+      language: session.language,
+      sessionId: session.id,
+      durationSeconds: session.audio_duration_seconds ?? null,
+    });
 
-    for (const chunk of chunks) {
-      timeOffsets.push(cumulativeOffset);
-      const audioBlob = await this._downloadChunk(chunk.storage_path);
-      const chunkDurationSeconds =
-        chunk.duration_ms != null ? Number(chunk.duration_ms) / 1000 : null;
-
-      const result = await this._provider.transcribe({
-        audioBlobs: [audioBlob],
-        mimeType,
-        language: session.language,
-        sessionId: session.id,
-        durationSeconds: chunkDurationSeconds,
-      });
-
-      chunkResults.push(result);
-      const advance =
-        result.durationSeconds ??
-        chunkDurationSeconds ??
-        (chunkResults.length === chunks.length
-          ? 0
-          : (session.audio_duration_seconds ?? 0) / chunks.length);
-      cumulativeOffset += advance;
-    }
-
-    return mergeTranscriptionResults(chunkResults, timeOffsets);
+    return { ...result, chunkCount: chunks.length };
   }
 
   /**
@@ -572,14 +548,21 @@ export class TranscriptionService {
     });
 
     const current = await this._sessions.findByIdForWorker(session.id);
-    if (current?.status === SESSION_STATUS.TRANSCRIBING) {
+    const rollbackFrom = current?.status;
+    const rollbackTo =
+      updatedJob.status === JOB_STATUS.PENDING
+        ? SESSION_STATUS.TRANSCRIPTION_QUEUED
+        : SESSION_STATUS.TRANSCRIPTION_FAILED;
+
+    if (
+      rollbackFrom === SESSION_STATUS.TRANSCRIBING ||
+      rollbackFrom === SESSION_STATUS.TRANSCRIPTION_QUEUED
+    ) {
       await this._sessions.transitionStatus(
         session.id,
         session.doctor_id,
-        SESSION_STATUS.TRANSCRIBING,
-        updatedJob.status === JOB_STATUS.PENDING
-          ? SESSION_STATUS.TRANSCRIPTION_QUEUED
-          : SESSION_STATUS.TRANSCRIPTION_FAILED,
+        rollbackFrom,
+        rollbackTo,
         { error_message: message },
       );
     }
@@ -646,16 +629,6 @@ export class TranscriptionService {
 // MODULE-LEVEL HELPERS
 // ─────────────────────────────────────────────────────────────
 
-/** @type {Record<string, string>} File extension → MIME type */
-const MIME_TYPES = {
-  webm: "audio/webm",
-  ogg:  "audio/ogg",
-  mp4:  "audio/mp4",
-  m4a:  "audio/mp4",
-  wav:  "audio/wav",
-  mp3:  "audio/mpeg",
-};
-
 /**
  * Builds a RequestContext-shaped object from a session row for worker use.
  *
@@ -681,7 +654,23 @@ function contextFromSession(session, workerId) {
  */
 function isRetryable(err) {
   if (err?.code === "TRANSCRIPTION_NOT_READY") return false;
-  if (err?.code === "VALIDATION_ERROR")        return false;
-  if (err?.code === "SESSION_NOT_FOUND")       return false;
+  if (err?.code === "VALIDATION_ERROR") return false;
+  if (err?.code === "SESSION_NOT_FOUND") return false;
+
+  if (err instanceof TranscriptionProviderError) {
+    const status = Number(err.details?.status);
+    if (status === 400 || status === 401 || status === 403 || status === 413) {
+      return false;
+    }
+    const message = String(err.message ?? "").toLowerCase();
+    if (
+      message.includes("corrupt") ||
+      message.includes("unsupported data") ||
+      message.includes("invalid audio")
+    ) {
+      return false;
+    }
+  }
+
   return true;
 }

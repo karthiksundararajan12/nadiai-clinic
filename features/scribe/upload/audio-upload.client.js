@@ -57,10 +57,14 @@ export async function uploadCompletedRecording(options) {
     throw new Error("No audio chunks provided for upload");
   }
 
-  const totalBytes = chunks.reduce((sum, chunk) => sum + chunk.size, 0);
-  const durationPerChunk = Math.round((audioDurationSeconds * 1000) / chunks.length);
+  const mimeType = chunks[0]?.type || "audio/webm";
+  const uploadChunks =
+    chunks.length > 1 ? [new Blob(chunks, { type: mimeType })] : chunks;
 
-  onProgress?.(progressEvent("starting", 0, 0, chunks.length));
+  const totalBytes = uploadChunks.reduce((sum, chunk) => sum + chunk.size, 0);
+  const durationPerChunk = Math.round(audioDurationSeconds * 1000);
+
+  onProgress?.(progressEvent("starting", 0, 0, uploadChunks.length));
 
   const manifest = {
     patient_id: patientId ?? null,
@@ -68,11 +72,11 @@ export async function uploadCompletedRecording(options) {
     language,
     audio_duration_seconds: audioDurationSeconds,
     audio_size_bytes: totalBytes,
-    chunks: chunks.map((chunk, index) => ({
+    chunks: uploadChunks.map((chunk, index) => ({
       chunk_index: index,
       size_bytes: chunk.size,
       duration_ms: durationPerChunk,
-      mime_type: chunk.type || "audio/webm",
+      mime_type: chunk.type || mimeType,
       checksum: null,
     })),
   };
@@ -85,7 +89,7 @@ export async function uploadCompletedRecording(options) {
 
   let uploadedChunks = 0;
 
-  for (let index = 0; index < chunks.length; index++) {
+  for (let index = 0; index < uploadChunks.length; index++) {
     let upload = uploadMap.get(index);
     if (!upload) {
       throw new Error(`Missing signed upload URL for chunk ${index}`);
@@ -98,14 +102,14 @@ export async function uploadCompletedRecording(options) {
         attempts === 1 ? "uploading" : "retrying",
         index,
         uploadedChunks,
-        chunks.length,
+        uploadChunks.length,
         sessionId,
       ));
 
       const { error: uploadError } = await supabase.storage
         .from(start.bucket)
-        .uploadToSignedUrl(upload.path, upload.token, chunks[index], {
-          contentType: chunks[index].type || "audio/webm",
+        .uploadToSignedUrl(upload.path, upload.token, uploadChunks[index], {
+          contentType: uploadChunks[index].type || mimeType,
           upsert: true,
         });
 
@@ -120,26 +124,26 @@ export async function uploadCompletedRecording(options) {
       await sleep(500 * attempts);
     }
 
-    onProgress?.(progressEvent("confirming", index, uploadedChunks, chunks.length, sessionId));
+    onProgress?.(progressEvent("confirming", index, uploadedChunks, uploadChunks.length, sessionId));
 
     await postJson(`/api/scribe/sessions/${sessionId}/uploads/confirm`, {
       chunk_index: index,
-      size_bytes: chunks[index].size,
+      size_bytes: uploadChunks[index].size,
       checksum: null,
     });
 
     uploadedChunks += 1;
-    onProgress?.(progressEvent("uploading", index, uploadedChunks, chunks.length, sessionId));
+    onProgress?.(progressEvent("uploading", index, uploadedChunks, uploadChunks.length, sessionId));
   }
 
-  onProgress?.(progressEvent("finalizing", chunks.length - 1, uploadedChunks, chunks.length, sessionId));
+  onProgress?.(progressEvent("finalizing", uploadChunks.length - 1, uploadedChunks, uploadChunks.length, sessionId));
 
   const finalized = await postJson(`/api/scribe/sessions/${sessionId}/uploads/finalize`, {
     audio_duration_seconds: audioDurationSeconds,
     audio_size_bytes: totalBytes,
   });
 
-  onProgress?.(progressEvent("completed", chunks.length - 1, chunks.length, chunks.length, sessionId));
+  onProgress?.(progressEvent("completed", uploadChunks.length - 1, uploadChunks.length, uploadChunks.length, sessionId));
 
   return finalized;
 }

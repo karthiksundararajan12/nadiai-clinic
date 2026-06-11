@@ -49,15 +49,13 @@ export function ScribeRecordPanel({
   return (
     <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
       <div className="flex shrink-0 flex-col items-center gap-4 border-b border-gray-200 px-4 py-5">
-        {isLive && (
-          <AudioLevelMeter
-            level={level}
-            waveformData={waveformData}
-            isActive
-            isPaused={isPaused}
-            className="h-12"
-          />
-        )}
+        <AudioLevelMeter
+          level={level}
+          waveformData={waveformData}
+          isActive={isLive}
+          isPaused={isPaused}
+          className="w-full"
+        />
 
         <div className="text-center">
           <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
@@ -150,6 +148,12 @@ export function ScribeRecordPanel({
             </div>
           )}
         </div>
+
+        {(isIdle || isRequesting) && !disabled && (
+          <p className="max-w-[240px] text-center text-xs leading-relaxed text-gray-500">
+            Speak clearly and louder. Minimum recording length is 10 seconds.
+          </p>
+        )}
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col bg-white">

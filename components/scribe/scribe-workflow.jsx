@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
+import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
+import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
+import { RECORDING_LIMITS } from "@/features/scribe/recording/constants.js";
 import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
 import { ScribeRecordPanel } from "@/features/scribe/consultation-workspace/components/consultation/ScribeRecordPanel.jsx";
@@ -63,6 +66,7 @@ export function ScribeWorkflow() {
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [pipelineMessage, setPipelineMessage] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  const [toastMessage, setToastMessage] = useState(null);
   const [busySessionId, setBusySessionId] = useState(null);
   const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
   const [workspaceState, setWorkspaceState] = useState({
@@ -82,6 +86,23 @@ export function ScribeWorkflow() {
     chunkIntervalMs: 5_000,
     onError: (err) => setUploadError(err instanceof Error ? err : new Error(String(err))),
   });
+
+  const isRecordingLive = recording.isRecording || recording.isPaused;
+  const { level: audioLevel } = useAudioLevel(recording.analyserNode, isRecordingLive);
+  const audioStatsRef = useRef({ sum: 0, count: 0, peak: 0 });
+
+  useEffect(() => {
+    if (recording.isRequesting) {
+      audioStatsRef.current = { sum: 0, count: 0, peak: 0 };
+    }
+  }, [recording.isRequesting]);
+
+  useEffect(() => {
+    if (!recording.isRecording) return;
+    audioStatsRef.current.sum += audioLevel;
+    audioStatsRef.current.count += 1;
+    audioStatsRef.current.peak = Math.max(audioStatsRef.current.peak, audioLevel);
+  }, [audioLevel, recording.isRecording]);
 
   const loadConsultations = useCallback(async (isRefresh = false) => {
     if (isRefresh) setRefreshing(true);
@@ -204,8 +225,37 @@ export function ScribeWorkflow() {
 
   const handleStopRecording = useCallback(async () => {
     try {
+      const duration = recording.duration;
+      const stats = audioStatsRef.current;
+      const avgLevel = stats.count > 0 ? stats.sum / stats.count : 0;
+      const tooShort = duration < RECORDING_LIMITS.MIN_DURATION_SECONDS;
+      const unclear =
+        stats.peak < RECORDING_LIMITS.MIN_PEAK_AUDIO_LEVEL ||
+        avgLevel < RECORDING_LIMITS.MIN_AVG_AUDIO_LEVEL;
+
+      if (tooShort && unclear) {
+        setToastMessage(
+          "Recording is too short and audio is not clear. Speak louder and record for at least 10 seconds.",
+        );
+        await recording.stopRecording();
+        recording.resetRecording();
+        return;
+      }
+      if (tooShort) {
+        setToastMessage("Recording is too short. Please record for at least 10 seconds.");
+        await recording.stopRecording();
+        recording.resetRecording();
+        return;
+      }
+      if (unclear) {
+        setToastMessage("Audio is not clear. Please speak louder and try again.");
+        await recording.stopRecording();
+        recording.resetRecording();
+        return;
+      }
+
       const chunks = await recording.stopRecording();
-      await handleRecordingComplete(chunks, recording.mimeType, recording.duration);
+      await handleRecordingComplete(chunks, recording.mimeType, duration);
     } catch (err) {
       setUploadError(err instanceof Error ? err : new Error(String(err)));
     }
@@ -394,6 +444,16 @@ export function ScribeWorkflow() {
                 setUploadError(e instanceof Error ? e : new Error(String(e)));
               }
             }}
+          />
+        </div>
+      )}
+
+      {toastMessage && (
+        <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
+          <Toast
+            message={toastMessage}
+            variant="warning"
+            onDismiss={() => setToastMessage(null)}
           />
         </div>
       )}

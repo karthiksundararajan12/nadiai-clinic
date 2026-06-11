@@ -37,6 +37,15 @@ export const MIME_TYPE_PRIORITY = Object.freeze([
 // ─────────────────────────────────────────────────────────────
 
 export const RECORDING_LIMITS = Object.freeze({
+  /** Minimum recording length before upload / transcription. */
+  MIN_DURATION_SECONDS: 10,
+
+  /** Peak mic level (0–100) below which audio is treated as unclear. */
+  MIN_PEAK_AUDIO_LEVEL: 12,
+
+  /** Average mic level (0–100) below which audio is treated as unclear. */
+  MIN_AVG_AUDIO_LEVEL: 6,
+
   /** Hard stop at 90 minutes to prevent runaway sessions. */
   MAX_DURATION_SECONDS: 90 * 60,
 

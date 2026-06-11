@@ -49,24 +49,27 @@ export function Sidebar({ collapsed, onToggle }) {
       <div
         className={cn(
           "flex items-center justify-center border-b border-gray-200 dark:border-gray-800",
-          collapsed ? "h-16 px-2" : "h-20 px-3"
+          collapsed ? "h-20 px-2" : "h-[100px] px-3"
         )}
       >
         {collapsed ? (
           <Image
-            src="/logo-icon.png"
+            src="/logo-icon.svg"
             alt="Nadi AI"
-            width={48}
-            height={48}
-            className="h-10 w-10 shrink-0 object-contain"
+            width={205}
+            height={205}
+            unoptimized
+            className="h-16 w-16 shrink-0 object-contain"
           />
         ) : (
           <Image
-            src="/logo.png"
+            src="/logo.svg"
             alt="Nadi AI"
-            width={220}
-            height={120}
-            className="h-12 w-auto object-contain"
+            width={740}
+            height={205}
+            priority
+            unoptimized
+            className="w-full max-w-[236px] h-auto object-contain"
           />
         )}
       </div>

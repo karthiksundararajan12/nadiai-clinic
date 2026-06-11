@@ -32,13 +32,15 @@ export function MobileNav({ open, onClose }) {
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="fixed inset-0 bg-black/50 glass" onClick={onClose} />
       <div className="fixed inset-y-0 left-0 w-[280px] bg-white text-gray-900 shadow-xl animate-in slide-in-from-left dark:bg-gray-950 dark:text-gray-100">
-        <div className="flex h-20 items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
+        <div className="flex h-[100px] items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
           <Image
-            src="/logo.png"
+            src="/logo.svg"
             alt="Nadi AI"
-            width={220}
-            height={120}
-            className="h-12 w-auto object-contain"
+            width={740}
+            height={205}
+            priority
+            unoptimized
+            className="w-full max-w-[228px] h-auto object-contain"
           />
           <button
             onClick={onClose}

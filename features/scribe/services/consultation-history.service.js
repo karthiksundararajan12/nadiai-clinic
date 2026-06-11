@@ -95,7 +95,13 @@ function transcriptStatusLabel(sessionStatus) {
 }
 
 function approvalStatusLabel(sessionStatus, soapStatus) {
-  if (sessionStatus === "COMPLETED" || soapStatus === "approved") return "approved";
+  if (
+    sessionStatus === "COMPLETED" ||
+    sessionStatus === "SOAP_APPROVED" ||
+    soapStatus === "approved"
+  ) {
+    return "approved";
+  }
   if (soapStatus === "rejected") return "rejected";
   if (["SOAP_REVIEWING", "SOAP_REVIEW_REQUIRED", "SOAP_READY"].includes(sessionStatus)) return "pending_approval";
   if (soapStatus === "reviewing" || soapStatus === "review_required") return "pending_approval";

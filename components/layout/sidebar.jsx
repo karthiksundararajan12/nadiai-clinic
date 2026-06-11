@@ -54,19 +54,19 @@ export function Sidebar({ collapsed, onToggle }) {
       >
         {collapsed ? (
           <Image
-            src="/logo.png"
+            src="/logo-icon.png"
             alt="Nadi AI"
             width={48}
             height={48}
-            className="shrink-0 object-contain"
+            className="h-10 w-10 shrink-0 object-contain"
           />
         ) : (
           <Image
             src="/logo.png"
             alt="Nadi AI"
             width={220}
-            height={60}
-            className="h-[220px] w-auto object-contain"
+            height={120}
+            className="h-12 w-auto object-contain"
           />
         )}
       </div>

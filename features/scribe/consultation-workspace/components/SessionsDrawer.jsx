@@ -4,6 +4,19 @@ import { Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { formatConsultationStatus } from "../lib/consultation-labels.js";
+
+function resolveSessionStatusLabel(session) {
+  if (
+    session.approval_status === "approved" ||
+    session.soap_status === "approved" ||
+    session.status === "SOAP_APPROVED" ||
+    session.status === "COMPLETED"
+  ) {
+    return "SOAP Approved";
+  }
+  return formatConsultationStatus(session.status);
+}
 
 export function SessionsDrawer({
   open,
@@ -131,7 +144,7 @@ function SessionGroup({
 }
 
 function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, readOnly }) {
-  const status = session.status?.replace(/_/g, " ") ?? "—";
+  const statusLabel = resolveSessionStatusLabel(session);
   const date = new Date(session.created_at).toLocaleString(undefined, {
     month: "short",
     day: "numeric",
@@ -144,7 +157,15 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
   const canOpen =
     readOnly ||
     ["TRANSCRIBED", "REVIEWING", "REVIEW_COMPLETED"].includes(session.status) ||
-    ["SOAP_READY", "SOAP_REVIEW_REQUIRED", "SOAP_REVIEWING", "GENERATING_SOAP"].includes(session.status);
+    [
+      "SOAP_READY",
+      "SOAP_REVIEW_REQUIRED",
+      "SOAP_REVIEWING",
+      "SOAP_APPROVED",
+      "COMPLETED",
+      "GENERATING_SOAP",
+    ].includes(session.status) ||
+    session.approval_status === "approved";
 
   return (
     <li
@@ -159,7 +180,7 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
             {isLatest && <Badge className="h-5 text-[10px]">Latest</Badge>}
           </div>
           <p className="mt-0.5 text-[12px] text-slate-500">{date}</p>
-          <p className="mt-1 text-[12px] font-medium capitalize text-slate-700">{status}</p>
+          <p className="mt-1 text-[12px] font-medium text-slate-700">{statusLabel}</p>
         </div>
         <div className="flex shrink-0 gap-1">
           {(needsTranscribe || canRetry) && onTranscribe && (

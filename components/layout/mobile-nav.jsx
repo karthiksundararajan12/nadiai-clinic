@@ -37,8 +37,8 @@ export function MobileNav({ open, onClose }) {
             src="/logo.png"
             alt="Nadi AI"
             width={220}
-            height={60}
-            className="h-14 w-auto object-contain"
+            height={120}
+            className="h-12 w-auto object-contain"
           />
           <button
             onClick={onClose}

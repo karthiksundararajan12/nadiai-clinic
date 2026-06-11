@@ -1,6 +1,6 @@
 "use client";
 
-import { Loader2, Mic, MicOff, Plus } from "lucide-react";
+import { Loader2, Mic, Pause, Play, Plus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { AudioLevelMeter } from "@/features/scribe/components/recording/AudioLevelMeter.jsx";
@@ -13,72 +13,141 @@ export function ScribeRecordPanel({
   statusMessage,
   disabled,
   analyserNode,
+  pauseSupported = true,
   transcriptSegments = [],
   transcriptLoading,
   transcriptLoadingMessage,
   canStartNewSession,
   onStart,
+  onPause,
+  onResume,
   onStop,
   onNewSession,
   footer,
 }) {
+  const isIdle = recordState === "idle";
+  const isRequesting = recordState === "requesting";
   const isRecording = recordState === "recording";
+  const isPaused = recordState === "paused";
   const isProcessing = recordState === "processing";
+  const isLive = isRecording || isPaused;
 
-  const { level } = useAudioLevel(analyserNode, isRecording);
+  const { level, waveformData } = useAudioLevel(analyserNode, isLive);
 
-  const handleClick = () => {
-    if (disabled || isProcessing) return;
-    if (isRecording) onStop?.();
-    else onStart?.();
-  };
+  const statusTitle = isProcessing
+    ? "Processing…"
+    : isRequesting
+      ? "Requesting microphone…"
+      : isPaused
+        ? "Paused"
+        : isRecording
+          ? "Recording"
+          : disabled
+            ? "Session in progress"
+            : "Ready to record";
 
   return (
     <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
-      <div className="flex shrink-0 flex-col items-center gap-3 border-b border-gray-200 px-4 py-5">
-        <button
-          type="button"
-          aria-label={isRecording ? "Stop recording" : "Start recording"}
-          disabled={disabled || isProcessing}
-          onClick={handleClick}
-          className={cn(
-            "relative flex h-24 w-24 cursor-pointer items-center justify-center rounded-full transition-all duration-200",
-            "disabled:cursor-not-allowed disabled:opacity-60",
-            isRecording
-              ? "bg-red-600 text-white shadow-lg shadow-red-200 hover:bg-red-700"
-              : isProcessing
-                ? "bg-gray-200 text-gray-400"
-                : "border-2 border-cyan-600 bg-white text-cyan-600 hover:border-cyan-700 hover:bg-cyan-50",
-          )}
-        >
-          {isProcessing ? (
-            <Loader2 className="h-9 w-9 animate-spin" />
-          ) : isRecording ? (
-            <MicOff className="h-9 w-9" />
-          ) : (
-            <Mic className="h-9 w-9" />
-          )}
-        </button>
-
-        {isRecording && (
-          <AudioLevelMeter level={level} isActive className="h-10" />
+      <div className="flex shrink-0 flex-col items-center gap-4 border-b border-gray-200 px-4 py-5">
+        {isLive && (
+          <AudioLevelMeter
+            level={level}
+            waveformData={waveformData}
+            isActive
+            isPaused={isPaused}
+            className="h-12"
+          />
         )}
 
         <div className="text-center">
-          <p className="text-sm font-medium text-gray-900">
-            {isProcessing
-              ? "Processing…"
-              : isRecording
-                ? "Recording"
-                : disabled
-                  ? "Session in progress"
-                  : "Tap to record"}
-          </p>
-          {durationLabel && isRecording && (
-            <p className="mt-0.5 text-xs text-gray-500">{durationLabel}</p>
+          <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
+          {durationLabel && isLive && (
+            <p className="mt-0.5 font-mono text-xs tabular-nums text-gray-500">{durationLabel}</p>
           )}
           {statusMessage && !transcriptLoading && (
             <p className="mt-1 text-xs text-gray-500">{statusMessage}</p>
+          )}
+        </div>
+
+        <div className="flex w-full max-w-[240px] flex-col items-center gap-2">
+          {(isIdle || isRequesting) && !disabled && (
+            <button
+              type="button"
+              aria-label="Start recording"
+              disabled={disabled || isProcessing || isRequesting}
+              onClick={onStart}
+              className={cn(
+                "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
+                "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
+                "transition-all duration-200 hover:bg-cyan-700",
+                "disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+            >
+              {isRequesting ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <Mic className="h-5 w-5" />
+              )}
+              {isRequesting ? "Starting…" : "Start Recording"}
+            </button>
+          )}
+
+          {isProcessing && (
+            <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 px-5 py-3 text-sm text-gray-500">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              Processing…
+            </div>
+          )}
+
+          {disabled && !isLive && !isProcessing && (
+            <div className="w-full rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-center text-xs text-gray-500">
+              Finish or end the open consultation to record again
+            </div>
+          )}
+
+          {isLive && (
+            <div className="flex w-full gap-2">
+              {pauseSupported && (
+                <button
+                  type="button"
+                  aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                  onClick={isPaused ? onResume : onPause}
+                  className={cn(
+                    "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
+                    "text-sm font-semibold text-white shadow-md transition-all duration-200",
+                    isPaused
+                      ? "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700"
+                      : "bg-amber-500 shadow-amber-500/20 hover:bg-amber-600",
+                  )}
+                >
+                  {isPaused ? (
+                    <>
+                      <Play className="h-4 w-4 fill-current" />
+                      Resume
+                    </>
+                  ) : (
+                    <>
+                      <Pause className="h-4 w-4" />
+                      Pause
+                    </>
+                  )}
+                </button>
+              )}
+              <button
+                type="button"
+                aria-label="Stop recording"
+                onClick={onStop}
+                className={cn(
+                  "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
+                  "bg-red-600 text-sm font-semibold text-white shadow-md shadow-red-600/20",
+                  "transition-all duration-200 hover:bg-red-700",
+                  !pauseSupported && "w-full",
+                )}
+              >
+                <Square className="h-4 w-4 fill-current" />
+                Stop
+              </button>
+            </div>
           )}
         </div>
       </div>

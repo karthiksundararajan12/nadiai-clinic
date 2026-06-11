@@ -56,7 +56,12 @@ export function ConsultationWorkspace({
   const pauseStatusPoll =
     Boolean(sessionId) &&
     !pipelineBusy &&
-    ["SOAP_REVIEWING", "SOAP_APPROVED", "COMPLETED"].includes(lastKnownStatusRef.current);
+    [
+      "SOAP_REVIEWING",
+      "SOAP_APPROVED",
+      "COMPLETED",
+      "READY_FOR_PRESCRIPTION",
+    ].includes(lastKnownStatusRef.current);
 
   const statusPoll = useSessionStatus(sessionId, {
     enabled: Boolean(sessionId) && !pauseStatusPoll,
@@ -246,15 +251,19 @@ export function ConsultationWorkspace({
     setApproving(true);
     setApprovalLocked(true);
     try {
-      await soap.approve();
+      const result = await soap.approve();
+      if (result?.session?.status) {
+        lastKnownStatusRef.current = result.session.status;
+      }
       void statusPoll.refresh?.();
+      onApproved?.(result);
     } catch (err) {
       setApprovalLocked(false);
       window.alert(err instanceof Error ? err.message : "Failed to approve SOAP");
     } finally {
       setApproving(false);
     }
-  }, [sessionId, soap, statusPoll]);
+  }, [onApproved, sessionId, soap, statusPoll]);
 
   const prescriptionReady = PRESCRIPTION_READY_STATUSES.has(resolvedSessionStatus);
   const prescriptionGenerating =

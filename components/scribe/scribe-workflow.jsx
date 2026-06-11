@@ -111,6 +111,10 @@ export function ScribeWorkflow() {
     loadConsultations(false);
   }, [loadConsultations]);
 
+  useEffect(() => {
+    if (sessionsOpen) void loadConsultations(true);
+  }, [sessionsOpen, loadConsultations]);
+
   const runTranscription = useCallback(async (sessionId) => {
     setPipelineBusy(true);
     setPipelineMessage("Transcribing…");
@@ -209,9 +213,16 @@ export function ScribeWorkflow() {
 
   const recordState = useMemo(() => {
     if (pipelineBusy) return "processing";
-    if (recording.isRecording || recording.isPaused) return "recording";
+    if (recording.isRequesting) return "requesting";
+    if (recording.isPaused) return "paused";
+    if (recording.isRecording) return "recording";
     return "idle";
-  }, [pipelineBusy, recording.isRecording, recording.isPaused]);
+  }, [
+    pipelineBusy,
+    recording.isRequesting,
+    recording.isPaused,
+    recording.isRecording,
+  ]);
 
   const goLive = useCallback(() => {
     setActiveSessionId(null);
@@ -250,10 +261,28 @@ export function ScribeWorkflow() {
     }
   }, [activeSessionId, goLive, loadConsultations]);
 
-  const handleSOAPApproved = useCallback(() => {
+  const handleSOAPApproved = useCallback((result) => {
+    const approvedId = result?.session?.id ?? activeSessionId;
+    const approvedSession = result?.session;
+
+    if (approvedId) {
+      setActiveSessions((prev) => prev.filter((s) => s.id !== approvedId));
+      if (approvedSession) {
+        const row = {
+          ...approvedSession,
+          approval_status: "approved",
+          soap_status: "approved",
+        };
+        setHistorySessions((prev) => [
+          row,
+          ...prev.filter((s) => s.id !== approvedId),
+        ]);
+      }
+    }
+
     goLive();
-    loadConsultations(true);
-  }, [goLive, loadConsultations]);
+    void loadConsultations(true);
+  }, [activeSessionId, goLive, loadConsultations]);
 
   const handleTranscriptionComplete = useCallback(() => {
     setPipelineBusy(false);
@@ -335,11 +364,14 @@ export function ScribeWorkflow() {
         statusMessage={pipelineMessage}
         disabled={Boolean(activeSessionId)}
         analyserNode={recording.analyserNode}
+        pauseSupported={recording.pauseSupported}
         transcriptSegments={workspaceState.segments}
         transcriptLoading={workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId))}
         transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
         canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}
         onStart={() => recording.startRecording()}
+        onPause={recording.pauseRecording}
+        onResume={recording.resumeRecording}
         onStop={handleStopRecording}
         onNewSession={goLive}
         footer={recordPanelFooter}

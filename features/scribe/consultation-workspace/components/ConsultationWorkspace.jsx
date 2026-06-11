@@ -97,6 +97,9 @@ export function ConsultationWorkspace({
   const [frozenQuality, setFrozenQuality] = useState(null);
   const frozenDateRef = useRef({ sessionId: null, value: null });
   const qualityDebounceRef = useRef(null);
+  const qualityComputedRef = useRef(false);
+  const soapDraftForQualityRef = useRef(soap.draft);
+  soapDraftForQualityRef.current = soap.draft;
   const [icdOverride, setIcdOverride] = useState(null);
   const [rpmEnabled, setRpmEnabled] = useState(false);
 
@@ -169,6 +172,7 @@ export function ConsultationWorkspace({
     setApprovalLocked(false);
     setGeneratingPrescription(false);
     setFrozenQuality(null);
+    qualityComputedRef.current = false;
     frozenDateRef.current = { sessionId, value: null };
     if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
   }, [sessionId]);
@@ -538,23 +542,34 @@ export function ConsultationWorkspace({
   useEffect(() => {
     if (qualityBusy) {
       if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
-      if (soapApproved) setFrozenQuality(null);
+      if (soapApproved) {
+        setFrozenQuality(null);
+        qualityComputedRef.current = false;
+      }
       return;
     }
 
+    if (qualityComputedRef.current) return;
+
     if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
     qualityDebounceRef.current = setTimeout(() => {
-      const computed = computeSoapQuality(soap.draft, transcript.segments);
-      if (computed) setFrozenQuality((prev) => prev ?? computed);
+      const computed = computeSoapQuality(soapDraftForQualityRef.current, transcript.segments);
+      if (computed) {
+        setFrozenQuality(computed);
+        qualityComputedRef.current = true;
+      }
     }, 600);
 
     return () => {
       if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
     };
-  }, [qualityBusy, soapApproved, soap.draft, transcript.segments]);
+  }, [qualityBusy, soapApproved, transcript.segments]);
 
   useEffect(() => {
-    if (soap.regenerating) setFrozenQuality(null);
+    if (soap.regenerating) {
+      setFrozenQuality(null);
+      qualityComputedRef.current = false;
+    }
   }, [soap.regenerating]);
 
   const quality = soapApproved ? null : frozenQuality;

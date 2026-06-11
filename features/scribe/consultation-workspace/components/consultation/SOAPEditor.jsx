@@ -44,7 +44,7 @@ export function SOAPEditor({
 
   return (
     <div className="space-y-3" data-testid="soap-review-workspace">
-      {quality && !readOnly && !generating && !regenerating && !saving && (
+      {quality && !readOnly && !generating && !regenerating && (
         <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-none">
           <SOAPQualityIndicator quality={quality} />
         </div>

@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Copy, Loader2, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { VitalsInput, stripVitalsFromObjective, buildObjectiveWithVitals, parseVitalsFromObjective } from "./VitalsInput.jsx";
+import { VitalsInput } from "./VitalsInput.jsx";
+import {
+  buildObjectiveWithVitals,
+  parseVitalsFromObjective,
+  stripVitalsFromObjective,
+} from "../../lib/vitals-objective.js";
 
 const SECTION_STYLES = {
   subjective: { border: "border-l-blue-500", text: "text-blue-600", ring: "focus:ring-blue-500/30" },

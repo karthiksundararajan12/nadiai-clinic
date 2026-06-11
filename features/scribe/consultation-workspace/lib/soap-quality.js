@@ -1,4 +1,14 @@
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "./clinical-safety.js";
+import { stripVitalsFromObjective } from "./vitals-objective.js";
+
+/**
+ * Doctor-entered vitals should not affect AI confidence scoring.
+ * @param {Record<string, string>} draft
+ */
+function draftForQualityScoring(draft = {}) {
+  const objective = stripVitalsFromObjective(draft.objective ?? "");
+  return { ...draft, objective };
+}
 
 /**
  * @param {Record<string, string>} draft
@@ -6,10 +16,11 @@ import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "./clinical-saf
  * @returns {{ level: "high"|"review"|"low"; label: string; description: string } | null}
  */
 export function computeSoapQuality(draft, segments = []) {
-  const hasDraftContent = Object.values(draft ?? {}).some((v) => String(v ?? "").trim());
+  const scoredDraft = draftForQualityScoring(draft);
+  const hasDraftContent = Object.values(scoredDraft).some((v) => String(v ?? "").trim());
   if (!hasDraftContent || segments.length === 0) return null;
 
-  const warnings = getSoapClinicalWarnings(draft);
+  const warnings = getSoapClinicalWarnings(scoredDraft);
   const blocking = hasBlockingSoapWarnings(warnings);
   const emptyCount = warnings.length;
 

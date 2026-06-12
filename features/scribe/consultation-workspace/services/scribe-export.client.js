@@ -29,15 +29,20 @@ function printHtmlDocument(html) {
       return;
     }
 
+    let cleanedUp = false;
     const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
       setTimeout(() => {
         if (iframe.parentNode) document.body.removeChild(iframe);
       }, 1000);
     };
 
+    // onafterprint is unreliable (often skipped when the dialog is cancelled).
+    const cleanupFallback = setTimeout(cleanup, 60_000);
     frameWindow.onafterprint = () => {
+      clearTimeout(cleanupFallback);
       cleanup();
-      resolve();
     };
 
     frameDoc.open();
@@ -48,7 +53,9 @@ function printHtmlDocument(html) {
       try {
         frameWindow.focus();
         frameWindow.print();
+        resolve();
       } catch (err) {
+        clearTimeout(cleanupFallback);
         cleanup();
         reject(err instanceof Error ? err : new Error(String(err)));
       }

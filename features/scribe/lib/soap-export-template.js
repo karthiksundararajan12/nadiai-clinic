@@ -2,6 +2,9 @@
  * Builds a print-ready HTML document for SOAP note export.
  */
 
+import { formatSessionLabel } from "../consultation-workspace/lib/format-datetime.js";
+import { resolveSessionChip } from "../consultation-workspace/lib/session-status-chip.js";
+
 const SOAP_SECTIONS = [
   ["chiefComplaint", "Chief Complaint"],
   ["historyOfPresentIllness", "History of Present Illness"],
@@ -18,11 +21,17 @@ const SOAP_SECTIONS = [
  * @param {object|null} data.doctor
  * @param {object|null} data.patient
  * @param {object|null} data.note
+ * @param {string|null} [data.noteStatus]
  * @param {Array<{ speaker_label?: string; text?: string }>} data.segments
  */
 export function buildSoapExportHtml(data) {
-  const { session, doctor, patient, note, segments = [] } = data;
+  const { session, doctor, patient, note, segments = [], noteStatus = null } = data;
   const noteBody = note?.note ?? note ?? {};
+  const sessionLabel = formatSessionLabel(session?.created_at);
+  const statusChip = resolveSessionChip({
+    status: session?.status,
+    soap_status: noteStatus ?? note?.status,
+  });
   const date = session?.created_at
     ? new Date(session.created_at).toLocaleString("en-IN", {
         dateStyle: "medium",
@@ -53,13 +62,18 @@ export function buildSoapExportHtml(data) {
 <html lang="en">
 <head>
   <meta charset="utf-8"/>
-  <title>SOAP Note — ${escapeHtml(session?.id?.slice(0, 8) ?? "session")}</title>
+  <title>SOAP Note — ${escapeHtml(sessionLabel)}</title>
   <style>
     * { box-sizing: border-box; }
     body { font-family: Georgia, "Times New Roman", serif; color: #111; max-width: 720px; margin: 40px auto; padding: 0 24px; line-height: 1.55; }
     header { border-bottom: 2px solid #111; padding-bottom: 16px; margin-bottom: 24px; }
     h1 { font-size: 20px; margin: 0 0 4px; }
     .meta { font-size: 13px; color: #444; }
+    .status-badge { display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; vertical-align: middle; }
+    .status-badge--approved { background: #dcfce7; color: #15803d; border: 1px solid #86efac; }
+    .status-badge--pending_review { background: #fef9c3; color: #a16207; border: 1px solid #fde047; }
+    .status-badge--draft { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+    .status-badge--rejected { background: #fee2e2; color: #b91c1c; border: 1px solid #fca5a5; }
     h2 { font-size: 15px; margin: 28px 0 12px; text-transform: uppercase; letter-spacing: 0.06em; }
     h3 { font-size: 14px; margin: 0 0 8px; color: #333; }
     .section { margin-bottom: 18px; }
@@ -77,7 +91,10 @@ export function buildSoapExportHtml(data) {
       ${doctor?.clinic_name ? `<br/>${escapeHtml(doctor.clinic_name)}` : ""}
     </p>
     <p class="meta">Patient: ${escapeHtml(patient?.name ?? "Walk-in")} · ${date}</p>
-    <p class="meta">Session: ${escapeHtml(session?.id ?? "")}</p>
+    <p class="meta">
+      Consultation · ${escapeHtml(sessionLabel)}
+      <span class="status-badge status-badge--${escapeHtml(statusChip.status)}">${escapeHtml(statusChip.label)}</span>
+    </p>
   </header>
 
   <h2>SOAP Note</h2>

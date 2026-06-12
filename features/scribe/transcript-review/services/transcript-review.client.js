@@ -38,7 +38,7 @@ export async function completeTranscriptReview(sessionId) {
 export async function generateSOAPNote(sessionId, payload = {}) {
   return requestJson(`/api/scribe/sessions/${sessionId}/soap/generate`, {
     method: "POST",
-    body: { force: true, ...payload },
+    body: payload,
   });
 }
 

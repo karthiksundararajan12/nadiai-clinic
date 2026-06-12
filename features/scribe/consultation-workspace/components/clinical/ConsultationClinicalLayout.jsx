@@ -22,6 +22,7 @@ import { SoapReviewModal } from "./SoapReviewModal.jsx";
 import { SoapFeedbackModal } from "./SoapFeedbackModal.jsx";
 import { SoapManualEditBar } from "./SoapManualEditBar.jsx";
 import { SoapRegeneratingOverlay } from "./SoapRegeneratingOverlay.jsx";
+import { EvidenceModal } from "./EvidenceModal.jsx";
 
 export function ConsultationClinicalLayout({
   sessionId,
@@ -29,7 +30,16 @@ export function ConsultationClinicalLayout({
   sessionDateLabel = "Generated",
   status,
   quality,
-  evidenceMap,
+  statementEvidence,
+  activeStatementId,
+  evidenceModalOpen,
+  selectedEvidence,
+  onEvidenceModalOpenChange,
+  onStatementClick,
+  onEvidenceBadgeClick,
+  onEditEvidenceStatement,
+  onDeleteEvidenceStatement,
+  onRegenerateEvidenceSoap,
   soapProps,
   readOnly,
   soapApproved,
@@ -222,8 +232,10 @@ export function ConsultationClinicalLayout({
             <SOAPEditor
               {...soapProps.panel}
               quality={approved || manualEditMode ? null : quality}
-              evidenceMap={evidenceMap}
-              onEvidenceJump={handleEvidenceJump}
+              statementEvidence={statementEvidence}
+              activeStatementId={activeStatementId}
+              onStatementClick={onStatementClick}
+              onEvidenceBadgeClick={onEvidenceBadgeClick}
               onRegenerate={soapProps.panel.onRegenerate}
             />
           ) : (
@@ -256,6 +268,15 @@ export function ConsultationClinicalLayout({
       />
 
       <AuditTrailDrawer open={auditOpen} onClose={() => onAuditOpenChange?.(false)} sessionId={sessionId} />
+
+      <EvidenceModal
+        open={evidenceModalOpen}
+        onOpenChange={onEvidenceModalOpenChange}
+        evidence={selectedEvidence}
+        onEditStatement={onEditEvidenceStatement}
+        onDeleteStatement={onDeleteEvidenceStatement}
+        onRegenerateSoap={onRegenerateEvidenceSoap}
+      />
     </div>
   );
 }

@@ -5,8 +5,12 @@ import { CORE_SOAP_SECTIONS } from "../../lib/clinical-safety.js";
 import { SOAPSection } from "./SOAPSection.jsx";
 import { SOAPQualityIndicator } from "../clinical/SOAPQualityIndicator.jsx";
 
-const CONFIDENCE = { subjective: 88, objective: 82, assessment: 79, plan: 85 };
-
+/**
+ * @param {object} props
+ * @param {Record<string, string>} props.draft
+ * @param {import("../../lib/soap-statement-evidence.js").SoapStatementEvidence[]} [props.statementEvidence]
+ * @param {string|null} [props.activeStatementId]
+ */
 export function SOAPEditor({
   draft,
   dirty,
@@ -16,13 +20,15 @@ export function SOAPEditor({
   generating,
   regenerating,
   quality,
-  evidenceMap,
+  statementEvidence = [],
+  activeStatementId,
   activeSection,
   onChange,
   onRetry,
   onSectionFocus,
   onRegenerate,
-  onEvidenceJump,
+  onStatementClick,
+  onEvidenceBadgeClick,
 }) {
   if (error) {
     return (
@@ -55,18 +61,20 @@ export function SOAPEditor({
           sectionKey={key}
           label={label}
           value={draft[key] ?? ""}
-          confidence={CONFIDENCE[key] ?? 80}
-          showConfidence={!readOnly}
+          showConfidence={false}
           readOnly={readOnly}
           saving={saving}
           regenerating={regenerating}
           isActive={activeSection === key}
-          evidence={evidenceMap?.[key]}
+          statementEvidence={statementEvidence}
+          activeStatementId={activeStatementId}
           onChange={onChange}
           onFocus={onSectionFocus}
           onRegenerateSection={onRegenerate}
-          onEvidenceJump={onEvidenceJump}
+          onStatementClick={onStatementClick}
+          onEvidenceBadgeClick={onEvidenceBadgeClick}
           showVitals={key === "objective"}
+          showStatementEvidence
         />
       ))}
       {dirty && Object.keys(dirty).length > 0 && (

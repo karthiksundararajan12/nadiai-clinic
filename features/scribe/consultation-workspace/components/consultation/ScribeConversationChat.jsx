@@ -18,6 +18,7 @@ export function ScribeConversationChat({
   segments = [],
   loading,
   loadingMessage,
+  highlightedSegmentId = null,
 }) {
   const bottomRef = useRef(null);
 
@@ -52,11 +53,16 @@ export function ScribeConversationChat({
         {segments.map((segment) => {
           const doctor = isDoctor(segment);
           const label = speakerLabel(segment);
+          const isHighlighted = highlightedSegmentId === segment.id;
           return (
             <div
               key={segment.id}
               id={`chat-segment-${segment.id}`}
-              className={cn("flex w-full", doctor ? "justify-end" : "justify-start")}
+              className={cn(
+                "flex w-full rounded-lg transition-all duration-300",
+                doctor ? "justify-end" : "justify-start",
+                isHighlighted && "animate-evidence-pulse ring-2 ring-cyan-400/60 ring-offset-2",
+              )}
             >
               <div className={cn("max-w-[88%] min-w-0", doctor ? "items-end" : "items-start")}>
                 <p

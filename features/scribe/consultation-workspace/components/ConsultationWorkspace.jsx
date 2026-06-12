@@ -17,7 +17,10 @@ import {
   isTranscriptionPending,
 } from "../lib/transcript-availability.js";
 import { buildConsultationSummary } from "../lib/consultation-summary.js";
-import { buildSoapEvidenceMap } from "../lib/soap-evidence.js";
+import {
+  buildStatementEvidenceMappings,
+  removeStatementFromSection,
+} from "../lib/soap-statement-evidence.js";
 import { computeSoapQuality } from "../lib/soap-quality.js";
 import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
@@ -130,8 +133,11 @@ export function ConsultationWorkspace({
   const [autoPipelineRunning, setAutoPipelineRunning] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [activeSegmentId, setActiveSegmentId] = useState(null);
+  const [activeStatementId, setActiveStatementId] = useState(null);
   const [activeSoapSection, setActiveSoapSection] = useState(null);
   const [highlightedSoapSection, setHighlightedSoapSection] = useState(null);
+  const [evidenceModalOpen, setEvidenceModalOpen] = useState(false);
+  const [selectedEvidence, setSelectedEvidence] = useState(null);
   const [reviewModalOpen, setReviewModalOpen] = useState(false);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [feedbackAction, setFeedbackAction] = useState(null);
@@ -177,6 +183,10 @@ export function ConsultationWorkspace({
     setApprovalLocked(false);
     setGeneratingPrescription(false);
     setFrozenQuality(null);
+    setActiveStatementId(null);
+    setActiveSegmentId(null);
+    setSelectedEvidence(null);
+    setEvidenceModalOpen(false);
     qualityComputedRef.current = false;
     frozenDateRef.current = { sessionId, value: null };
     if (qualityDebounceRef.current) clearTimeout(qualityDebounceRef.current);
@@ -222,6 +232,11 @@ export function ConsultationWorkspace({
     if (pipelineBusy) onTranscriptionComplete?.();
   }, [statusPoll.isTranscribed, statusPoll.isFailed, pipelineBusy, onTranscriptionComplete]);
 
+  const scrollToTranscriptSegment = useCallback((segmentId) => {
+    if (!segmentId) return;
+    document.getElementById(`chat-segment-${segmentId}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, []);
+
   const handleSegmentClick = useCallback((segment) => {
     const section = inferSoapSectionFromSegment(segment);
     setActiveSegmentId(segment.id);
@@ -230,6 +245,48 @@ export function ConsultationWorkspace({
     audioSeekRef.current?.(segment.start_seconds ?? 0);
     document.getElementById(`soap-section-${section}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
   }, []);
+
+  const handleStatementClick = useCallback((evidence) => {
+    setActiveStatementId(evidence.soapStatementId);
+    setActiveSoapSection(evidence.sectionKey);
+    setHighlightedSoapSection(evidence.sectionKey);
+
+    if (evidence.transcriptSegmentId) {
+      setActiveSegmentId(evidence.transcriptSegmentId);
+      const segment = transcript.segments.find((s) => s.id === evidence.transcriptSegmentId);
+      if (segment) {
+        audioSeekRef.current?.(segment.start_seconds ?? 0);
+      }
+      scrollToTranscriptSegment(evidence.transcriptSegmentId);
+    }
+  }, [scrollToTranscriptSegment, transcript.segments]);
+
+  const handleEvidenceBadgeClick = useCallback((evidence) => {
+    setSelectedEvidence(evidence);
+    setEvidenceModalOpen(true);
+  }, []);
+
+  const handleEditEvidenceStatement = useCallback(() => {
+    if (!selectedEvidence) return;
+    setEvidenceModalOpen(false);
+    setManualEditMode(true);
+    setActiveSoapSection(selectedEvidence.sectionKey);
+    document.getElementById(`soap-section-${selectedEvidence.sectionKey}`)?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [selectedEvidence]);
+
+  const handleDeleteEvidenceStatement = useCallback(() => {
+    if (!selectedEvidence) return;
+    const current = soap.draft[selectedEvidence.sectionKey] ?? "";
+    const updated = removeStatementFromSection(
+      selectedEvidence.sectionKey,
+      current,
+      selectedEvidence.statementText,
+    );
+    soap.updateSection(selectedEvidence.sectionKey, updated);
+    setEvidenceModalOpen(false);
+    setSelectedEvidence(null);
+    setActiveStatementId(null);
+  }, [selectedEvidence, soap]);
 
   const handlePlayFromHere = useCallback((segment) => {
     audioSeekRef.current?.(segment.start_seconds ?? 0, true);
@@ -389,6 +446,12 @@ export function ConsultationWorkspace({
     await transcript.load();
   }, [soap, transcript]);
 
+  const handleRegenerateEvidenceSoap = useCallback(async () => {
+    setEvidenceModalOpen(false);
+    setSelectedEvidence(null);
+    await handleRegenerateSOAP();
+  }, [handleRegenerateSOAP]);
+
   const handleRestoreVersion = useCallback(async (versionId) => {
     if (!window.confirm("Restore this SOAP version? Current edits will be replaced.")) return;
     await soap.restoreVersion(versionId);
@@ -496,6 +559,7 @@ export function ConsultationWorkspace({
       transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
       sessionComplete,
       status: resolvedSessionStatus,
+      highlightedSegmentId: activeSegmentId,
     });
   }, [
     onWorkspaceStateChange,
@@ -507,6 +571,7 @@ export function ConsultationWorkspace({
     sessionComplete,
     resolvedSessionStatus,
     soapApproved,
+    activeSegmentId,
   ]);
 
   const transcriptLoadError = waitingForTranscript ? null : transcript.error;
@@ -537,9 +602,11 @@ export function ConsultationWorkspace({
   const blockingApproval = hasBlockingSoapWarnings(soapWarnings);
 
   const summary = useMemo(() => buildConsultationSummary(soap.draft), [soap.draft]);
-  const evidenceMap = useMemo(
-    () => buildSoapEvidenceMap(transcript.segments),
-    [transcript.segments],
+  const storedEvidenceMappings = soap.note?.generation_metadata?.evidenceMappings ?? [];
+
+  const statementEvidence = useMemo(
+    () => buildStatementEvidenceMappings(soap.draft, transcript.segments, storedEvidenceMappings),
+    [soap.draft, transcript.segments, storedEvidenceMappings],
   );
   const qualityBusy =
     soapApproved ||
@@ -645,7 +712,16 @@ export function ConsultationWorkspace({
         sessionDateLabel={soapDateLabel}
         status={resolvedSessionStatus}
         quality={quality}
-        evidenceMap={evidenceMap}
+        statementEvidence={statementEvidence}
+        activeStatementId={activeStatementId}
+        evidenceModalOpen={evidenceModalOpen}
+        selectedEvidence={selectedEvidence}
+        onEvidenceModalOpenChange={setEvidenceModalOpen}
+        onStatementClick={handleStatementClick}
+        onEvidenceBadgeClick={handleEvidenceBadgeClick}
+        onEditEvidenceStatement={handleEditEvidenceStatement}
+        onDeleteEvidenceStatement={handleDeleteEvidenceStatement}
+        onRegenerateEvidenceSoap={handleRegenerateEvidenceSoap}
         readOnly={readOnly || soapApproved}
         soapApproved={soapApproved}
         toolbarLeft={toolbarLeft}

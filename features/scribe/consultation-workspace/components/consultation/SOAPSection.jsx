@@ -9,6 +9,7 @@ import {
   parseVitalsFromObjective,
   stripVitalsFromObjective,
 } from "../../lib/vitals-objective.js";
+import { SoapStatementList } from "./SoapStatementList.jsx";
 
 const SECTION_STYLES = {
   subjective: { border: "border-l-blue-500", text: "text-blue-600", ring: "focus:ring-blue-500/30" },
@@ -29,12 +30,16 @@ export function SOAPSection({
   saving,
   regenerating,
   isActive,
-  evidence,
+  statementEvidence = [],
+  activeStatementId,
   onChange,
   onFocus,
   onRegenerateSection,
   onEvidenceJump,
+  onStatementClick,
+  onEvidenceBadgeClick,
   showVitals,
+  showStatementEvidence = true,
 }) {
   const style = SECTION_STYLES[sectionKey] ?? SECTION_STYLES.subjective;
   const [expanded, setExpanded] = useState(true);
@@ -150,7 +155,7 @@ export function SOAPSection({
               saving && "opacity-80",
             )}
           />
-        ) : !showVitals ? (
+        ) : !showVitals && !showStatementEvidence ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
             {displayValue || (
               <span className="italic text-gray-400">
@@ -158,11 +163,26 @@ export function SOAPSection({
               </span>
             )}
           </p>
-        ) : stripVitalsFromObjective(value) ? (
+        ) : !showVitals && showStatementEvidence && !String(value).trim() ? (
+          <p className="text-sm italic text-gray-400">
+            {sectionKey === "objective" ? "No objective findings documented." : `No ${label.toLowerCase()} documented.`}
+          </p>
+        ) : stripVitalsFromObjective(value) && !showStatementEvidence ? (
           <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
             {stripVitalsFromObjective(value)}
           </p>
         ) : null}
+
+        {showStatementEvidence && String(value).trim() && (
+          <SoapStatementList
+            sectionKey={sectionKey}
+            sectionText={showVitals ? stripVitalsFromObjective(value) : value}
+            evidenceMappings={statementEvidence}
+            activeStatementId={activeStatementId}
+            onStatementClick={onStatementClick}
+            onBadgeClick={onEvidenceBadgeClick}
+          />
+        )}
 
         {readOnly && isLong && (
           <button
@@ -176,24 +196,6 @@ export function SOAPSection({
         )}
       </div>
 
-      {evidence?.length > 0 && (
-        <div className="border-t border-gray-200 bg-gray-50 px-4 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Evidence from transcript</p>
-          <ul className="mt-1 space-y-0.5">
-            {evidence.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  className="cursor-pointer text-left text-xs text-cyan-600 transition-all duration-200 hover:underline"
-                  onClick={() => onEvidenceJump?.(item)}
-                >
-                  • {item.text}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
     </article>
   );
 }

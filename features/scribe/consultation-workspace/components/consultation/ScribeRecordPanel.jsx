@@ -15,6 +15,7 @@ export function ScribeRecordPanel({
   analyserNode,
   pauseSupported = true,
   transcriptSegments = [],
+  highlightedSegmentId = null,
   transcriptLoading,
   transcriptLoadingMessage,
   canStartNewSession,
@@ -49,13 +50,15 @@ export function ScribeRecordPanel({
   return (
     <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
       <div className="flex shrink-0 flex-col items-center gap-4 border-b border-gray-200 px-4 py-5">
-        <AudioLevelMeter
-          level={level}
-          waveformData={waveformData}
-          isActive={isLive}
-          isPaused={isPaused}
-          className="w-full"
-        />
+        {isLive && (
+          <AudioLevelMeter
+            level={level}
+            waveformData={waveformData}
+            isActive
+            isPaused={isPaused}
+            className="w-full"
+          />
+        )}
 
         <div className="text-center">
           <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
@@ -162,6 +165,7 @@ export function ScribeRecordPanel({
         </div>
         <ScribeConversationChat
           segments={transcriptSegments}
+          highlightedSegmentId={highlightedSegmentId}
           loading={transcriptLoading}
           loadingMessage={transcriptLoadingMessage ?? statusMessage}
         />

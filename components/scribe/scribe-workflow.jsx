@@ -74,6 +74,7 @@ export function ScribeWorkflow() {
     transcriptLoading: false,
     transcriptLoadingMessage: null,
     sessionComplete: false,
+    highlightedSegmentId: null,
   });
 
   const mountedRef = useRef(true);
@@ -416,6 +417,7 @@ export function ScribeWorkflow() {
         analyserNode={recording.analyserNode}
         pauseSupported={recording.pauseSupported}
         transcriptSegments={workspaceState.segments}
+        highlightedSegmentId={workspaceState.highlightedSegmentId}
         transcriptLoading={workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId))}
         transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
         canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}

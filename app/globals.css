@@ -163,7 +163,16 @@
   50%       { transform: scaleY(1);   opacity: 1;   }
 }
 
+@keyframes evidence-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(34, 211, 238, 0.35); }
+  50%       { box-shadow: 0 0 0 6px rgba(34, 211, 238, 0.15); }
+}
+
 @layer utilities {
+  .animate-evidence-pulse {
+    animation: evidence-pulse 1.6s ease-in-out infinite;
+  }
+
   .scrollbar-thin {
     scrollbar-width: thin;
     scrollbar-color: var(--border) transparent;

@@ -31,6 +31,7 @@ import {
   toDbSoapVersionSource,
   withSoapWorkflowMetadata,
 } from "../lib/soap-db-compat.js";
+import { buildStatementEvidenceMappings } from "../consultation-workspace/lib/soap-statement-evidence.js";
 
 export class SOAPGenerationService {
   /**
@@ -144,6 +145,7 @@ export class SOAPGenerationService {
       const prompt = buildSOAPPrompt(generationContext);
       const generated = await this._generateWithRetry(prompt);
       const noteObject = parseAndValidateSOAP(generated.text);
+      const evidenceMappings = buildStatementEvidenceMappings(noteObject, context.segments ?? []);
       const generatedAt = new Date().toISOString();
 
       const workflowAction = input.force ? "regenerated" : "generated";
@@ -174,6 +176,7 @@ export class SOAPGenerationService {
           responseId: generated.response?.id ?? null,
           latencyMs: Date.now() - startedAt,
           attempts: generated.attempts,
+          evidenceMappings,
         }, workflowAction),
         input_hash: inputHash,
         error_message: null,

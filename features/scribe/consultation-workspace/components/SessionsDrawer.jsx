@@ -4,19 +4,8 @@ import { Loader2, RefreshCw, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { formatConsultationStatus } from "../lib/consultation-labels.js";
-
-function resolveSessionStatusLabel(session) {
-  if (
-    session.approval_status === "approved" ||
-    session.soap_status === "approved" ||
-    session.status === "SOAP_APPROVED" ||
-    session.status === "COMPLETED"
-  ) {
-    return "SOAP Approved";
-  }
-  return formatConsultationStatus(session.status);
-}
+import { formatSessionLabel } from "../lib/format-datetime.js";
+import { resolveSessionChip } from "../lib/session-status-chip.js";
 
 export function SessionsDrawer({
   open,
@@ -143,14 +132,24 @@ function SessionGroup({
   );
 }
 
+function SessionStatusChip({ session }) {
+  const { label, chip, dot } = resolveSessionChip(session);
+
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+        chip,
+      )}
+    >
+      <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dot)} aria-hidden />
+      {label}
+    </span>
+  );
+}
+
 function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, readOnly }) {
-  const statusLabel = resolveSessionStatusLabel(session);
-  const date = new Date(session.created_at).toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  const sessionLabel = formatSessionLabel(session.created_at);
 
   const needsTranscribe = ["UPLOADED", "TRANSCRIPTION_FAILED"].includes(session.status);
   const canRetry = ["TRANSCRIPTION_QUEUED", "TRANSCRIBING"].includes(session.status);
@@ -175,12 +174,13 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[11px] text-slate-400">{session.id.slice(0, 8)}…</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-[13px] font-semibold text-slate-900">{sessionLabel}</p>
             {isLatest && <Badge className="h-5 text-[10px]">Latest</Badge>}
           </div>
-          <p className="mt-0.5 text-[12px] text-slate-500">{date}</p>
-          <p className="mt-1 text-[12px] font-medium text-slate-700">{statusLabel}</p>
+          <div className="mt-1.5">
+            <SessionStatusChip session={session} />
+          </div>
         </div>
         <div className="flex shrink-0 gap-1">
           {(needsTranscribe || canRetry) && onTranscribe && (

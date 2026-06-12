@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Live waveform visualiser — animated bars when idle, reactive bars + oscilloscope when active.
+ * Live waveform visualiser — reactive bars + oscilloscope while recording.
  */
 
 import { useEffect, useId, useRef } from "react";
@@ -38,7 +38,7 @@ export function AudioLevelMeter({
     const fillEl = fillRef.current;
     const glowEl = glowRef.current;
     const barsEl = barsRef.current;
-    if (!pathEl || !fillEl || !glowEl || !barsEl) return;
+    if (!pathEl || !fillEl || !glowEl || !barsEl || !isActive) return;
 
     let rafId;
     const width = 280;
@@ -47,26 +47,6 @@ export function AudioLevelMeter({
 
     const draw = () => {
       const t = Date.now() / 1000;
-
-      if (!isActive) {
-        smoothRef.current *= 0.9;
-        for (let i = 0; i < BAR_COUNT; i++) {
-          const bar = barsEl.children[i];
-          if (!bar) continue;
-          const phase = (i / BAR_COUNT) * Math.PI * 2 + t * 2.2;
-          const idle = 0.12 + (Math.sin(phase) * 0.5 + 0.5) * 0.18;
-          bar.style.transform = `scaleY(${idle.toFixed(3)})`;
-          bar.style.opacity = "0.35";
-        }
-        const flat = buildFlatPath(width, height);
-        pathEl.setAttribute("d", flat.line);
-        fillEl.setAttribute("d", flat.area);
-        glowEl.setAttribute("d", flat.line);
-        glowEl.style.opacity = "0";
-        rafId = requestAnimationFrame(draw);
-        return;
-      }
-
       const target = isPaused
         ? smoothRef.current * 0.92
         : Math.max(0, Math.min(100, level)) / 100;
@@ -83,14 +63,14 @@ export function AudioLevelMeter({
         const sample = samples[i] ?? 128;
         const normalised = Math.abs((sample - 128) / 128);
         const barHeight = isPaused
-          ? 0.1 + energy * 0.15
-          : 0.08 + normalised * 0.85 + energy * 0.25;
+          ? 0.12 + energy * 0.2
+          : 0.1 + normalised * 0.9 + energy * 0.3;
         bar.style.transform = `scaleY(${Math.min(1, barHeight).toFixed(3)})`;
-        bar.style.opacity = isPaused ? "0.4" : String(0.55 + energy * 0.45);
+        bar.style.opacity = isPaused ? "0.55" : String(0.75 + energy * 0.25);
       }
 
       const lineSamples = downsample(samples, 64);
-      const amplitude = isPaused ? 4 + energy * 6 : 6 + energy * 22;
+      const amplitude = isPaused ? 5 + energy * 8 : 8 + energy * 26;
       const points = lineSamples.map((sample, i) => {
         const x = (i / (lineSamples.length - 1)) * width;
         const normalised = (sample - 128) / 128;
@@ -104,7 +84,7 @@ export function AudioLevelMeter({
       pathEl.setAttribute("d", line);
       fillEl.setAttribute("d", area);
       glowEl.setAttribute("d", line);
-      glowEl.style.opacity = isPaused ? "0.12" : String(0.3 + energy * 0.5);
+      glowEl.style.opacity = isPaused ? "0.25" : String(0.55 + energy * 0.45);
 
       rafId = requestAnimationFrame(draw);
     };
@@ -112,6 +92,8 @@ export function AudioLevelMeter({
     rafId = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(rafId);
   }, [isActive, isPaused, level, waveformData]);
+
+  if (!isActive) return null;
 
   return (
     <div
@@ -121,10 +103,8 @@ export function AudioLevelMeter({
     >
       <div
         className={cn(
-          "absolute inset-0 rounded-2xl transition-colors duration-500",
-          isActive && !isPaused && "bg-cyan-500/[0.06]",
-          isPaused && "bg-amber-500/[0.06]",
-          !isActive && "bg-gray-100/80",
+          "absolute inset-0 rounded-2xl transition-colors duration-300",
+          isPaused ? "bg-amber-400/10" : "bg-cyan-400/15 shadow-[inset_0_0_24px_rgba(6,182,212,0.12)]",
         )}
       />
 
@@ -136,10 +116,10 @@ export function AudioLevelMeter({
           <div
             key={i}
             className={cn(
-              "h-full w-[5px] origin-center rounded-full transition-colors duration-300",
-              isActive && !isPaused && "bg-gradient-to-t from-cyan-600 to-cyan-400",
-              isPaused && "bg-gradient-to-t from-amber-500 to-amber-300",
-              !isActive && "bg-gradient-to-t from-cyan-700/40 to-cyan-500/30",
+              "h-full w-[5px] origin-center rounded-full shadow-sm",
+              isPaused
+                ? "bg-gradient-to-t from-amber-600 via-amber-400 to-yellow-300"
+                : "bg-gradient-to-t from-teal-600 via-cyan-400 to-emerald-300",
             )}
             style={{ transform: "scaleY(0.12)" }}
           />
@@ -148,49 +128,48 @@ export function AudioLevelMeter({
 
       <svg
         viewBox="0 0 280 56"
-        className="relative z-10 h-8 w-full max-w-[280px] opacity-80"
+        className="relative z-10 h-8 w-full max-w-[280px]"
         preserveAspectRatio="none"
         aria-hidden
       >
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#0891b2" stopOpacity="0.4" />
-            <stop offset="50%" stopColor="#06b6d4" stopOpacity="1" />
-            <stop offset="100%" stopColor="#0891b2" stopOpacity="0.4" />
+            <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.85" />
+            <stop offset="35%" stopColor="#06b6d4" stopOpacity="1" />
+            <stop offset="65%" stopColor="#22d3ee" stopOpacity="1" />
+            <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0.85" />
           </linearGradient>
           <linearGradient id={fillGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.22" />
+            <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.45" />
             <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path
           ref={glowRef}
           fill="none"
-          stroke="#22d3ee"
-          strokeWidth="2.5"
+          stroke="#67e8f9"
+          strokeWidth="4"
           strokeLinecap="round"
           strokeLinejoin="round"
-          style={{ filter: "blur(4px)" }}
+          style={{ filter: "blur(5px)" }}
         />
         <path ref={fillRef} fill={`url(#${fillGradientId})`} stroke="none" />
         <path
           ref={pathRef}
           fill="none"
           stroke={`url(#${gradientId})`}
-          strokeWidth="1.5"
+          strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
       </svg>
 
-      {isActive && (
-        <span
-          className={cn(
-            "absolute right-2 top-2 z-20 h-2 w-2 rounded-full",
-            isPaused ? "bg-amber-400" : "bg-red-500 animate-pulse",
-          )}
-        />
-      )}
+      <span
+        className={cn(
+          "absolute right-2 top-2 z-20 h-2.5 w-2.5 rounded-full shadow-sm",
+          isPaused ? "bg-amber-400" : "bg-red-500 animate-pulse shadow-red-500/50",
+        )}
+      />
     </div>
   );
 }
@@ -218,11 +197,4 @@ function pointsToLine(points) {
   return points
     .map(([x, y], i) => `${i === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`)
     .join(" ");
-}
-
-function buildFlatPath(width, height) {
-  const y = height / 2;
-  const line = `M 0 ${y} L ${width} ${y}`;
-  const area = `${line} L ${width} ${height} L 0 ${height} Z`;
-  return { line, area };
 }

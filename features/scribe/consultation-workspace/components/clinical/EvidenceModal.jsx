@@ -22,9 +22,7 @@ export function EvidenceModal({
   onDeleteStatement,
   onRegenerateSoap,
 }) {
-  if (!evidence) return null;
-
-  const hasEvidence = evidence.status !== "none" && evidence.evidenceText;
+  const hasEvidence = evidence && evidence.status !== "none" && evidence.evidenceText;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -33,7 +31,9 @@ export function EvidenceModal({
           <DialogTitle>Source Evidence</DialogTitle>
         </DialogHeader>
 
-        {hasEvidence ? (
+        {!evidence ? (
+          <p className="py-6 text-center text-sm text-gray-500">No evidence selected.</p>
+        ) : hasEvidence ? (
           <div className="space-y-4">
             <div>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">

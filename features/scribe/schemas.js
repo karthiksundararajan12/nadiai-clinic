@@ -268,6 +268,15 @@ export const FinalizeAudioUploadSchema = z.object({
 // TRANSCRIPTION PIPELINE
 // ─────────────────────────────────────────────────────────────
 
+export const ManualTranscriptImportSchema = z.object({
+  text: z.string().trim().min(20, "Transcript must be at least 20 characters"),
+  language: languageEnum.optional(),
+  patient_id: uuidOptional,
+  appointment_id: uuidOptional,
+});
+
+/** @typedef {z.infer<typeof ManualTranscriptImportSchema>} ManualTranscriptImportInput */
+
 export const QueueTranscriptionSchema = z.object({
   priority: z.coerce.number().int().min(1).max(10).default(5),
   force: z.boolean().optional().default(false),

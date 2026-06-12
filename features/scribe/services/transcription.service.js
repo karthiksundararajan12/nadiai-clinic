@@ -33,11 +33,13 @@ import {
   TranscriptionRetryExhaustedError,
 } from "../errors.js";
 import {
+  ManualTranscriptImportSchema,
   QueueTranscriptionSchema,
   RecoverTranscriptionJobsSchema,
   RetryTranscriptionSchema,
   TranscriptionWorkerSchema,
 } from "../schemas.js";
+import { parseManualTranscript } from "../lib/manual-transcript-parser.js";
 import { createTranscriptionProvider } from "./transcription-providers/provider-factory.js";
 import {
   buildInlineTranscriptionJob,
@@ -194,6 +196,77 @@ export class TranscriptionService {
     const transcription = await this._transcriptions.findBySession(sessionId);
     const segments      = await this._transcriptions.getSegments(sessionId);
     return { session, transcription, segments };
+  }
+
+  /**
+   * Imports a doctor-pasted transcript, persisting segments and skipping Whisper.
+   * Session must be in CREATED status (typically just created for manual entry).
+   *
+   * @param {string} sessionId
+   * @param {Record<string, unknown>} rawInput
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  async importManualTranscript(sessionId, rawInput, ctx) {
+    const parsed = ManualTranscriptImportSchema.safeParse(rawInput);
+    if (!parsed.success) throw new SessionValidationError(parsed.error);
+
+    const session = await this._sessions.findById(sessionId, ctx.doctorId);
+    if (!session) throw new SessionNotFoundError(sessionId);
+
+    if (session.status !== SESSION_STATUS.CREATED) {
+      throw new InvalidStateTransitionError(session.status, SESSION_STATUS.TRANSCRIBED);
+    }
+
+    const { segments, fullText } = parseManualTranscript(parsed.data.text);
+    if (!segments.length) {
+      throw new TranscriptionNotReadyError("Transcript could not be parsed into segments");
+    }
+
+    const completedAt = new Date().toISOString();
+    const speakerMap = { A: "Doctor", B: "Patient", C: "Attendant" };
+
+    const transcription = await this._transcriptions.upsertTranscription({
+      session_id:              sessionId,
+      clinic_id:               session.clinic_id,
+      doctor_id:               session.doctor_id,
+      provider:                "manual",
+      model:                   "manual",
+      language:                session.language,
+      full_text:               fullText,
+      text:                    fullText,
+      segments,
+      speaker_map:             speakerMap,
+      low_confidence_segments: [],
+      low_confidence_count:    0,
+      average_confidence:      1,
+      status:                  TRANSCRIPTION_STATUS.COMPLETED,
+      attempt_count:           0,
+      completed_at:            completedAt,
+      error:                   null,
+    });
+
+    await this._transcriptions.replaceSegments(transcription.id, sessionId, segments);
+
+    const updatedSession = await this._sessions.transitionStatus(
+      sessionId,
+      ctx.doctorId,
+      SESSION_STATUS.CREATED,
+      SESSION_STATUS.TRANSCRIBED,
+      { error_message: null },
+    );
+
+    await this._audit.log({
+      action:    AUDIT_ACTION.TRANSCRIPTION_COMPLETED,
+      sessionId,
+      ctx,
+      metadata:  {
+        provider:     "manual",
+        segmentCount: segments.length,
+        source:       "manual_entry",
+      },
+    });
+
+    return { session: updatedSession, transcription };
   }
 
   /**

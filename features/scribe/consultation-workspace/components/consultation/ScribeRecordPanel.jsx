@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Loader2, Mic, Pause, Play, Plus, Square } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
@@ -24,8 +25,18 @@ export function ScribeRecordPanel({
   onResume,
   onStop,
   onNewSession,
+  manualMode = false,
+  onManualModeChange,
+  onManualSubmit,
+  manualSubmitting = false,
   footer,
 }) {
+  const [manualText, setManualText] = useState("");
+
+  useEffect(() => {
+    if (!manualMode) setManualText("");
+  }, [manualMode]);
+
   const isIdle = recordState === "idle";
   const isRequesting = recordState === "requesting";
   const isRecording = recordState === "recording";
@@ -33,7 +44,7 @@ export function ScribeRecordPanel({
   const isProcessing = recordState === "processing";
   const isLive = isRecording || isPaused;
 
-  const { level, waveformData } = useAudioLevel(analyserNode, isLive);
+  const { level, waveformData } = useAudioLevel(analyserNode, isLive && !manualMode);
 
   const statusTitle = isProcessing
     ? "Processing…"
@@ -45,12 +56,26 @@ export function ScribeRecordPanel({
           ? "Recording"
           : disabled
             ? "Session in progress"
-            : "Ready to record";
+            : manualMode
+              ? "Manual transcript"
+              : "Ready to record";
+
+  const showRecordingControls = !manualMode;
+  const canUseManualEntry = (isIdle || isRequesting) && !disabled && !manualSubmitting;
+
+  const enterManualMode = () => onManualModeChange?.(true);
+  const exitManualMode = () => onManualModeChange?.(false);
+
+  const handleManualGenerate = () => {
+    const text = manualText.trim();
+    if (!text || manualSubmitting) return;
+    onManualSubmit?.(text);
+  };
 
   return (
     <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
       <div className="flex shrink-0 flex-col items-center gap-4 border-b border-gray-200 px-4 py-5">
-        {isLive && (
+        {showRecordingControls && isLive && (
           <AudioLevelMeter
             level={level}
             waveformData={waveformData}
@@ -60,23 +85,31 @@ export function ScribeRecordPanel({
           />
         )}
 
-        <div className="text-center">
-          <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
-          {durationLabel && isLive && (
-            <p className="mt-0.5 font-mono text-xs tabular-nums text-gray-500">{durationLabel}</p>
-          )}
-          {statusMessage && !transcriptLoading && (
-            <p className="mt-1 text-xs text-gray-500">{statusMessage}</p>
-          )}
-        </div>
-
-        <div className="flex w-full max-w-[240px] flex-col items-center gap-2">
-          {(isIdle || isRequesting) && !disabled && (
+        {manualMode ? (
+          <div className="flex w-full flex-col gap-3">
             <button
               type="button"
-              aria-label="Start recording"
-              disabled={disabled || isProcessing || isRequesting}
-              onClick={onStart}
+              onClick={exitManualMode}
+              disabled={manualSubmitting}
+              className="self-start text-sm text-gray-400 underline cursor-pointer hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              ← Use microphone instead
+            </button>
+            <textarea
+              value={manualText}
+              onChange={(e) => setManualText(e.target.value)}
+              disabled={manualSubmitting}
+              placeholder="Paste or type the doctor-patient conversation here..."
+              className={cn(
+                "min-h-[200px] w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-900",
+                "placeholder:text-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500",
+                "disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+            />
+            <button
+              type="button"
+              disabled={!manualText.trim() || manualSubmitting}
+              onClick={handleManualGenerate}
               className={cn(
                 "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
                 "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
@@ -84,78 +117,125 @@ export function ScribeRecordPanel({
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
-              {isRequesting ? (
-                <Loader2 className="h-5 w-5 animate-spin" />
+              {manualSubmitting ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Generating…
+                </>
               ) : (
-                <Mic className="h-5 w-5" />
+                "Generate SOAP Note"
               )}
-              {isRequesting ? "Starting…" : "Start Recording"}
             </button>
-          )}
-
-          {isProcessing && (
-            <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 px-5 py-3 text-sm text-gray-500">
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Processing…
+          </div>
+        ) : (
+          <>
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
+              {durationLabel && isLive && (
+                <p className="mt-0.5 font-mono text-xs tabular-nums text-gray-500">{durationLabel}</p>
+              )}
+              {statusMessage && !transcriptLoading && (
+                <p className="mt-1 text-xs text-gray-500">{statusMessage}</p>
+              )}
             </div>
-          )}
 
-          {disabled && !isLive && !isProcessing && (
-            <div className="w-full rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-center text-xs text-gray-500">
-              Finish or end the open consultation to record again
-            </div>
-          )}
-
-          {isLive && (
-            <div className="flex w-full gap-2">
-              {pauseSupported && (
+            <div className="flex w-full max-w-[240px] flex-col items-center gap-2">
+              {(isIdle || isRequesting) && !disabled && (
                 <button
                   type="button"
-                  aria-label={isPaused ? "Resume recording" : "Pause recording"}
-                  onClick={isPaused ? onResume : onPause}
+                  aria-label="Start recording"
+                  disabled={disabled || isProcessing || isRequesting}
+                  onClick={onStart}
                   className={cn(
-                    "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
-                    "text-sm font-semibold text-white shadow-md transition-all duration-200",
-                    isPaused
-                      ? "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700"
-                      : "bg-amber-500 shadow-amber-500/20 hover:bg-amber-600",
+                    "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
+                    "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
+                    "transition-all duration-200 hover:bg-cyan-700",
+                    "disabled:cursor-not-allowed disabled:opacity-60",
                   )}
                 >
-                  {isPaused ? (
-                    <>
-                      <Play className="h-4 w-4 fill-current" />
-                      Resume
-                    </>
+                  {isRequesting ? (
+                    <Loader2 className="h-5 w-5 animate-spin" />
                   ) : (
-                    <>
-                      <Pause className="h-4 w-4" />
-                      Pause
-                    </>
+                    <Mic className="h-5 w-5" />
                   )}
+                  {isRequesting ? "Starting…" : "Start Recording"}
                 </button>
               )}
-              <button
-                type="button"
-                aria-label="Stop recording"
-                onClick={onStop}
-                className={cn(
-                  "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
-                  "bg-red-600 text-sm font-semibold text-white shadow-md shadow-red-600/20",
-                  "transition-all duration-200 hover:bg-red-700",
-                  !pauseSupported && "w-full",
-                )}
-              >
-                <Square className="h-4 w-4 fill-current" />
-                Stop
-              </button>
-            </div>
-          )}
-        </div>
 
-        {(isIdle || isRequesting) && !disabled && (
-          <p className="max-w-[240px] text-center text-xs leading-relaxed text-gray-500">
-            Speak clearly and louder. Minimum recording length is 10 seconds.
-          </p>
+              {isProcessing && (
+                <div className="flex w-full items-center justify-center gap-2 rounded-xl bg-gray-100 px-5 py-3 text-sm text-gray-500">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  Processing…
+                </div>
+              )}
+
+              {disabled && !isLive && !isProcessing && (
+                <div className="w-full rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-center text-xs text-gray-500">
+                  Finish or end the open consultation to record again
+                </div>
+              )}
+
+              {isLive && (
+                <div className="flex w-full gap-2">
+                  {pauseSupported && (
+                    <button
+                      type="button"
+                      aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                      onClick={isPaused ? onResume : onPause}
+                      className={cn(
+                        "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
+                        "text-sm font-semibold text-white shadow-md transition-all duration-200",
+                        isPaused
+                          ? "bg-emerald-600 shadow-emerald-600/20 hover:bg-emerald-700"
+                          : "bg-amber-500 shadow-amber-500/20 hover:bg-amber-600",
+                      )}
+                    >
+                      {isPaused ? (
+                        <>
+                          <Play className="h-4 w-4 fill-current" />
+                          Resume
+                        </>
+                      ) : (
+                        <>
+                          <Pause className="h-4 w-4" />
+                          Pause
+                        </>
+                      )}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    aria-label="Stop recording"
+                    onClick={onStop}
+                    className={cn(
+                      "flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl px-4 py-3",
+                      "bg-red-600 text-sm font-semibold text-white shadow-md shadow-red-600/20",
+                      "transition-all duration-200 hover:bg-red-700",
+                      !pauseSupported && "w-full",
+                    )}
+                  >
+                    <Square className="h-4 w-4 fill-current" />
+                    Stop
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {canUseManualEntry && (
+              <>
+                <p className="max-w-[240px] text-center text-xs leading-relaxed text-gray-500">
+                  Speak clearly and louder. Minimum recording length is 10 seconds.
+                </p>
+                <button
+                  type="button"
+                  onClick={enterManualMode}
+                  className="text-sm text-gray-400 underline cursor-pointer hover:text-gray-600"
+                >
+                  Or enter transcript manually
+                </button>
+              </>
+            )}
+          </>
         )}
       </div>
 

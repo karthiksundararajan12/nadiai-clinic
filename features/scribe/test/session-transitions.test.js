@@ -35,6 +35,13 @@ test("TRANSCRIBED can transition to REVIEWING", () => {
   );
 });
 
+test("CREATED can transition to TRANSCRIBED for manual transcript entry", () => {
+  assert.equal(
+    canTransitionSession(SESSION_STATUS.CREATED, SESSION_STATUS.TRANSCRIBED),
+    true,
+  );
+});
+
 test("SOAP_APPROVED can transition to COMPLETED", () => {
   assert.equal(
     canTransitionSession(SESSION_STATUS.SOAP_APPROVED, SESSION_STATUS.COMPLETED),

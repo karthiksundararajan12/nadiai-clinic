@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
+import { submitManualTranscript } from "@/features/scribe/upload/manual-transcript.client.js";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { RECORDING_LIMITS } from "@/features/scribe/recording/constants.js";
@@ -67,6 +68,8 @@ export function ScribeWorkflow() {
   const [pipelineMessage, setPipelineMessage] = useState(null);
   const [uploadError, setUploadError] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
+  const [manualInputMode, setManualInputMode] = useState(false);
+  const [manualSubmitting, setManualSubmitting] = useState(false);
   const [busySessionId, setBusySessionId] = useState(null);
   const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
   const [workspaceState, setWorkspaceState] = useState({
@@ -279,6 +282,8 @@ export function ScribeWorkflow() {
     setActiveSessionId(null);
     setViewFromHistory(false);
     setUploadError(null);
+    setManualInputMode(false);
+    setManualSubmitting(false);
     setSessionsOpen(false);
     setWorkspaceState({
       segments: [],
@@ -288,6 +293,37 @@ export function ScribeWorkflow() {
     });
     recording.resetRecording?.();
   }, [recording.resetRecording]);
+
+  const handleManualTranscriptSubmit = useCallback(async (text) => {
+    setUploadError(null);
+    setManualSubmitting(true);
+    setPipelineMessage("Saving transcript…");
+
+    try {
+      const result = await submitManualTranscript({
+        text,
+        language,
+        patientId: selectedPatient?.id,
+      });
+
+      const sessionId = result?.session?.id;
+      if (!sessionId) throw new Error("Transcript saved but no session id was returned");
+
+      setLastRecordedSessionId(sessionId);
+      setActiveSessionId(sessionId);
+      setViewFromHistory(false);
+      setManualInputMode(false);
+      setPipelineMessage(null);
+      await loadConsultations(true);
+    } catch (err) {
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      if (err && typeof err === "object" && "code" in err) wrapped.code = err.code;
+      setUploadError(wrapped);
+      setPipelineMessage(null);
+    } finally {
+      setManualSubmitting(false);
+    }
+  }, [language, loadConsultations, selectedPatient?.id]);
 
   const openSession = useCallback((sessionId, fromHistory = false) => {
     setViewFromHistory(fromHistory);
@@ -365,7 +401,7 @@ export function ScribeWorkflow() {
 
   const recordPanelFooter = (
     <div className="space-y-3">
-      {languageToggle}
+      {!manualInputMode && languageToggle}
       <Button
         variant="outline"
         size="sm"
@@ -426,6 +462,10 @@ export function ScribeWorkflow() {
         onResume={recording.resumeRecording}
         onStop={handleStopRecording}
         onNewSession={goLive}
+        manualMode={manualInputMode}
+        onManualModeChange={setManualInputMode}
+        onManualSubmit={handleManualTranscriptSubmit}
+        manualSubmitting={manualSubmitting}
         footer={recordPanelFooter}
       />
 

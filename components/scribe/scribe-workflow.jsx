@@ -348,11 +348,11 @@ export function ScribeWorkflow() {
     }
   }, [activeSessionId, goLive, loadConsultations]);
 
-  const handleSOAPApproved = useCallback((result) => {
+  const handleSOAPApproved = useCallback((result, options = {}) => {
     const approvedId = result?.session?.id ?? activeSessionId;
     const approvedSession = result?.session;
 
-    if (approvedId) {
+    if (approvedId && !options.keepSessionOpen) {
       setActiveSessions((prev) => prev.filter((s) => s.id !== approvedId));
       if (approvedSession) {
         const row = {
@@ -367,7 +367,9 @@ export function ScribeWorkflow() {
       }
     }
 
-    goLive();
+    if (!options.keepSessionOpen && !options.prescriptionApproved) {
+      goLive();
+    }
     void loadConsultations(true);
   }, [activeSessionId, goLive, loadConsultations]);
 

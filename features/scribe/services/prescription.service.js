@@ -41,6 +41,11 @@ import {
   PRESCRIPTION_JSON_SCHEMA,
 } from "./prescription-prompt.js";
 import { createSOAPAIProvider } from "./ai-providers/provider-factory.js";
+import { buildDoctorStyleContext } from "../lib/doctor-prescription-style.js";
+import {
+  isGeminiPrescriptionFormat,
+  mapGeminiPrescriptionToDraft,
+} from "../lib/prescription-response-mapper.js";
 
 export class PrescriptionService {
   /**
@@ -109,10 +114,29 @@ export class PrescriptionService {
     }
 
     // ── Build generation inputs and idempotency hash ────────────────────
+    const approvedHistory = await this._prescriptions.getApprovedPrescriptionsForDoctor(
+      ctx.doctorId,
+      20,
+    );
+    const doctorStyleContext = buildDoctorStyleContext(approvedHistory);
+
     const generationContext = buildGenerationContext(
-      soapNote, latestTranscriptVersion, patient, doctor, appointment, session,
+      soapNote, latestTranscriptVersion, patient, doctor, appointment, session, doctorStyleContext,
     );
     const inputHash = hashInput(generationContext);
+    const fromStatus = session.status;
+
+    if (input.manual) {
+      return this._createManualDraft(
+        sessionId,
+        soapNote,
+        session,
+        ctx,
+        generationContext,
+        inputHash,
+        fromStatus,
+      );
+    }
 
     if (!input.force) {
       const reusable = await this._prescriptions.findReusableDraft(sessionId, inputHash);
@@ -123,7 +147,6 @@ export class PrescriptionService {
     }
 
     // ── Transition to GENERATING_PRESCRIPTION ──────────────────────────
-    const fromStatus = session.status;
     await this._sessions.transitionStatus(
       sessionId, ctx.doctorId, fromStatus, SESSION_STATUS.GENERATING_PRESCRIPTION,
       { error_message: null },
@@ -164,7 +187,7 @@ export class PrescriptionService {
       // ── Call Claude ──────────────────────────────────────────────────────
       const prompt    = buildPrescriptionPrompt(generationContext);
       const generated = await this._generateWithRetry(prompt);
-      const draftObj  = parseAndValidateDraft(generated.text);
+      const draftObj  = parseAndValidateDraft(generated.text, soapNote.assessment ?? "");
       const generatedAt = new Date().toISOString();
 
       // Low-confidence medications get an extra warning automatically.
@@ -272,6 +295,46 @@ export class PrescriptionService {
   // ─────────────────────────────────────────────────────────────
   // PRIVATE
   // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Creates an empty manual-entry draft without calling AI.
+   */
+  async _createManualDraft(sessionId, soapNote, session, ctx, generationContext, inputHash, fromStatus) {
+    await this._sessions.transitionStatus(
+      sessionId, ctx.doctorId, fromStatus, SESSION_STATUS.GENERATING_PRESCRIPTION,
+      { error_message: null },
+    );
+
+    const emptyDraft = buildEmptyManualDraft(generationContext.soapNote.assessment);
+    const generatedAt = new Date().toISOString();
+
+    const draft = await this._prescriptions.upsertDraft({
+      session_id:          sessionId,
+      soap_note_id:        soapNote.id,
+      clinic_id:           ctx.clinicId,
+      doctor_id:           ctx.doctorId,
+      patient_id:          session.patient_id ?? null,
+      appointment_id:      session.appointment_id ?? null,
+      status:              PRESCRIPTION_DRAFT_STATUS.DRAFT_READY,
+      draft:               emptyDraft,
+      provider:            "manual",
+      model:               "manual",
+      prompt_version:      PRESCRIPTION_GENERATION_CONFIG.PROMPT_VERSION,
+      generation_metadata: { source: "manual_entry" },
+      input_hash:          inputHash,
+      error_message:       null,
+      generated_at:        generatedAt,
+    });
+
+    await this._sessions.transitionStatus(
+      sessionId, ctx.doctorId,
+      SESSION_STATUS.GENERATING_PRESCRIPTION,
+      SESSION_STATUS.PRESCRIPTION_DRAFT_READY,
+      { error_message: null },
+    );
+
+    return { draft, reused: false, manual: true };
+  }
 
   /**
    * Calls Claude with exponential back-off up to MAX_ATTEMPTS.
@@ -409,10 +472,11 @@ export class PrescriptionService {
  * @param {Record<string,unknown>}      session
  * @returns {import('./prescription-prompt.js').PrescriptionGenerationContext}
  */
-function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, appointment, session) {
+function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, appointment, session, doctorStyleContext = "") {
   const transcriptText = transcriptVersion?.full_text?.trim() ?? "";
 
   return {
+    doctorStyleContext,
     soapNote: {
       chiefComplaint:          soapNote.chief_complaint ?? "",
       historyOfPresentIllness: soapNote.history_of_present_illness ?? "",
@@ -451,19 +515,45 @@ function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, ap
  * @param {string} text
  * @returns {import('../schemas.js').PrescriptionDraft}
  */
-function parseAndValidateDraft(text) {
+function parseAndValidateDraft(text, assessment = "") {
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
-    throw new PrescriptionValidationError({ reason: "invalid_json", message: err.message });
+    throw new PrescriptionValidationError({
+      reason: "invalid_json",
+      message: "Could not generate prescription. Please enter manually.",
+    });
   }
 
-  const result = PrescriptionDraftSchema.safeParse(parsed);
+  const normalized = isGeminiPrescriptionFormat(parsed)
+    ? mapGeminiPrescriptionToDraft(parsed, assessment)
+    : parsed;
+
+  const result = PrescriptionDraftSchema.safeParse(normalized);
   if (!result.success) {
-    throw new PrescriptionValidationError(result.error.flatten());
+    throw new PrescriptionValidationError({
+      reason: "validation_failed",
+      message: "Could not generate prescription. Please enter manually.",
+      details: result.error.flatten(),
+    });
   }
   return result.data;
+}
+
+/** @param {string} assessment */
+function buildEmptyManualDraft(assessment) {
+  const diagnosis = assessment
+    ? assessment.split(/[;\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 3)
+    : [];
+  return {
+    diagnosis,
+    medications: [],
+    investigations: [],
+    advice: [],
+    followUpInstructions: "",
+    warnings: [],
+  };
 }
 
 /**

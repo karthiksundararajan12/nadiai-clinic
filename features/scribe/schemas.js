@@ -484,6 +484,7 @@ export const PrescriptionDraftSchema = z.object({
   investigations:       z.array(z.string().min(1).max(500)),
   advice:               z.array(z.string().min(1).max(1000)),
   followUpInstructions: z.string().max(2000).default(""),
+  followUpDays:         z.number().int().positive().optional(),
   warnings:             z.array(z.string().min(1).max(1000)),
 }).strict();
 
@@ -491,6 +492,7 @@ export const PrescriptionDraftSchema = z.object({
 
 export const GeneratePrescriptionSchema = z.object({
   force:           z.boolean().optional().default(false),
+  manual:          z.boolean().optional().default(false),
   soap_note_id:    z.string().uuid().optional().nullable(),
 });
 

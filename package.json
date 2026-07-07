@@ -8,7 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test": "npm run test:unit",
-    "test:unit": "node --test --test-reporter spec 'features/scribe/test/**/*.test.js'",
+    "test:unit": "node --test --test-reporter spec 'features/scribe/test/**/*.test.js' 'features/booking/test/**/*.test.js'",
     "e2e:fixtures": "node e2e/scripts/ensure-fixtures.mjs",
     "test:e2e": "playwright test --project=smoke",
     "test:e2e:full": "npm run e2e:fixtures && playwright test --project=setup --project=scribe-full",

@@ -27,6 +27,7 @@ import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinica
 import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
 import { resolveSoapDisplayDate, resolveSoapDateLabel } from "../lib/format-datetime.js";
+import { usePrescriptionPanel } from "../../prescription-review/hooks/use-prescription-panel.js";
 
 const PRESCRIPTION_READY_STATUSES = new Set([
   "PRESCRIPTION_DRAFT_READY",
@@ -101,7 +102,7 @@ export function ConsultationWorkspace({
   const [auditOpen, setAuditOpen] = useState(false);
   const [approvalLocked, setApprovalLocked] = useState(false);
   const [approving, setApproving] = useState(false);
-  const [generatingPrescription, setGeneratingPrescription] = useState(false);
+  const prescription = usePrescriptionPanel(sessionId);
   const [frozenQuality, setFrozenQuality] = useState(null);
   const frozenDateRef = useRef({ sessionId: null, value: null });
   const qualityDebounceRef = useRef(null);
@@ -181,7 +182,7 @@ export function ConsultationWorkspace({
     parentTranscriptionRef.current = false;
     transcriptionCompleteHandledRef.current = false;
     setApprovalLocked(false);
-    setGeneratingPrescription(false);
+    prescription.reset();
     setFrozenQuality(null);
     setActiveStatementId(null);
     setActiveSegmentId(null);
@@ -313,43 +314,89 @@ export function ConsultationWorkspace({
         lastKnownStatusRef.current = result.session.status;
       }
       void statusPoll.refresh?.();
-      onApproved?.(result);
+      onApproved?.(result, { keepSessionOpen: true });
     } catch (err) {
       setApprovalLocked(false);
       window.alert(err instanceof Error ? err.message : "Failed to approve SOAP");
     } finally {
       setApproving(false);
     }
-  }, [onApproved, sessionId, soap, statusPoll]);
+  }, [onApproved, soap, statusPoll]);
 
   const prescriptionReady = PRESCRIPTION_READY_STATUSES.has(resolvedSessionStatus);
   const prescriptionGenerating =
-    generatingPrescription || resolvedSessionStatus === "GENERATING_PRESCRIPTION";
+    prescription.generating || resolvedSessionStatus === "GENERATING_PRESCRIPTION";
   const canGeneratePrescription =
-    soapApproved && !prescriptionReady && !prescriptionGenerating;
+    soapApproved &&
+    !prescriptionGenerating &&
+    !prescription.panelOpen &&
+    !prescription.approved &&
+    resolvedSessionStatus !== "PRESCRIPTION_APPROVED";
 
   const handleGeneratePrescription = useCallback(async () => {
-    setGeneratingPrescription(true);
     try {
-      const res = await fetch(`/api/scribe/sessions/${sessionId}/prescription/generate`, {
-        method: "POST",
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(payload?.error || `Failed to generate prescription (${res.status})`);
-      }
+      await prescription.generate();
       await statusPoll.refresh?.();
-      window.open(`/scribe?rx=${sessionId}`, "_blank");
-    } catch (err) {
-      window.alert(err instanceof Error ? err.message : "Failed to generate prescription");
-    } finally {
-      setGeneratingPrescription(false);
+    } catch {
+      // Error state shown in prescription panel
     }
-  }, [sessionId, statusPoll]);
+  }, [prescription, statusPoll]);
 
-  const handleViewPrescription = useCallback(() => {
-    window.open(`/scribe?rx=${sessionId}`, "_blank");
-  }, [sessionId]);
+  const handlePrescriptionRetry = useCallback(async () => {
+    try {
+      await prescription.generate({ force: true });
+      await statusPoll.refresh?.();
+    } catch {
+      // Error state shown in prescription panel
+    }
+  }, [prescription, statusPoll]);
+
+  const handlePrescriptionEnterManual = useCallback(async () => {
+    try {
+      await prescription.enterManual();
+      await statusPoll.refresh?.();
+    } catch {
+      // Local empty draft shown
+    }
+  }, [prescription, statusPoll]);
+
+  const handlePrescriptionApprove = useCallback(async () => {
+    try {
+      await prescription.approve();
+      await statusPoll.refresh?.();
+      onApproved?.(null, { prescriptionApproved: true });
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : "Failed to approve prescription");
+    }
+  }, [onApproved, prescription, statusPoll]);
+
+  const handlePrescriptionDiscard = useCallback(() => {
+    prescription.discard();
+  }, [prescription]);
+
+  const handleUpdateAdvice = useCallback((text) => {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    prescription.updateDraft((prev) => ({
+      ...prev,
+      advice: lines,
+      followUpInstructions: prev.followUpDays
+        ? `Follow up in ${prev.followUpDays} days`
+        : prev.followUpInstructions,
+    }));
+  }, [prescription]);
+
+  const handleUpdateFollowUpDays = useCallback((days) => {
+    prescription.updateDraft((prev) => ({
+      ...prev,
+      followUpDays: days,
+      followUpInstructions: days ? `Follow up in ${days} days` : "",
+    }));
+  }, [prescription]);
+
+  const handleViewPrescription = useCallback(async () => {
+    prescription.setPanelOpen(true);
+    await prescription.loadWorkspace();
+  }, [prescription]);
 
   const handlePatientSelect = useCallback(async (p) => {
     onSelectedPatientChange?.(p);
@@ -760,7 +807,26 @@ export function ConsultationWorkspace({
         generatingPrescription={prescriptionGenerating}
         onGeneratePrescription={handleGeneratePrescription}
         prescriptionReady={prescriptionReady}
-        onViewPrescription={handleViewPrescription}
+        onViewPrescription={prescriptionReady ? handleViewPrescription : undefined}
+        patient={patient}
+        prescriptionPanel={{
+          open: prescription.panelOpen,
+          generating: prescription.generating,
+          approving: prescription.approving,
+          approved: prescription.approved || resolvedSessionStatus === "PRESCRIPTION_APPROVED",
+          error: prescription.error,
+          draft: prescription.draft,
+          doctor: prescription.doctor,
+          onRetry: handlePrescriptionRetry,
+          onEnterManually: handlePrescriptionEnterManual,
+          onApprove: handlePrescriptionApprove,
+          onDiscard: handlePrescriptionDiscard,
+          onAddMedication: prescription.addMedication,
+          onUpdateMedication: prescription.updateMedication,
+          onRemoveMedication: prescription.removeMedication,
+          onUpdateAdvice: handleUpdateAdvice,
+          onUpdateFollowUpDays: handleUpdateFollowUpDays,
+        }}
         soapProps={{
           ready: soapReady,
           panel: {

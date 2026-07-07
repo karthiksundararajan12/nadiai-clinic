@@ -23,6 +23,10 @@ import { SoapFeedbackModal } from "./SoapFeedbackModal.jsx";
 import { SoapManualEditBar } from "./SoapManualEditBar.jsx";
 import { SoapRegeneratingOverlay } from "./SoapRegeneratingOverlay.jsx";
 import { EvidenceModal } from "./EvidenceModal.jsx";
+import { PrescriptionGeneratingView } from "../prescription/PrescriptionGeneratingView.jsx";
+import { PrescriptionDraftPanel } from "../prescription/PrescriptionDraftPanel.jsx";
+import { PrescriptionApprovedView } from "../prescription/PrescriptionApprovedView.jsx";
+import { PrescriptionErrorView } from "../prescription/PrescriptionErrorView.jsx";
 
 export function ConsultationClinicalLayout({
   sessionId,
@@ -80,6 +84,8 @@ export function ConsultationClinicalLayout({
   onGeneratePrescription,
   prescriptionReady,
   onViewPrescription,
+  patient,
+  prescriptionPanel,
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -104,6 +110,42 @@ export function ConsultationClinicalLayout({
 
   const formattedDate = formatClinicalDateTime(sessionDate);
   const workflowAction = resolveSoapWorkflowAction(soapNote);
+  const showPrescriptionPanel = prescriptionPanel?.open;
+
+  if (showPrescriptionPanel) {
+    return (
+      <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace-prescription">
+        {prescriptionPanel.generating && <PrescriptionGeneratingView />}
+        {!prescriptionPanel.generating && prescriptionPanel.error && (
+          <PrescriptionErrorView
+            onRetry={prescriptionPanel.onRetry}
+            onEnterManually={prescriptionPanel.onEnterManually}
+          />
+        )}
+        {!prescriptionPanel.generating && !prescriptionPanel.error && prescriptionPanel.approved && (
+          <PrescriptionApprovedView
+            draft={prescriptionPanel.draft}
+            patient={patient}
+            doctor={prescriptionPanel.doctor}
+          />
+        )}
+        {!prescriptionPanel.generating && !prescriptionPanel.error && !prescriptionPanel.approved && (
+          <PrescriptionDraftPanel
+            draft={prescriptionPanel.draft}
+            patient={patient}
+            approving={prescriptionPanel.approving}
+            onApprove={prescriptionPanel.onApprove}
+            onDiscard={prescriptionPanel.onDiscard}
+            onAddMedication={prescriptionPanel.onAddMedication}
+            onUpdateMedication={prescriptionPanel.onUpdateMedication}
+            onRemoveMedication={prescriptionPanel.onRemoveMedication}
+            onUpdateAdvice={prescriptionPanel.onUpdateAdvice}
+            onUpdateFollowUpDays={prescriptionPanel.onUpdateFollowUpDays}
+          />
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace">
@@ -148,19 +190,7 @@ export function ConsultationClinicalLayout({
               Approve
             </button>
           )}
-          {approved && canGeneratePrescription && (
-            <button
-              type="button"
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:bg-green-700 disabled:opacity-50"
-              onClick={onGeneratePrescription}
-              disabled={generatingPrescription}
-              data-testid="generate-prescription"
-            >
-              {generatingPrescription ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />}
-              Generate Prescription
-            </button>
-          )}
-          {approved && prescriptionReady && (
+          {approved && prescriptionReady && onViewPrescription && (
             <button
               type="button"
               className="flex cursor-pointer items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"
@@ -240,6 +270,27 @@ export function ConsultationClinicalLayout({
             />
           ) : (
             <SOAPEditorEmpty {...soapProps.empty} />
+          )}
+
+          {approved && canGeneratePrescription && (
+            <button
+              type="button"
+              className={cn(
+                "mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
+                "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
+                "transition-all duration-200 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60",
+              )}
+              onClick={onGeneratePrescription}
+              disabled={generatingPrescription}
+              data-testid="generate-prescription"
+            >
+              {generatingPrescription ? (
+                <Loader2 className="h-5 w-5 animate-spin" />
+              ) : (
+                <FileText className="h-5 w-5" />
+              )}
+              Generate Prescription
+            </button>
           )}
         </div>
       </div>

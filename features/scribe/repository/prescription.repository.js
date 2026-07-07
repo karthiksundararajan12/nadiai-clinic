@@ -322,6 +322,26 @@ export class PrescriptionRepository extends BaseRepository {
     );
   }
 
+  /**
+   * Returns the most recent approved prescription drafts for a doctor (style learning).
+   *
+   * @param {string} doctorId
+   * @param {number} [limit]
+   */
+  async getApprovedPrescriptionsForDoctor(doctorId, limit = 20) {
+    return this._run(
+      () =>
+        this._db
+          .from("prescription_drafts")
+          .select("id, draft, approved_at, session_id")
+          .eq("doctor_id", doctorId)
+          .eq("status", "approved")
+          .order("approved_at", { ascending: false })
+          .limit(limit),
+      "getApprovedPrescriptionsForDoctor",
+    );
+  }
+
   /** @param {string} sessionId */
   async getReviewEvents(sessionId) {
     return this._run(

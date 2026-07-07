@@ -1,7 +1,20 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
+// Server-to-server webhooks (Meta, Razorpay) never carry a Supabase session —
+// they authenticate via their own signature schemes (X-Hub-Signature-256,
+// X-Razorpay-Signature) inside the route handlers themselves. Redirecting
+// these to /login would return a 307 instead of the expected 200/401, which
+// providers treat as a delivery failure and eventually disable the webhook.
+const PUBLIC_WEBHOOK_PATHS = ["/api/whatsapp/webhook", "/api/webhooks/razorpay"];
+
 export async function middleware(request) {
+  const { pathname } = request.nextUrl;
+
+  if (PUBLIC_WEBHOOK_PATHS.some((path) => pathname === path)) {
+    return NextResponse.next();
+  }
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -31,8 +44,6 @@ export async function middleware(request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const { pathname } = request.nextUrl;
 
   if (
     !user &&

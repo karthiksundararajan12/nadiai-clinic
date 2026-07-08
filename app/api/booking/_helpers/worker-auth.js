@@ -5,47 +5,58 @@ import { WorkerUnauthorizedError } from "../../../../features/booking/errors.js"
  * @returns {{ debug: Record<string, unknown>; authorized: boolean }}
  */
 export function inspectWorkerAuth(request) {
-  const expected = process.env.CRON_SECRET;
+  const expected = process.env.CRON_SECRET?.trim() ?? "";
   const auth = request.headers.get("authorization") || "";
+  const cronSecretHeader = request.headers.get("x-cron-secret") || "";
 
   let authScheme = "none";
   if (auth.toLowerCase().startsWith("bearer ")) authScheme = "bearer";
   else if (auth.toLowerCase().startsWith("basic ")) authScheme = "basic";
   else if (auth) authScheme = "other";
 
-  const token = authScheme === "bearer"
-    ? auth.slice(auth.indexOf(" ") + 1)
-    : "";
+  let token = "";
+  let authSource = "none";
+
+  if (cronSecretHeader) {
+    token = cronSecretHeader.trim();
+    authSource = "x-cron-secret";
+  } else if (authScheme === "bearer") {
+    token = auth.slice(auth.indexOf(" ") + 1).trim();
+    authSource = "authorization-bearer";
+  } else if (authScheme === "other") {
+    token = auth.trim();
+    authSource = "authorization-raw";
+  }
 
   const debug = {
     secretConfigured: Boolean(expected),
     hasAuthHeader: Boolean(auth),
+    hasCronSecretHeader: Boolean(cronSecretHeader),
+    authSource,
     authScheme,
     bearerPrefixPresent: authScheme === "bearer",
     tokenLength: token.length,
-    expectedLength: expected?.length ?? 0,
+    expectedLength: expected.length,
     exactMatch: token === expected,
-    trimmedMatch: token.trim() === (expected?.trim() ?? ""),
     tokenHasSpaces: token.includes(" "),
     tokenHasPlus: token.includes("+"),
-    expectedHasPlus: expected?.includes("+") ?? false,
+    expectedHasPlus: expected.includes("+"),
     userAgent: request.headers.get("user-agent")?.slice(0, 80) ?? null,
   };
 
   return {
     debug,
-    authorized: Boolean(expected) && token === expected,
+    authorized: Boolean(expected) && Boolean(token) && token === expected,
   };
 }
 
 /**
  * Validates a server-to-server worker/cron request.
  *
- * Configure CRON_SECRET in production — Vercel Cron automatically sends
- * `Authorization: Bearer $CRON_SECRET` on every scheduled invocation when
- * that env var is set (see vercel.json's `crons` entry for
- * /api/cron/booking-reminders), so no extra wiring is needed beyond
- * setting the env var.
+ * Accepts the secret via any of:
+ *  - `Authorization: Bearer <CRON_SECRET>`
+ *  - `Authorization: <CRON_SECRET>` (raw — common cron-job.org setup)
+ *  - `X-Cron-Secret: <CRON_SECRET>` (recommended for cron-job.org)
  *
  * @param {Request} request
  */
@@ -66,6 +77,7 @@ export function assertWorkerAuthorized(request) {
       data: debug,
       timestamp: Date.now(),
       hypothesisId: "H1-H5",
+      runId: "post-fix",
     }),
   }).catch(() => {});
   // #endregion

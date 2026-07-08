@@ -47,24 +47,32 @@ test("H3: plus corrupted to spaces in token", () => {
   assert.equal(authorized, false);
 });
 
-test("H4: raw token without Bearer prefix", () => {
+test("H4: raw token without Bearer prefix is accepted", () => {
   process.env.CRON_SECRET = SECRET;
   const { debug, authorized } = inspectWorkerAuth(
     mockRequest({ authorization: SECRET }),
   );
   assert.equal(debug.authScheme, "other");
-  assert.equal(debug.bearerPrefixPresent, false);
-  assert.equal(authorized, false);
+  assert.equal(debug.authSource, "authorization-raw");
+  assert.equal(authorized, true);
 });
 
-test("H5: trailing whitespace mismatch", () => {
+test("H5: trailing whitespace is trimmed", () => {
   process.env.CRON_SECRET = SECRET;
   const { debug, authorized } = inspectWorkerAuth(
     mockRequest({ authorization: `Bearer ${SECRET} ` }),
   );
-  assert.equal(debug.trimmedMatch, true);
-  assert.equal(debug.exactMatch, false);
-  assert.equal(authorized, false);
+  assert.equal(debug.authSource, "authorization-bearer");
+  assert.equal(authorized, true);
+});
+
+test("X-Cron-Secret header is accepted", () => {
+  process.env.CRON_SECRET = SECRET;
+  const { debug, authorized } = inspectWorkerAuth(
+    mockRequest({ "x-cron-secret": SECRET }),
+  );
+  assert.equal(debug.authSource, "x-cron-secret");
+  assert.equal(authorized, true);
 });
 
 test("valid Bearer token authorizes", () => {
@@ -73,6 +81,6 @@ test("valid Bearer token authorizes", () => {
     mockRequest({ authorization: `Bearer ${SECRET}` }),
   );
   assert.equal(debug.authScheme, "bearer");
-  assert.equal(debug.exactMatch, true);
+  assert.equal(debug.authSource, "authorization-bearer");
   assert.equal(authorized, true);
 });

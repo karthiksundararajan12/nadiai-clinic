@@ -80,6 +80,11 @@ Key columns: `id`, `clinic_id`, `doctor_id`, `patient_id`, `contact_phone` (deno
 ### `razorpay_webhook_events` (new, migration 020)
 Idempotency ledger for the Razorpay webhook (`/api/webhooks/razorpay`), keyed on the `X-Razorpay-Event-Id` header (`event_id`, unique). Insert-if-new is the dedupe mechanism: a unique violation means "already processed" and the handler no-ops instead of re-running a transition. See `features/booking/services/payment-webhook.service.js`.
 
+**Session 5 additions (migration 021 — reminders):**
+- `clinics.reminder_24h_offset_minutes` / `reminder_2h_offset_minutes` (default 1440 / 120): how long before `slot_start` each reminder fires, configurable per clinic.
+- `appointments.reminder_24h_sent_at` / `reminder_2h_sent_at` (nullable timestamptz): stamped by the reminder cron the moment it *claims* an appointment for that reminder (single conditional `UPDATE ... WHERE reminder_Xh_sent_at IS NULL`) — NULL means "not sent yet", and doubles as the idempotency guard against a double-send from an overlapping cron tick.
+- `appointments.status` gained a new app-level value, `reschedule_requested` (no DB CHECK constraint exists on this column, so no migration was needed) — set when a patient taps "Reschedule" on a reminder. See `features/booking/services/reminder.service.js`.
+
 ### `conversation_state` (new)
 Tracks where a WhatsApp contact is in the booking flow. Scoped by `(clinic_id, contact_phone)` — one active flow per contact per clinic.
 
@@ -96,9 +101,16 @@ Key columns: `id`, `clinic_id`, `contact_phone`, `current_state`, `context` (jso
 | SLOT_SELECTION | `appointments` (read availability), `conversation_state` | no appointment row created until slot confirmed |
 | PAYMENT_PENDING | `appointments` (status update), Razorpay webhook | idempotent on `razorpay_webhook_events.event_id` (event-level) and `razorpay_payment_id` (row-level) |
 | CONFIRMED | `appointments` | |
-| REMINDER_SENT | `appointments` (read, scheduled job) | no new row, status/notification only |
+| REMINDER_SENT | `appointments` (read, scheduled job) | no new row, status/notification only — see Session 5 note below |
 | CANCELLED | `appointments` | soft — status change, cancelled_at set |
-| RESCHEDULE_REQUESTED | `appointments` (new row, rescheduled_from_id set) | old row marked `rescheduled`, not cancelled |
+| RESCHEDULE_REQUESTED | `appointments` (new row, rescheduled_from_id set) | old row marked `rescheduled`, not cancelled — full self-serve loop (Session 6) not built yet; Session 5's reminder "Reschedule" quick-reply only marks the existing row `reschedule_requested` for manual doctor follow-up |
+
+**Session 5 (REMINDER_SENT) is deliberately NOT a `conversation_state.current_state` value**, despite the name. `conversation_state` is a singleton per `(clinic_id, contact_phone)` tracking one active *pre-appointment* flow — but a contact can have multiple independently-reminded CONFIRMED appointments, which a single conversation_state row can't represent. Instead:
+- Reminder progress lives on `appointments.reminder_24h_sent_at`/`reminder_2h_sent_at` (see migration 021 above).
+- A cron (`GET /api/cron/booking-reminders`, every 15 min via `vercel.json`, protected by `CRON_SECRET`) loops every clinic with WhatsApp configured and sends due reminders — stubbed/logged unless `WHATSAPP_TEMPLATES_LIVE=true` (the real `appt_reminder_24h`/`appt_reminder_2h` templates are still pending Meta review).
+- Confirm/Cancel/Reschedule quick-replies on a reminder self-identify their target `appointment_id` directly in the WhatsApp button id (`features/booking/lib/reminder-reply.js`) and are routed by the webhook route *before* `conversationStateService` — never via `conversation_state`.
+- No-response timeout: past-due CONFIRMED appointments with no reply move straight to `completed` (NO_SHOW tracking deferred — no clinic config flag built yet).
+- See `features/booking/services/reminder.service.js` and `features/booking/index.js` header notes #22-27 for full design rationale and flagged trade-offs (notably: the per-clinic loop is O(clinics) queries per cron tick, fine pre-launch but worth revisiting before the 5k-clinic target scale).
 
 ---
 

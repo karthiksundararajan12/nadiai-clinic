@@ -487,3 +487,157 @@ test("releaseFailedHold: a non-constraint DB error throws DatabaseError instead 
 
   await assert.rejects(() => repo.releaseFailedHold("clinic-1", "appt-1"), DatabaseError);
 });
+
+// ─────────────────────────────────────────────────────────────
+// Session 5 — findDueForReminder
+// ─────────────────────────────────────────────────────────────
+
+test("findDueForReminder: scopes by clinic/CONFIRMED/not-deleted/reminder column null/window, returns rows as-is", async () => {
+  const rows = [{ id: "appt-1", slot_start: "2026-07-06T03:30:00.000Z" }];
+  const db = createFakeSupabaseClient({ data: rows, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.findDueForReminder(
+    "clinic-1",
+    "reminder_24h_sent_at",
+    "2026-07-05T03:10:00.000Z",
+    "2026-07-05T03:30:00.000Z",
+  );
+
+  assert.deepEqual(result, rows);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "clinic_id" && val === "clinic-1"));
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+  const isArgs = db.lastBuilder.calls.filter((c) => c.method === "is").map((c) => c.args);
+  assert.ok(isArgs.some(([col, val]) => col === "reminder_24h_sent_at" && val === null));
+  assert.ok(isArgs.some(([col, val]) => col === "deleted_at" && val === null));
+  const gteArgs = db.lastBuilder.calls.find((c) => c.method === "gte")?.args;
+  assert.deepEqual(gteArgs, ["slot_start", "2026-07-05T03:10:00.000Z"]);
+  const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
+  assert.deepEqual(ltArgs, ["slot_start", "2026-07-05T03:30:00.000Z"]);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Session 5 — claimReminder
+// ─────────────────────────────────────────────────────────────
+
+test("claimReminder: happy path stamps the reminder column, scoped by the guarded WHERE", async () => {
+  const claimedRow = { id: "appt-1", reminder_24h_sent_at: "2026-07-05T03:15:00.000Z" };
+  const db = createFakeSupabaseClient({ data: claimedRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.claimReminder("clinic-1", "appt-1", "reminder_24h_sent_at");
+
+  assert.deepEqual(result, claimedRow);
+  assert.ok(db.lastBuilder.updatedWith.reminder_24h_sent_at);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+  const isArgs = db.lastBuilder.calls.filter((c) => c.method === "is").map((c) => c.args);
+  assert.ok(isArgs.some(([col, val]) => col === "reminder_24h_sent_at" && val === null));
+});
+
+test("claimReminder: already claimed elsewhere (guarded UPDATE matches nothing) returns null, not an error", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.claimReminder("clinic-1", "appt-1", "reminder_24h_sent_at");
+
+  assert.equal(result, null);
+});
+
+test("claimReminder: a non-constraint DB error throws DatabaseError instead of being swallowed", async () => {
+  const error = { code: "08006", message: "connection failure" };
+  const db = createFakeSupabaseClient({ data: null, error });
+  const repo = new AppointmentRepository(db);
+
+  await assert.rejects(() => repo.claimReminder("clinic-1", "appt-1", "reminder_24h_sent_at"), DatabaseError);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Session 5 — completeExpiredConfirmed (no-response timeout)
+// ─────────────────────────────────────────────────────────────
+
+test("completeExpiredConfirmed: bulk-completes past-due CONFIRMED rows, scoped by clinic/status/not-deleted/slot_end", async () => {
+  const completed = [{ id: "appt-1" }, { id: "appt-2" }];
+  const db = createFakeSupabaseClient({ data: completed, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.completeExpiredConfirmed("clinic-1", "2026-07-06T10:00:00.000Z");
+
+  assert.deepEqual(result, completed);
+  assert.equal(db.lastBuilder.updatedWith.status, "completed");
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+  const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
+  assert.deepEqual(ltArgs, ["slot_end", "2026-07-06T10:00:00.000Z"]);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Session 5 — cancelViaReminderReply
+// ─────────────────────────────────────────────────────────────
+
+test("cancelViaReminderReply: happy path cancels the appointment, scoped by the guarded WHERE", async () => {
+  const cancelledRow = { id: "appt-1", status: "cancelled" };
+  const db = createFakeSupabaseClient({ data: cancelledRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaReminderReply("clinic-1", "appt-1");
+
+  assert.deepEqual(result, cancelledRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
+  assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "patient_cancelled_via_reminder");
+  assert.ok(db.lastBuilder.updatedWith.cancelled_at);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("cancelViaReminderReply: replaying against an already-cancelled appointment is a no-op (returns null)", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaReminderReply("clinic-1", "appt-1");
+
+  assert.equal(result, null);
+});
+
+test("cancelViaReminderReply: a non-constraint DB error throws DatabaseError instead of being swallowed", async () => {
+  const error = { code: "08006", message: "connection failure" };
+  const db = createFakeSupabaseClient({ data: null, error });
+  const repo = new AppointmentRepository(db);
+
+  await assert.rejects(() => repo.cancelViaReminderReply("clinic-1", "appt-1"), DatabaseError);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Session 5 — requestRescheduleViaReminderReply
+// ─────────────────────────────────────────────────────────────
+
+test("requestRescheduleViaReminderReply: happy path marks RESCHEDULE_REQUESTED, scoped by the guarded WHERE", async () => {
+  const updatedRow = { id: "appt-1", status: "reschedule_requested" };
+  const db = createFakeSupabaseClient({ data: updatedRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.requestRescheduleViaReminderReply("clinic-1", "appt-1");
+
+  assert.deepEqual(result, updatedRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "reschedule_requested");
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("requestRescheduleViaReminderReply: no longer CONFIRMED (guarded UPDATE matches nothing) returns null", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.requestRescheduleViaReminderReply("clinic-1", "appt-1");
+
+  assert.equal(result, null);
+});
+
+test("requestRescheduleViaReminderReply: a non-constraint DB error throws DatabaseError instead of being swallowed", async () => {
+  const error = { code: "08006", message: "connection failure" };
+  const db = createFakeSupabaseClient({ data: null, error });
+  const repo = new AppointmentRepository(db);
+
+  await assert.rejects(() => repo.requestRescheduleViaReminderReply("clinic-1", "appt-1"), DatabaseError);
+});

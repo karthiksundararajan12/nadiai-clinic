@@ -144,6 +144,12 @@ export class MissingConsultationFeeError extends BookingError {
   }
 }
 
+export class WorkerUnauthorizedError extends BookingError {
+  constructor() {
+    super("Unauthorized worker request", "WORKER_UNAUTHORIZED", 401);
+  }
+}
+
 export class DatabaseError extends BookingError {
   /**
    * @param {string} operation

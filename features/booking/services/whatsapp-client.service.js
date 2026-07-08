@@ -114,6 +114,49 @@ export class WhatsAppClientService {
   }
 
   /**
+   * Sends an approved WhatsApp message template. Used by ReminderService
+   * for `appt_reminder_24h`/`appt_reminder_2h` — always gated behind
+   * WHATSAPP_TEMPLATES_LIVE at the call site (this method itself has no
+   * flag/stub logic; it's a real Meta API call whenever it's invoked).
+   *
+   * @param {string} phoneNumberId
+   * @param {string} toPhone
+   * @param {{
+   *   templateName: string;
+   *   languageCode: string;
+   *   bodyParams?: string[];
+   *   buttonPayloads?: Array<{ index: number; payload: string }>;
+   * }} opts
+   */
+  async sendTemplate(phoneNumberId, toPhone, { templateName, languageCode, bodyParams = [], buttonPayloads = [] }) {
+    const components = [];
+    if (bodyParams.length > 0) {
+      components.push({
+        type: "body",
+        parameters: bodyParams.map((text) => ({ type: "text", text })),
+      });
+    }
+    for (const { index, payload } of buttonPayloads) {
+      components.push({
+        type: "button",
+        sub_type: "quick_reply",
+        index,
+        parameters: [{ type: "payload", payload }],
+      });
+    }
+
+    return this._post(phoneNumberId, {
+      to: toPhone,
+      type: "template",
+      template: {
+        name: templateName,
+        language: { code: languageCode },
+        ...(components.length > 0 && { components }),
+      },
+    });
+  }
+
+  /**
    * Sends an interactive list message (up to MAX_LIST_ROWS rows) — used for
    * the START-state intent menu since it has 4 options, exceeding Meta's
    * 3-button cap on the "button" interactive type.

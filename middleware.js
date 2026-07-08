@@ -8,10 +8,19 @@ import { createServerClient } from "@supabase/ssr";
 // providers treat as a delivery failure and eventually disable the webhook.
 const PUBLIC_WEBHOOK_PATHS = ["/api/whatsapp/webhook", "/api/webhooks/razorpay"];
 
+// Same problem, different auth scheme: Vercel Cron invocations (and other
+// server-to-server "worker" callers) carry a Bearer CRON_SECRET, never a
+// Supabase session — see app/api/booking/_helpers/worker-auth.js. Matched by
+// prefix so future cron endpoints don't need a middleware change too.
+const UNAUTHENTICATED_WORKER_PATH_PREFIXES = ["/api/cron/"];
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  if (PUBLIC_WEBHOOK_PATHS.some((path) => pathname === path)) {
+  if (
+    PUBLIC_WEBHOOK_PATHS.some((path) => pathname === path) ||
+    UNAUTHENTICATED_WORKER_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+  ) {
     return NextResponse.next();
   }
 

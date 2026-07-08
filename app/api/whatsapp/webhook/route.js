@@ -14,6 +14,7 @@ import {
   verifyMetaSignature,
   parseInboundWhatsAppWebhook,
   NormalizedInboundMessageSchema,
+  parseReminderReplyId,
   bookingLogger,
 } from "@/features/booking";
 
@@ -50,7 +51,12 @@ export async function POST(request) {
   const signatureHeader = request.headers.get("x-hub-signature-256");
   const appSecret = process.env.WHATSAPP_APP_SECRET;
   if (!verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
-    log.warn("Rejected webhook POST with invalid signature");
+    // Diagnostic flags only -- never log the secret or signature values themselves.
+    log.warn("Rejected webhook POST with invalid signature", {
+      hasAppSecretConfigured: Boolean(appSecret),
+      hasSignatureHeader: Boolean(signatureHeader),
+      signatureHeaderPrefixOk: signatureHeader?.startsWith("sha256=") ?? false,
+    });
     return NextResponse.json({ error: "Invalid signature", code: "WEBHOOK_SIGNATURE_INVALID" }, { status: 401 });
   }
 
@@ -68,7 +74,7 @@ export async function POST(request) {
     return NextResponse.json({ status: "ignored" }, { status: 200 });
   }
 
-  const { clinicRepository, conversationStateService } = createBookingServices();
+  const { clinicRepository, conversationStateService, reminderService } = createBookingServices();
 
   for (const rawMessage of messages) {
     const parsed = NormalizedInboundMessageSchema.safeParse(rawMessage);
@@ -88,7 +94,18 @@ export async function POST(request) {
         continue;
       }
 
-      const result = await conversationStateService.processInboundMessage({ clinic, message });
+      // Reminder quick-replies (Confirm/Cancel/Reschedule) are appointment-scoped
+      // and self-identify their target appointment via the button id (see
+      // lib/reminder-reply.js) — deliberately routed here BEFORE
+      // conversationStateService, and never touch conversation_state at all,
+      // since a contact's reminder can arrive regardless of whatever
+      // conversation_state they're independently in (see constants.js's
+      // REMINDER_SENT section / ARCHITECTURE.md section 4 for why this isn't
+      // a conversation_state value).
+      const reminderReply = parseReminderReplyId(message.replyId);
+      const result = reminderReply
+        ? await reminderService.handleQuickReply({ clinic, message })
+        : await conversationStateService.processInboundMessage({ clinic, message });
       messageLog.info("Inbound message processed", { clinicId: clinic.id, ...result });
     } catch (err) {
       // Always ACK Meta with 200 below — we don't want processing failures to

@@ -55,4 +55,48 @@ export class ClinicRepository extends BaseRepository {
       "findById",
     );
   }
+
+  /**
+   * Every clinic with WhatsApp routing configured, plus its reminder
+   * offsets — used by ReminderService to loop clinic-by-clinic (see that
+   * file's header comment on why the reminder cron is a per-clinic loop
+   * rather than one global query: PostgREST can't express "compare
+   * slot_start to now() + this row's own offset column" in a single
+   * request, and looping keeps every query scoped by clinic_id like
+   * everywhere else in this codebase). Flagged scale trade-off: at the
+   * project's target 5k-clinic scale this becomes 5k small queries per
+   * cron tick — acceptable for the current pre-launch testing phase, but
+   * worth revisiting (e.g. a Postgres function/view) before then.
+   *
+   * Paginated internally (PAGE_SIZE) since PostgREST caps unbounded
+   * selects — safe to call with an arbitrarily large clinics table.
+   *
+   * @returns {Promise<Array<{ id: string; name: string; whatsapp_phone_number_id: string; reminder_24h_offset_minutes: number; reminder_2h_offset_minutes: number }>>}
+   */
+  async findAllWithWhatsAppConfigured() {
+    const PAGE_SIZE = 500;
+    const all = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const rows = await this._run(
+        () =>
+          this._db
+            .from(this._table)
+            .select("id, name, whatsapp_phone_number_id, reminder_24h_offset_minutes, reminder_2h_offset_minutes")
+            .not("whatsapp_phone_number_id", "is", null)
+            .order("id", { ascending: true })
+            .range(from, to),
+        "findAllWithWhatsAppConfigured",
+      );
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      page += 1;
+    }
+
+    return all;
+  }
 }

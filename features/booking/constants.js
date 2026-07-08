@@ -296,6 +296,8 @@ export const HANDOFF_REASON = Object.freeze({
   NO_SLOTS_AVAILABLE:          "no_slots_available",
   MISSING_BOOKING_CONTEXT:     "missing_booking_context",
   MISSING_CONSULTATION_FEE:    "missing_consultation_fee",
+  /** Session 5: patient tapped "Reschedule" on a reminder — see REMINDER_COPY / ReminderService. */
+  RESCHEDULE_REQUESTED_VIA_REMINDER: "reschedule_requested_via_reminder",
 });
 
 /**
@@ -317,6 +319,7 @@ export const HANDOFF_NOTIFICATION_COPY = Object.freeze({
     [HANDOFF_REASON.NO_SLOTS_AVAILABLE]: "No open slots in the doctor's configured availability window.",
     [HANDOFF_REASON.MISSING_BOOKING_CONTEXT]: "The bot lost track of which patient this booking was for (internal error).",
     [HANDOFF_REASON.MISSING_CONSULTATION_FEE]: "This doctor hasn't configured a consultation fee yet — booking can't proceed until they do (dashboard setup needed).",
+    [HANDOFF_REASON.RESCHEDULE_REQUESTED_VIA_REMINDER]: "Patient requested a reschedule via an appointment reminder — self-serve rescheduling isn't built yet, please help them find a new time.",
   }),
 });
 
@@ -327,13 +330,23 @@ export const HANDOFF_NOTIFICATION_COPY = Object.freeze({
 
 /** @enum {string} */
 export const APPOINTMENT_STATUS = Object.freeze({
-  PENDING:         "pending",
-  PAYMENT_PENDING: "payment_pending",
-  CONFIRMED:       "confirmed",
-  CANCELLED:       "cancelled",
-  RESCHEDULED:     "rescheduled",
-  NO_SHOW:         "no_show",
-  COMPLETED:       "completed",
+  PENDING:              "pending",
+  PAYMENT_PENDING:      "payment_pending",
+  CONFIRMED:            "confirmed",
+  CANCELLED:            "cancelled",
+  RESCHEDULED:          "rescheduled",
+  /**
+   * Session 5 addition: set when a patient taps "Reschedule" on a reminder
+   * message. A marker for manual doctor/staff follow-up only — the
+   * self-serve loop-back into SLOT_SELECTION with pre-filled patient
+   * context is explicitly Session 6 scope (ARCHITECTURE.md / booking
+   * prompts doc), not built yet. `appointments.status` has no DB-level
+   * CHECK constraint (confirmed live), so this is safe to introduce
+   * app-side without a migration.
+   */
+  RESCHEDULE_REQUESTED: "reschedule_requested",
+  NO_SHOW:              "no_show",
+  COMPLETED:            "completed",
 });
 
 /**
@@ -360,6 +373,107 @@ export const PAYMENT_REQUIRED_MIN_FEE = 0;
 export const RAZORPAY_EVENT_TYPE = Object.freeze({
   PAYMENT_CAPTURED: "payment.captured",
   PAYMENT_FAILED:   "payment.failed",
+});
+
+// ─────────────────────────────────────────────────────────────
+// REMINDER_SENT (Session 5 — scheduled job, not user-triggered)
+//
+// Deliberately NOT a conversation_state.current_state value — see
+// ARCHITECTURE.md section 4 and index.js header notes. Progress lives on
+// `appointments.reminder_24h_sent_at` / `reminder_2h_sent_at` instead, and
+// quick-reply routing (Confirm/Cancel/Reschedule) self-identifies its
+// target appointment via the button id (see lib/reminder-reply.js) rather
+// than depending on conversation_state at all.
+// ─────────────────────────────────────────────────────────────
+
+/** @enum {string} Which reminder threshold a query/claim/send call is operating on. */
+export const REMINDER_KIND = Object.freeze({
+  H24: "24h",
+  H2:  "2h",
+});
+
+/** Maps REMINDER_KIND -> the appointments column that guards/records that reminder having been sent. */
+export const REMINDER_SENT_AT_COLUMN = Object.freeze({
+  [REMINDER_KIND.H24]: "reminder_24h_sent_at",
+  [REMINDER_KIND.H2]:  "reminder_2h_sent_at",
+});
+
+/** Maps REMINDER_KIND -> the clinics column configuring how many minutes before slot_start it fires. */
+export const REMINDER_OFFSET_COLUMN = Object.freeze({
+  [REMINDER_KIND.H24]: "reminder_24h_offset_minutes",
+  [REMINDER_KIND.H2]:  "reminder_2h_offset_minutes",
+});
+
+/** Fallback offsets when a clinic row predates migration 021 or the column is somehow null. */
+export const REMINDER_DEFAULT_OFFSET_MINUTES = Object.freeze({
+  [REMINDER_KIND.H24]: 1440,
+  [REMINDER_KIND.H2]:  120,
+});
+
+/**
+ * How wide a window (minutes) each cron run scans around "now + offset" for
+ * candidate appointments. Must comfortably exceed the cron's own interval
+ * (recommended 15 min — see vercel.json) so a slightly-late run never skips
+ * an appointment; a window that overlaps a previous run is harmless since
+ * `reminder_Xh_sent_at IS NULL` (checked at query time) plus the atomic
+ * claim-before-send UPDATE (see AppointmentRepository.claimReminder) make
+ * re-scanning the same window idempotent.
+ */
+export const REMINDER_WINDOW_MINUTES = 20;
+
+/**
+ * Placeholder WhatsApp template names (Session 5 spec) — the real templates
+ * are still pending Meta review. Matches the existing UTILITY-category
+ * naming convention (`appt_booking_confirmed`, etc. — see doc comments
+ * elsewhere referencing that convention). Do not send real template calls
+ * until WHATSAPP_TEMPLATES_LIVE=true AND these names are confirmed approved
+ * in the Meta dashboard — see ReminderService.
+ */
+export const REMINDER_TEMPLATE_NAME = Object.freeze({
+  [REMINDER_KIND.H24]: "appt_reminder_24h",
+  [REMINDER_KIND.H2]:  "appt_reminder_2h",
+});
+
+/** Meta template language code used for both reminder templates. */
+export const REMINDER_TEMPLATE_LANGUAGE_CODE = "en";
+
+/**
+ * Quick-reply button id action tags, embedded as `booking_reminder_{action}:{appointmentId}`
+ * (see lib/reminder-reply.js). ASSUMPTION flagged for verification once the
+ * real templates are approved: quick_reply buttons are defined by index at
+ * template-creation time in Meta Business Manager, and this order
+ * (Confirm=0, Cancel=1, Reschedule=2) is what ReminderService.sendTemplate
+ * assumes when stamping each button's payload — must be checked against
+ * the actual approved template layout before flipping WHATSAPP_TEMPLATES_LIVE.
+ */
+export const REMINDER_REPLY_ACTION = Object.freeze({
+  CONFIRM:    "confirm",
+  CANCEL:     "cancel",
+  RESCHEDULE: "reschedule",
+});
+
+/** Prefix for reminder quick-reply button ids — `${PREFIX}${action}:${appointmentId}`. */
+export const REMINDER_REPLY_ID_PREFIX = "booking_reminder_";
+
+export const REMINDER_COPY = Object.freeze({
+  /**
+   * {variables} sent to the template call when WHATSAPP_TEMPLATES_LIVE is
+   * true; this exact text is also what's logged as the "would send" stub
+   * body when it's false, so the pipeline is visibly testable end-to-end
+   * before templates are approved.
+   */
+  H24_BODY: "Reminder: {patientName} has an appointment with {clinicName} tomorrow, {slotLabel}. Please confirm, cancel, or reschedule.",
+  H2_BODY:  "Reminder: {patientName}'s appointment with {clinicName} is in about 2 hours, {slotLabel}. Please confirm, cancel, or reschedule.",
+  CONFIRM_BUTTON_LABEL:    "Confirm",
+  CANCEL_BUTTON_LABEL:     "Cancel",
+  RESCHEDULE_BUTTON_LABEL: "Reschedule",
+  CONFIRM_ACK: "Great, see you then!",
+  CANCEL_ACK: "Your appointment on {slotLabel} has been cancelled. Send us any message whenever you'd like to book again.",
+  RESCHEDULE_ACK:
+    "Got it — we've flagged this for our clinic staff to help you find a new time. They'll be in touch shortly.",
+  /** Reply doesn't match a known reminder action, or references an appointment no longer in a reminder-able state. */
+  STALE_OR_UNKNOWN_REPLY:
+    "Sorry, this appointment reminder is no longer active. Send us any message if you need help.",
 });
 
 // ─────────────────────────────────────────────────────────────

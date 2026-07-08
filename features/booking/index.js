@@ -145,6 +145,63 @@
  *     auto-confirmed — logged for manual reconciliation instead, per
  *     explicit instruction. No admin UI for this exists (out of scope);
  *     structured logs are the only surface today.
+ *
+ * ── Session 5 (REMINDER_SENT — scheduled reminders + no-response timeout) ──
+ *
+ * 22. REMINDER_SENT is deliberately NOT a conversation_state.current_state
+ *     value, despite the session's own name — ARCHITECTURE.md section 4
+ *     already documents it as `appointments (read, scheduled job) — no new
+ *     row, status/notification only`. conversation_state is a singleton per
+ *     (clinic_id, contact_phone) tracking one active pre-appointment flow;
+ *     a contact can have multiple independently-reminded CONFIRMED
+ *     appointments, which a single conversation_state row can't represent.
+ *     Reminder progress lives on `appointments.reminder_24h_sent_at` /
+ *     `reminder_2h_sent_at` (migration 021) instead.
+ *
+ * 23. New per-clinic config: `clinics.reminder_24h_offset_minutes` /
+ *     `reminder_2h_offset_minutes` (migration 021, default 1440/120).
+ *     ReminderService.runReminderSweep loops every clinic with WhatsApp
+ *     configured (ClinicRepository.findAllWithWhatsAppConfigured) rather
+ *     than one global query — PostgREST can't express "compare slot_start
+ *     to now() + this row's own offset column" in a single request, and
+ *     looping keeps every query scoped by clinic_id like everywhere else in
+ *     this codebase. Flagged scale trade-off: this is O(clinics) queries per
+ *     cron tick — fine pre-launch, revisit (e.g. a Postgres function) before
+ *     the 5k-clinic target scale.
+ *
+ * 24. Reminder sends are stubbed (logged, not actually sent) unless
+ *     WHATSAPP_TEMPLATES_LIVE=true, per explicit instruction — the real
+ *     `appt_reminder_24h`/`appt_reminder_2h` templates are still pending
+ *     Meta review. Do not flip that env var until they're confirmed
+ *     approved (see WhatsAppClientService.sendTemplate and
+ *     ReminderService._sendReminder).
+ *
+ * 25. Confirm/Cancel/Reschedule quick-replies on a reminder are routed by
+ *     the webhook route BEFORE conversationStateService, using
+ *     lib/reminder-reply.js to decode the target appointment_id directly
+ *     from the button id — never via conversation_state (see note #22).
+ *     "Reschedule" only marks `appointments.status = 'reschedule_requested'`
+ *     and alerts the doctor for manual follow-up; the self-serve loop-back
+ *     into SLOT_SELECTION with pre-filled patient context is explicitly
+ *     Session 6 scope, not built here.
+ *
+ * 26. No-response timeout (past-due CONFIRMED, no reply) transitions
+ *     straight to COMPLETED — NO_SHOW tracking is deferred per explicit
+ *     instruction, no clinic config flag built for it yet.
+ *
+ * 27. Cron endpoint: GET /api/cron/booking-reminders, scheduled every 15 min
+ *     in vercel.json, protected by CRON_SECRET (same Bearer-token pattern as
+ *     the scribe feature's worker endpoints) — Vercel auto-injects that
+ *     header on scheduled invocations once the env var is set. NOTE: Vercel
+ *     Hobby plans cap built-in cron at once/day; a sub-daily schedule like
+ *     this requires Pro (or an external scheduler hitting the same
+ *     authenticated endpoint) — flagged, not silently assumed to deploy.
+ *     Also required a middleware.js fix (same class of bug as the Meta/
+ *     Razorpay webhook 307-to-/login issue from Session 4): the global auth
+ *     middleware was redirecting this Bearer-token-authenticated route to
+ *     /login before it ever reached assertWorkerAuthorized. Fixed by
+ *     exempting the /api/cron/ prefix the same way PUBLIC_WEBHOOK_PATHS
+ *     already exempts the two webhook routes — see middleware.js.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -188,6 +245,16 @@ export {
   RAZORPAY_EVENT_TYPE,
   INBOUND_MESSAGE_TYPE,
   WHATSAPP_CONFIG,
+  REMINDER_KIND,
+  REMINDER_SENT_AT_COLUMN,
+  REMINDER_OFFSET_COLUMN,
+  REMINDER_DEFAULT_OFFSET_MINUTES,
+  REMINDER_WINDOW_MINUTES,
+  REMINDER_TEMPLATE_NAME,
+  REMINDER_TEMPLATE_LANGUAGE_CODE,
+  REMINDER_REPLY_ACTION,
+  REMINDER_REPLY_ID_PREFIX,
+  REMINDER_COPY,
 } from "./constants.js";
 
 export {
@@ -202,6 +269,7 @@ export {
   RazorpayCredentialsError,
   RazorpaySendError,
   MissingConsultationFeeError,
+  WorkerUnauthorizedError,
   DatabaseError,
   isBookingError,
   toApiError,
@@ -230,6 +298,7 @@ export {
 } from "./lib/slot-engine.js";
 export { resolveConsultationFee } from "./lib/consultation-fee.js";
 export { isBlockingAppointmentRow } from "./lib/appointment-availability.js";
+export { reminderReplyId, parseReminderReplyId } from "./lib/reminder-reply.js";
 
 // ─────────────────────────────────────────────────────────────
 // REPOSITORY + SERVICE EXPORTS
@@ -248,6 +317,7 @@ export { ConversationStateService } from "./services/conversation-state.service.
 export { PatientCollectionService } from "./services/patient-collection.service.js";
 export { SlotSelectionService } from "./services/slot-selection.service.js";
 export { PaymentWebhookService } from "./services/payment-webhook.service.js";
+export { ReminderService } from "./services/reminder.service.js";
 
 // ─────────────────────────────────────────────────────────────
 // FACTORY
@@ -267,6 +337,7 @@ import { ConversationStateService as _ConvService } from "./services/conversatio
 import { PatientCollectionService as _PatientCollectionService } from "./services/patient-collection.service.js";
 import { SlotSelectionService as _SlotSelectionService } from "./services/slot-selection.service.js";
 import { PaymentWebhookService as _PaymentWebhookService } from "./services/payment-webhook.service.js";
+import { ReminderService as _ReminderService } from "./services/reminder.service.js";
 
 /**
  * Wires together all booking domain services.
@@ -289,6 +360,7 @@ import { PaymentWebhookService as _PaymentWebhookService } from "./services/paym
  *   slotSelectionService: import("./services/slot-selection.service.js").SlotSelectionService;
  *   conversationStateService: import("./services/conversation-state.service.js").ConversationStateService;
  *   paymentWebhookService: import("./services/payment-webhook.service.js").PaymentWebhookService;
+ *   reminderService: import("./services/reminder.service.js").ReminderService;
  * }}
  */
 export function createBookingServices(supabaseClient) {
@@ -337,6 +409,14 @@ export function createBookingServices(supabaseClient) {
     whatsappClient,
     razorpayWebhookEventRepository,
   );
+  const reminderService = new _ReminderService(
+    clinicRepository,
+    appointmentRepository,
+    patientRepository,
+    whatsappClient,
+    doctorNotificationService,
+    { templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true" },
+  );
 
   return {
     clinicRepository,
@@ -352,5 +432,6 @@ export function createBookingServices(supabaseClient) {
     slotSelectionService,
     conversationStateService,
     paymentWebhookService,
+    reminderService,
   };
 }

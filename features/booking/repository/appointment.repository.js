@@ -39,11 +39,19 @@
  * never clobber a row that's already moved on. Zero rows matched is a
  * valid, common outcome (not an error) — the caller re-reads separately
  * only for diagnostic logging.
+ *
+ * Session 5 (REMINDER_SENT — see ReminderService): `findDueForReminder`
+ * and `claimReminder`/`cancelViaReminderReply`/`requestRescheduleViaReminderReply`
+ * follow the exact same "atomic conditional UPDATE, never read-then-write"
+ * discipline as the Razorpay methods above — a redelivered/duplicate
+ * WhatsApp webhook or an overlapping cron run can never double-send a
+ * reminder or double-apply a quick-reply.
  */
 
 import { DatabaseError } from "../errors.js";
 import { BaseRepository } from "./base.repository.js";
 import { isBlockingAppointmentRow } from "../lib/appointment-availability.js";
+import { APPOINTMENT_STATUS } from "../constants.js";
 
 const NO_DOUBLE_BOOKING_CONSTRAINT = "appointments_no_double_booking";
 const WA_MESSAGE_ID_CONSTRAINT = "appointments_wa_message_id_key";
@@ -51,6 +59,7 @@ const UNIQUE_VIOLATION_CODE = "23505";
 const NOT_FOUND_CODE = "PGRST116";
 const EXPIRED_HOLD_CANCELLATION_REASON = "hold_expired";
 const PAYMENT_FAILED_CANCELLATION_REASON = "payment_failed";
+const PATIENT_CANCELLED_VIA_REMINDER_REASON = "patient_cancelled_via_reminder";
 
 /** @typedef {"SLOT_TAKEN"|"DUPLICATE_MESSAGE"|"UNKNOWN_CONFLICT"} AppointmentInsertConflict */
 
@@ -337,5 +346,162 @@ export class AppointmentRepository extends BaseRepository {
 
     this._log.error("DB error during releaseFailedHold", { appointmentId, code: error.code });
     throw new DatabaseError("releaseFailedHold", error);
+  }
+
+  // ─────────────────────────────────────────────────────────────
+  // Session 5 — REMINDER_SENT (reminder cron + quick-reply handling)
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * CONFIRMED appointments for this clinic, within [fromIso, toIso), that
+   * haven't had this particular reminder sent yet. Callers (ReminderService)
+   * compute the window from the clinic's own reminder_Xh_offset_minutes —
+   * this method is a pure parameterized read, no `now()`/offset logic here,
+   * so it's trivially testable with fixed fake timestamps.
+   *
+   * @param {string} clinicId
+   * @param {string} reminderSentAtColumn - "reminder_24h_sent_at" | "reminder_2h_sent_at"
+   * @param {string} fromIso
+   * @param {string} toIso
+   * @returns {Promise<Array<object>>}
+   */
+  async findDueForReminder(clinicId, reminderSentAtColumn, fromIso, toIso) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("*")
+          .eq("clinic_id", clinicId)
+          .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+          .is("deleted_at", null)
+          .is(reminderSentAtColumn, null)
+          .gte("slot_start", fromIso)
+          .lt("slot_start", toIso),
+      "findDueForReminder",
+    );
+  }
+
+  /**
+   * Atomically claims one appointment for one reminder kind before sending
+   * it — a single conditional UPDATE (never read-then-write), so two
+   * overlapping cron runs (or a retried invocation) can never both send the
+   * same reminder. Zero rows matched (returns null) means it was already
+   * claimed elsewhere; the caller must skip sending, not treat it as an error.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @param {string} reminderSentAtColumn - "reminder_24h_sent_at" | "reminder_2h_sent_at"
+   * @returns {Promise<object|null>}
+   */
+  async claimReminder(clinicId, appointmentId, reminderSentAtColumn) {
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({ [reminderSentAtColumn]: new Date().toISOString() })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is(reminderSentAtColumn, null)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during claimReminder", { appointmentId, reminderSentAtColumn, code: error.code });
+    throw new DatabaseError("claimReminder", error);
+  }
+
+  /**
+   * Bulk, idempotent no-response timeout (Session 5 step 5): any CONFIRMED
+   * appointment whose slot has already passed with no reply moves straight
+   * to COMPLETED. NO_SHOW tracking is explicitly deferred per spec — this
+   * is COMPLETED-only, no clinic config flag. A plain bulk UPDATE (not a
+   * per-row claim) is safe here because re-running it is naturally a
+   * no-op: once a row is COMPLETED it no longer matches `status = 'confirmed'`.
+   *
+   * @param {string} clinicId
+   * @param {string} nowIso
+   * @returns {Promise<Array<{ id: string }>>} rows that were transitioned, for logging.
+   */
+  async completeExpiredConfirmed(clinicId, nowIso) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .update({ status: APPOINTMENT_STATUS.COMPLETED, updated_at: nowIso })
+          .eq("clinic_id", clinicId)
+          .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+          .is("deleted_at", null)
+          .lt("slot_end", nowIso)
+          .select("id"),
+      "completeExpiredConfirmed",
+    );
+  }
+
+  /**
+   * "Cancel" quick-reply on a reminder. A single conditional UPDATE scoped
+   * to `status = 'confirmed'` — replaying the same webhook (Meta redelivery)
+   * naturally becomes a no-op the second time (zero rows matched), the same
+   * pattern as releaseFailedHold above.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>} the updated row, or null if it wasn't CONFIRMED.
+   */
+  async cancelViaReminderReply(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status:              APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: PATIENT_CANCELLED_VIA_REMINDER_REASON,
+        cancelled_at:        nowIso,
+        updated_at:          nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during cancelViaReminderReply", { appointmentId, code: error.code });
+    throw new DatabaseError("cancelViaReminderReply", error);
+  }
+
+  /**
+   * "Reschedule" quick-reply on a reminder. Marks the appointment
+   * RESCHEDULE_REQUESTED for manual doctor/staff follow-up — the self-serve
+   * loop back into SLOT_SELECTION is Session 6 scope (see
+   * APPOINTMENT_STATUS.RESCHEDULE_REQUESTED's doc comment in constants.js).
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>} the updated row, or null if it wasn't CONFIRMED.
+   */
+  async requestRescheduleViaReminderReply(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status:     APPOINTMENT_STATUS.RESCHEDULE_REQUESTED,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during requestRescheduleViaReminderReply", { appointmentId, code: error.code });
+    throw new DatabaseError("requestRescheduleViaReminderReply", error);
   }
 }

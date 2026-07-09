@@ -1,23 +1,10 @@
-# CRON_SECRET must be added under repo Settings > Secrets and variables > Actions,
-# and must exactly match the CRON_SECRET env var set in Vercel for this project.
-
-name: Booking reminders
-
-on:
-  schedule:
-    # Every 15 min — matches REMINDER_WINDOW_MINUTES (20) vs cron interval guidance in features/booking/constants.js
-    - cron: "*/15 * * * *"
-  workflow_dispatch:
-
-jobs:
-  trigger:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Log run timestamp
-        run: echo "Booking reminders trigger at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
-      - name: Call booking reminders endpoint
+- name: Call booking reminders endpoint
         run: |
-          curl -f -sS \
+          http_code=$(curl -sS -o response.json -w "%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://nadiai-clinic.vercel.app/api/cron/booking-reminders
+            https://nadiai-clinic.vercel.app/api/cron/booking-reminders)
+          echo "HTTP status: $http_code"
+          cat response.json
+          if [ "$http_code" -lt 200 ] || [ "$http_code" -ge 300 ]; then
+            exit 1
+          fi

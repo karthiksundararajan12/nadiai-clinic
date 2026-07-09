@@ -18,6 +18,13 @@ jobs:
 
       - name: Call booking reminders endpoint
         run: |
-          curl -f -sS \
+          response=$(curl -sS -w "\n%{http_code}" \
             -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://nadiai-clinic.vercel.app/api/cron/booking-reminders
+            https://nadiai-clinic.vercel.app/api/cron/booking-reminders)
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "$body"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "HTTP $status"
+            exit 22
+          fi

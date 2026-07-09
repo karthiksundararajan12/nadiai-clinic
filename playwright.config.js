@@ -1,4 +1,6 @@
 // @ts-check
+import { config } from "dotenv";
+config({ path: ".env.test" });
 import { defineConfig, devices } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";

@@ -16,6 +16,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - run: npm install -g npm@10.9.3
       - run: npm ci
       - run: npm run test:unit
 
@@ -28,6 +29,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - run: npm install -g npm@10.9.3
       - run: npm ci
       - run: npx playwright install chromium --with-deps
       - run: npm run test:e2e
@@ -45,6 +47,7 @@ jobs:
         with:
           node-version: "22"
           cache: npm
+      - run: npm install -g npm@10.9.3
       - run: npm ci
       - run: npm run e2e:fixtures
       - run: npx playwright install chromium --with-deps

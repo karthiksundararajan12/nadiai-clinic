@@ -1,21 +1,14 @@
-# CRON_SECRET must be added under repo Settings > Secrets and variables > Actions,
-# and must exactly match the CRON_SECRET env var set in Vercel for this project.
-
 name: Booking reminders
-
 on:
   schedule:
-    # Every 15 min — matches REMINDER_WINDOW_MINUTES (20) vs cron interval guidance in features/booking/constants.js
     - cron: "*/15 * * * *"
   workflow_dispatch:
-
 jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
       - name: Log run timestamp
         run: echo "Booking reminders trigger at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-
       - name: Call booking reminders endpoint
         run: |
           response=$(curl -sS -w "\n%{http_code}" \
@@ -26,5 +19,5 @@ jobs:
           echo "$body"
           if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
             echo "HTTP $status"
-            exit 22
+            exit 1
           fi

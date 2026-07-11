@@ -60,6 +60,7 @@ const NOT_FOUND_CODE = "PGRST116";
 const EXPIRED_HOLD_CANCELLATION_REASON = "hold_expired";
 const PAYMENT_FAILED_CANCELLATION_REASON = "payment_failed";
 const PATIENT_CANCELLED_VIA_REMINDER_REASON = "patient_cancelled_via_reminder";
+const DASHBOARD_CANCELLED_REASON = "cancelled_by_doctor";
 
 /** @typedef {"SLOT_TAKEN"|"DUPLICATE_MESSAGE"|"UNKNOWN_CONFLICT"} AppointmentInsertConflict */
 
@@ -134,6 +135,53 @@ export class AppointmentRepository extends BaseRepository {
           .gt("slot_end", slotStartIso),
       "findOverlappingConfirmedForPatient",
     );
+  }
+
+  /**
+   * Clinic-scoped appointment list shared by the dashboard and Appointments
+   * page. Optional ISO bounds use a half-open [from, to) interval.
+   * Pagination is internal so PostgREST's row cap cannot truncate "All".
+   *
+   * @param {string} clinicId
+   * @param {{ fromIso?: string; toIso?: string; ascending?: boolean }} [filters]
+   * @returns {Promise<Array<{ id: string; patient_id: string; contact_phone: string; slot_start: string; slot_end: string; status: string; payment_status: string|null; created_at: string; patients: { full_name: string }|null }>>}
+   */
+  async findForClinic(clinicId, { fromIso, toIso, ascending = true } = {}) {
+    const PAGE_SIZE = 500;
+    const all = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const rows = await this._run(
+        () => {
+          let query = this._db
+            .from(this._table)
+            .select("id, patient_id, contact_phone, slot_start, slot_end, status, payment_status, created_at, patients(full_name)")
+            .eq("clinic_id", clinicId)
+            .is("deleted_at", null);
+
+          if (fromIso) query = query.gte("slot_start", fromIso);
+          if (toIso) query = query.lt("slot_start", toIso);
+          return query
+            .order("slot_start", { ascending })
+            .range(from, to);
+        },
+        "findForClinic",
+      );
+
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      page += 1;
+    }
+
+    return all;
+  }
+
+  async findDashboardActivity(clinicId, fromIso, toIso) {
+    return this.findForClinic(clinicId, { fromIso, toIso, ascending: true });
   }
 
   /**
@@ -346,6 +394,68 @@ export class AppointmentRepository extends BaseRepository {
 
     this._log.error("DB error during releaseFailedHold", { appointmentId, code: error.code });
     throw new DatabaseError("releaseFailedHold", error);
+  }
+
+  /**
+   * Doctor-initiated cancellation from the authenticated dashboard.
+   * Completed, no-show, already-cancelled, and rescheduled rows are immutable.
+   */
+  async cancelFromDashboard(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const cancellableStatuses = [
+      APPOINTMENT_STATUS.PENDING,
+      APPOINTMENT_STATUS.PAYMENT_PENDING,
+      APPOINTMENT_STATUS.CONFIRMED,
+      APPOINTMENT_STATUS.RESCHEDULE_REQUESTED,
+    ];
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: DASHBOARD_CANCELLED_REASON,
+        cancelled_at: nowIso,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .in("status", cancellableStatuses)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+    throw new DatabaseError("cancelFromDashboard", error);
+  }
+
+  /**
+   * Moves a doctor-managed appointment to a new slot. The database unique
+   * index remains the source of truth for double-booking prevention.
+   *
+   * @returns {Promise<{ row: object|null; conflict: AppointmentInsertConflict|null }>}
+   */
+  async rescheduleFromDashboard(clinicId, appointmentId, slotStart, slotEnd) {
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        slot_start: slotStart,
+        slot_end: slotEnd,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .in("status", [APPOINTMENT_STATUS.PENDING, APPOINTMENT_STATUS.CONFIRMED])
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return { row: data, conflict: null };
+    if (error.code === NOT_FOUND_CODE) return { row: null, conflict: null };
+    if (error.code === UNIQUE_VIOLATION_CODE) {
+      return { row: null, conflict: "SLOT_TAKEN" };
+    }
+    throw new DatabaseError("rescheduleFromDashboard", error);
   }
 
   // ─────────────────────────────────────────────────────────────

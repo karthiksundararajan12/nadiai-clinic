@@ -3,17 +3,19 @@
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { ArrowRight } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ArrowRight, Users } from "lucide-react";
 import Link from "next/link";
 
-const RECENT = [
-  { name: "Rajesh Kumar", condition: "Type 2 Diabetes", time: "2 hours ago", status: "active" },
-  { name: "Priya Sharma", condition: "Hypertension", time: "4 hours ago", status: "active" },
-  { name: "Amit Patel", condition: "Cardiac Arrhythmia", time: "Yesterday", status: "active" },
-  { name: "Sunita Devi", condition: "Osteoarthritis", time: "2 days ago", status: "follow-up" },
-];
+function formatActivityDate(value) {
+  if (!value) return "Activity unavailable";
+  return `Updated ${new Date(value).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+  })}`;
+}
 
-export function RecentPatients() {
+export function RecentPatients({ patients = [], loading = false }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -26,42 +28,52 @@ export function RecentPatients() {
         </Link>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-border">
-          {RECENT.map((patient, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
-            >
-              <Avatar className="h-9 w-9">
-                <AvatarFallback className="text-xs">
-                  {patient.name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground truncate">
-                  {patient.name}
-                </p>
-                <p className="text-xs text-muted-foreground truncate">
-                  {patient.condition}
-                </p>
+        {loading ? (
+          <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+            Loading patients…
+          </p>
+        ) : patients.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No patients found"
+            description="Patient records will appear here after onboarding"
+            className="py-10"
+          />
+        ) : (
+          <div className="divide-y divide-border">
+            {patients.map((patient) => (
+              <div
+                key={patient.id}
+                className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
+              >
+                <Avatar className="h-9 w-9">
+                  <AvatarFallback className="text-xs">
+                    {patient.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">
+                    {patient.name}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {formatActivityDate(patient.lastActivityAt)}
+                  </p>
+                </div>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge
+                    variant={patient.status === "active" ? "success" : "warning"}
+                    className="text-[10px]"
+                  >
+                    {patient.status}
+                  </Badge>
+                </div>
               </div>
-              <div className="flex flex-col items-end gap-1">
-                <span className="text-[11px] text-muted-foreground">
-                  {patient.time}
-                </span>
-                <Badge
-                  variant={patient.status === "active" ? "success" : "warning"}
-                  className="text-[10px]"
-                >
-                  {patient.status}
-                </Badge>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

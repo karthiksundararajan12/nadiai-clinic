@@ -9,6 +9,7 @@
  */
 
 import { BaseRepository } from "./base.repository.js";
+import { DatabaseError } from "../errors.js";
 
 /**
  * @typedef {Object} BookingPatient
@@ -70,6 +71,73 @@ export class PatientRepository extends BaseRepository {
           .single(),
       "findById",
     );
+  }
+
+  /**
+   * Dashboard patient count plus the most recently updated patient records.
+   * `updated_at` is the only patient-level activity timestamp in the live
+   * schema; appointments are reported separately by AppointmentRepository.
+   *
+   * All returned rows are "active" under the current schema definition:
+   * patients has no active/inactive status column, so non-deleted is the
+   * only existing lifecycle distinction.
+   *
+   * @param {string} clinicId
+   * @param {number} [limit]
+   * @returns {Promise<{ total: number; recent: Array<{ id: string; full_name: string; updated_at: string }> }>}
+   */
+  async getDashboardSummary(clinicId, limit = 4) {
+    const { data, error, count } = await this._db
+      .from(this._table)
+      .select("id, full_name, updated_at", { count: "exact" })
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .order("updated_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      this._log.error("DB error during getDashboardSummary", {
+        operation: "getDashboardSummary",
+        table: this._table,
+        code: error.code,
+        details: error.details,
+      });
+      throw new DatabaseError("getDashboardSummary", error);
+    }
+
+    return { total: count ?? 0, recent: data ?? [] };
+  }
+
+  /**
+   * Patient options for authenticated clinic workflows such as manual
+   * appointment creation. Paginated internally to avoid PostgREST row caps.
+   */
+  async findAllForClinic(clinicId) {
+    const PAGE_SIZE = 500;
+    const all = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const rows = await this._run(
+        () =>
+          this._db
+            .from(this._table)
+            .select("id, full_name, contact_phone")
+            .eq("clinic_id", clinicId)
+            .is("deleted_at", null)
+            .order("full_name", { ascending: true })
+            .range(from, to),
+        "findAllForClinic",
+      );
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      page += 1;
+    }
+
+    return all;
   }
 
   /**

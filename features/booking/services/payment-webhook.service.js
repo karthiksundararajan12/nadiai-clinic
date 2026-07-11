@@ -31,7 +31,13 @@
  * late/expired payments — logging is enough for now.
  */
 
-import { CONVERSATION_STATE, RAZORPAY_EVENT_TYPE, PAYMENT_WEBHOOK_COPY } from "../constants.js";
+import {
+  CONVERSATION_STATE,
+  RAZORPAY_EVENT_TYPE,
+  PAYMENT_WEBHOOK_COPY,
+  BOOKING_CONFIRMED_TEMPLATE_NAME,
+  BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE,
+} from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { createLogger } from "../logger.js";
@@ -40,16 +46,22 @@ export class PaymentWebhookService {
   /**
    * @param {import("../repository/appointment.repository.js").AppointmentRepository} appointmentRepo
    * @param {import("../repository/clinic.repository.js").ClinicRepository} clinicRepo
+   * @param {import("../repository/patient.repository.js").PatientRepository} patientRepo
+   * @param {import("../repository/doctor-profile.repository.js").DoctorProfileRepository} doctorProfileRepo
    * @param {import("../repository/conversation-state.repository.js").ConversationStateRepository} conversationRepo
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("../repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository} webhookEventRepo
+   * @param {{ templatesLive?: boolean }} [opts]
    */
-  constructor(appointmentRepo, clinicRepo, conversationRepo, whatsappClient, webhookEventRepo) {
+  constructor(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, whatsappClient, webhookEventRepo, { templatesLive = false } = {}) {
     this._appointmentRepo = appointmentRepo;
     this._clinicRepo      = clinicRepo;
+    this._patientRepo     = patientRepo;
+    this._doctorRepo      = doctorProfileRepo;
     this._conversationRepo = conversationRepo;
     this._wa               = whatsappClient;
     this._eventRepo        = webhookEventRepo;
+    this._templatesLive    = templatesLive;
     this._log = createLogger({ component: "PaymentWebhookService" });
   }
 
@@ -120,10 +132,10 @@ export class PaymentWebhookService {
       razorpayPaymentId: payment.id,
     });
 
-    await this._notifyContact({
+    await this._notifyContactConfirmed({
       clinicId,
       contactPhone: confirmed.contact_phone,
-      body: PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED.replace("{slotLabel}", formatSlotLabel(new Date(confirmed.slot_start))),
+      appointment: confirmed,
       log,
     });
     await this._advanceConversationState({
@@ -191,6 +203,76 @@ export class PaymentWebhookService {
       await this._wa.sendText(clinic.whatsapp_phone_number_id, contactPhone, body);
     } catch (err) {
       log.error("Failed to send WhatsApp notification after payment webhook", {
+        clinicId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Sends the approved appt_booking_confirmed template on "payment.captured"
+   * — same best-effort/never-roll-back rationale as _notifyContact, but
+   * kept as its own method (rather than folded into _notifyContact) since
+   * _handleFailed's PAYMENT_FAILED message stays a plain-text sendText via
+   * _notifyContact, unchanged.
+   *
+   * Gated behind WHATSAPP_TEMPLATES_LIVE, same as ReminderService.sendTemplate
+   * call sites — appt_booking_confirmed is still pending Meta review. Unlike
+   * ReminderService (which just logs a stub while not live), this falls back
+   * to _notifyContact's existing plain-text PAYMENT_CONFIRMED send instead,
+   * so booking confirmations don't silently stop reaching the patient while
+   * templates are pending approval.
+   *
+   * `appointment` is the row returned by AppointmentRepository.confirmPayment
+   * (a bare `select("*")` on `appointments` — no join), so patient/doctor
+   * names aren't on it directly and are looked up here; `payment_amount` IS
+   * on it directly (stamped at booking time with the doctor's real
+   * consultation_fee — see ARCHITECTURE.md's `appointments` section), so no
+   * doctor_profiles lookup is needed just for the fee.
+   */
+  async _notifyContactConfirmed({ clinicId, contactPhone, appointment, log }) {
+    if (!this._templatesLive) {
+      log.info("WHATSAPP_TEMPLATES_LIVE=false — sending the plain-text PAYMENT_CONFIRMED message instead of the appt_booking_confirmed template", {
+        clinicId,
+        appointmentId: appointment.id,
+      });
+      return this._notifyContact({
+        clinicId,
+        contactPhone,
+        body: PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED.replace("{slotLabel}", formatSlotLabel(new Date(appointment.slot_start))),
+        log,
+      });
+    }
+
+    try {
+      const clinic = await this._clinicRepo.findById(clinicId);
+      if (!clinic?.whatsapp_phone_number_id) {
+        log.warn("No whatsapp_phone_number_id on file for clinic — cannot notify contact", { clinicId });
+        return;
+      }
+
+      const [patient, doctor] = await Promise.all([
+        appointment.patient_id ? this._patientRepo.findById(clinicId, appointment.patient_id) : null,
+        // v1 "one doctor per clinic" assumption — same lookup SlotSelectionService/
+        // DoctorNotificationService already use; no per-appointment doctor_id lookup exists.
+        this._doctorRepo.findPrimaryByClinicId(clinicId),
+      ]);
+
+      const bodyParams = [
+        patient?.full_name ?? "there",
+        doctor?.full_name ?? "our doctor",
+        formatSlotLabel(new Date(appointment.slot_start)),
+        String(appointment.payment_amount ?? ""),
+        clinic.name ?? "our clinic",
+      ];
+
+      await this._wa.sendTemplate(clinic.whatsapp_phone_number_id, contactPhone, {
+        templateName: BOOKING_CONFIRMED_TEMPLATE_NAME,
+        languageCode: BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE,
+        bodyParams,
+      });
+    } catch (err) {
+      log.error("Failed to send appt_booking_confirmed template after payment webhook", {
         clinicId,
         error: err instanceof Error ? err.message : String(err),
       });

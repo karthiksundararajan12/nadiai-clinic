@@ -9,6 +9,7 @@ import { ActivityChart } from "@/components/dashboard/activity-chart";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useUser } from "@/hooks/use-user";
+import { useDashboardData } from "@/hooks/use-dashboard-data";
 import {
   Users,
   CalendarDays,
@@ -21,6 +22,7 @@ import Link from "next/link";
 
 export default function DashboardPage() {
   const { displayName } = useUser();
+  const { data: dashboard, loading, error } = useDashboardData();
   const [dateStr, setDateStr] = useState("");
   const [greeting, setGreeting] = useState("");
 
@@ -46,6 +48,11 @@ export default function DashboardPage() {
   }, []);
 
   const firstName = displayName?.split(" ")[0] || "Doctor";
+  const metricValue = (value) => {
+    if (loading) return "—";
+    if (!value) return "No data";
+    return value.toLocaleString("en-IN");
+  };
 
   return (
     <>
@@ -55,45 +62,52 @@ export default function DashboardPage() {
       />
 
       <div className="flex-1 space-y-6 p-6">
+        {error && (
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+            Dashboard data could not be loaded. Please refresh to try again.
+          </div>
+        )}
+
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="Total Patients"
-            value="1,247"
-            change="12%"
-            changeType="positive"
+            value={metricValue(dashboard?.stats.totalPatients)}
             icon={Users}
           />
           <StatsCard
             title="Today's Appointments"
-            value="18"
-            change="3"
-            changeType="positive"
+            value={metricValue(dashboard?.stats.todayAppointments)}
             icon={CalendarDays}
           />
           <StatsCard
-            title="Scribe Sessions"
-            value="34"
-            change="8%"
-            changeType="positive"
+            title="Scribe Sessions This Week"
+            value={metricValue(dashboard?.stats.completedScribeSessionsThisWeek)}
             icon={Mic}
           />
           <StatsCard
             title="Active Patients"
-            value="128"
-            change="12%"
-            changeType="positive"
+            value={metricValue(dashboard?.stats.activePatients)}
             icon={Users}
           />
         </div>
 
         <div className="grid gap-6 lg:grid-cols-5">
           <div className="lg:col-span-3 space-y-6">
-            <UpcomingAppointments />
-            <ActivityChart />
+            <UpcomingAppointments
+              appointments={dashboard?.todayAppointments}
+              loading={loading}
+            />
+            <ActivityChart
+              activity={dashboard?.weeklyActivity}
+              loading={loading}
+            />
           </div>
 
           <div className="lg:col-span-2 space-y-6">
-            <RecentPatients />
+            <RecentPatients
+              patients={dashboard?.recentPatients}
+              loading={loading}
+            />
 
             <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-accent/5">
               <CardContent className="p-5">

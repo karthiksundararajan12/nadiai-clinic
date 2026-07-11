@@ -275,8 +275,11 @@ export const SLOT_SELECTION_COPY = Object.freeze({
 /**
  * Copy sent by PaymentWebhookService directly (not a state-handler reply to
  * an inbound WhatsApp message — these fire asynchronously off a Razorpay
- * webhook, so they intentionally don't need {patientName}/{clinicName}
- * lookups the way SLOT_SELECTION_COPY.CONFIRMED does).
+ * webhook).
+ *
+ * PAYMENT_CONFIRMED is no longer sent as of the appt_booking_confirmed
+ * template migration below — kept here in case of rollback, but
+ * _handleCaptured now sends BOOKING_CONFIRMED_TEMPLATE_NAME instead.
  */
 export const PAYMENT_WEBHOOK_COPY = Object.freeze({
   PAYMENT_CONFIRMED: "Payment received! Your appointment on {slotLabel} is confirmed. See you then!",
@@ -284,6 +287,25 @@ export const PAYMENT_WEBHOOK_COPY = Object.freeze({
     "Your payment couldn't be completed, so this slot has been released. " +
     "Send us any message whenever you'd like to try booking again.",
 });
+
+/**
+ * Approved Meta WhatsApp template sent by PaymentWebhookService._handleCaptured
+ * on "payment.captured" (replaces the PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED
+ * free-text send). Body: "Hi {{1}}, your appointment with {{2}} is confirmed
+ * for {{3}}. Consultation fee: ₹{{4}}. Clinic: {{5}}. Please arrive 10
+ * minutes early." — params in order: patient full_name, doctor full_name,
+ * formatted slot label, payment_amount, clinic name.
+ *
+ * Gated behind WHATSAPP_TEMPLATES_LIVE, same as ReminderService's templates
+ * — while false, PaymentWebhookService falls back to
+ * PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED (plain text) instead, so
+ * confirmations don't silently stop sending while this template is pending
+ * Meta approval.
+ */
+export const BOOKING_CONFIRMED_TEMPLATE_NAME = "appt_booking_confirmed";
+
+/** Meta template language code for BOOKING_CONFIRMED_TEMPLATE_NAME. */
+export const BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE = "en";
 
 // ─────────────────────────────────────────────────────────────
 // HUMAN_HANDOFF DOCTOR NOTIFICATION

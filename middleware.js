@@ -14,11 +14,20 @@ const PUBLIC_WEBHOOK_PATHS = ["/api/whatsapp/webhook", "/api/webhooks/razorpay"]
 // prefix so future cron endpoints don't need a middleware change too.
 const UNAUTHENTICATED_WORKER_PATH_PREFIXES = ["/api/cron/"];
 
+// Public routes that intentionally use authentication other than a doctor
+// Supabase session (worker secret), or must be reachable before a session
+// exists (account recovery).
+const PUBLIC_SESSIONLESS_PATHS = [
+  "/api/scribe/transcription/worker",
+  "/recover",
+];
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
   if (
     PUBLIC_WEBHOOK_PATHS.some((path) => pathname === path) ||
+    PUBLIC_SESSIONLESS_PATHS.some((path) => pathname === path) ||
     UNAUTHENTICATED_WORKER_PATH_PREFIXES.some((prefix) => pathname.startsWith(prefix))
   ) {
     return NextResponse.next();

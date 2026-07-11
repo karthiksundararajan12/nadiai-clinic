@@ -2,37 +2,11 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { StatusBadge } from "@/components/shared/status-badge";
-import { Clock, ArrowRight } from "lucide-react";
+import { EmptyState } from "@/components/shared/empty-state";
+import { Clock, ArrowRight, CalendarDays } from "lucide-react";
 import Link from "next/link";
 
-const UPCOMING = [
-  {
-    patient: "Rajesh Kumar",
-    time: "09:00 AM",
-    type: "Follow-up",
-    status: "confirmed",
-  },
-  {
-    patient: "Priya Sharma",
-    time: "09:30 AM",
-    type: "Consultation",
-    status: "scheduled",
-  },
-  {
-    patient: "Amit Patel",
-    time: "10:00 AM",
-    type: "Check-up",
-    status: "in_progress",
-  },
-  {
-    patient: "Vikram Singh",
-    time: "11:00 AM",
-    type: "Follow-up",
-    status: "scheduled",
-  },
-];
-
-export function UpcomingAppointments() {
+export function UpcomingAppointments({ appointments = [], loading = false }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
@@ -45,29 +19,43 @@ export function UpcomingAppointments() {
         </Link>
       </CardHeader>
       <CardContent className="p-0">
-        <div className="divide-y divide-border">
-          {UPCOMING.map((apt, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
-            >
-              <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/5 text-primary">
-                <Clock className="h-4 w-4" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-foreground truncate">
-                    {apt.patient}
+        {loading ? (
+          <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+            Loading appointments…
+          </p>
+        ) : appointments.length === 0 ? (
+          <EmptyState
+            icon={CalendarDays}
+            title="No appointments found"
+            description="There are no appointments scheduled for today"
+            className="py-10"
+          />
+        ) : (
+          <div className="divide-y divide-border">
+            {appointments.map((apt) => (
+              <div
+                key={apt.id}
+                className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
+              >
+                <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/5 text-primary">
+                  <Clock className="h-4 w-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground truncate">
+                      {apt.patientName}
+                    </p>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {apt.time}
+                    {apt.type ? ` · ${apt.type}` : ""}
                   </p>
                 </div>
-                <p className="text-xs text-muted-foreground">
-                  {apt.time} &middot; {apt.type}
-                </p>
+                <StatusBadge status={apt.status} />
               </div>
-              <StatusBadge status={apt.status} />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   );

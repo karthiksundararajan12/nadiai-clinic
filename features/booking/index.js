@@ -405,9 +405,12 @@ export function createBookingServices(supabaseClient) {
   const paymentWebhookService = new _PaymentWebhookService(
     appointmentRepository,
     clinicRepository,
+    patientRepository,
+    doctorProfileRepository,
     conversationStateRepository,
     whatsappClient,
     razorpayWebhookEventRepository,
+    { templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true" },
   );
   const reminderService = new _ReminderService(
     clinicRepository,

@@ -42,7 +42,7 @@ function clinicDateKey(date = new Date()) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function AppointmentList({ items, loading, onCancel }) {
+function AppointmentList({ items, loading, onCancel, onReschedule }) {
   if (loading) {
     return (
       <p className="px-6 py-16 text-center text-sm text-muted-foreground">
@@ -90,22 +90,45 @@ function AppointmentList({ items, loading, onCancel }) {
                 </span>
                 {appointment.type && <span>{appointment.type}</span>}
                 <span>{appointment.duration} min</span>
+                {appointment.contact_phone && (
+                  <a
+                    href={`tel:${appointment.contact_phone}`}
+                    className="text-muted-foreground hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {appointment.contact_phone}
+                  </a>
+                )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {appointment.payment_amount != null && (
+                <span className="text-sm text-muted-foreground">
+                  ₹{appointment.payment_amount}
+                </span>
+              )}
               <StatusBadge status={appointment.status} />
               {["pending", "payment_pending", "confirmed"].includes(
                 appointment.status,
               ) && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  className="text-destructive"
-                  onClick={() => onCancel(appointment.id)}
-                >
-                  Cancel
-                </Button>
+                <>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => onReschedule(appointment)}
+                  >
+                    Reschedule
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    className="text-destructive"
+                    onClick={() => onCancel(appointment.id)}
+                  >
+                    Cancel
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -123,6 +146,7 @@ export default function AppointmentsPage() {
     error,
     addAppointment,
     cancelAppointment,
+    updateAppointment,
   } = useAppointmentsData();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -134,6 +158,10 @@ export default function AppointmentsPage() {
     date: "",
     time: "",
   });
+  const [rescheduleTarget, setRescheduleTarget] = useState(null);
+  const [rescheduleForm, setRescheduleForm] = useState({ date: "", time: "" });
+  const [rescheduling, setRescheduling] = useState(false);
+  const [rescheduleError, setRescheduleError] = useState("");
 
   const filteredAppointments = appointments.filter(
     (a) =>
@@ -187,6 +215,30 @@ export default function AppointmentsPage() {
     } catch (appointmentError) {
       setActionError(appointmentError.message);
     }
+  };
+
+  const openRescheduleDialog = (appointment) => {
+    setRescheduleTarget(appointment);
+    setRescheduleForm({ date: appointment.date, time: "" });
+    setRescheduleError("");
+  };
+
+  const handleRescheduleAppointment = async () => {
+    if (!rescheduleTarget || !rescheduleForm.date || !rescheduleForm.time) return;
+    setRescheduling(true);
+    setRescheduleError("");
+    try {
+      await updateAppointment(rescheduleTarget.id, {
+        date: rescheduleForm.date,
+        time: rescheduleForm.time,
+      });
+    } catch (appointmentError) {
+      setRescheduleError(appointmentError.message);
+      setRescheduling(false);
+      return;
+    }
+    setRescheduling(false);
+    setRescheduleTarget(null);
   };
 
   return (
@@ -282,6 +334,7 @@ export default function AppointmentsPage() {
                   items={todayApts}
                   loading={loading}
                   onCancel={handleCancelAppointment}
+                  onReschedule={openRescheduleDialog}
                 />
               </TabsContent>
               <TabsContent value="upcoming">
@@ -289,6 +342,7 @@ export default function AppointmentsPage() {
                   items={upcomingApts}
                   loading={loading}
                   onCancel={handleCancelAppointment}
+                  onReschedule={openRescheduleDialog}
                 />
               </TabsContent>
               <TabsContent value="past">
@@ -296,6 +350,7 @@ export default function AppointmentsPage() {
                   items={pastApts}
                   loading={loading}
                   onCancel={handleCancelAppointment}
+                  onReschedule={openRescheduleDialog}
                 />
               </TabsContent>
               <TabsContent value="all">
@@ -303,6 +358,7 @@ export default function AppointmentsPage() {
                   items={filteredAppointments}
                   loading={loading}
                   onCancel={handleCancelAppointment}
+                  onReschedule={openRescheduleDialog}
                 />
               </TabsContent>
             </CardContent>
@@ -403,6 +459,67 @@ export default function AppointmentsPage() {
                 }
               >
                 {saving ? "Booking…" : "Book Appointment"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog
+          open={Boolean(rescheduleTarget)}
+          onOpenChange={(open) => !open && setRescheduleTarget(null)}
+        >
+          <DialogContent onClose={() => setRescheduleTarget(null)}>
+            <DialogHeader>
+              <DialogTitle>Reschedule Appointment</DialogTitle>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              {rescheduleTarget && (
+                <p className="text-sm text-muted-foreground">
+                  {rescheduleTarget.patient_name} — currently {rescheduleTarget.date} at{" "}
+                  {rescheduleTarget.time}
+                </p>
+              )}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label>New Date</Label>
+                  <Input
+                    type="date"
+                    min={today}
+                    value={rescheduleForm.date}
+                    onChange={(e) =>
+                      setRescheduleForm((prev) => ({ ...prev, date: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>New Time</Label>
+                  <Input
+                    type="time"
+                    value={rescheduleForm.time}
+                    onChange={(e) =>
+                      setRescheduleForm((prev) => ({ ...prev, time: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              {rescheduleError && (
+                <p className="text-sm text-destructive">{rescheduleError}</p>
+              )}
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setRescheduleTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleRescheduleAppointment}
+                disabled={
+                  rescheduling || !rescheduleForm.date || !rescheduleForm.time
+                }
+              >
+                {rescheduling ? "Rescheduling…" : "Confirm Reschedule"}
               </Button>
             </DialogFooter>
           </DialogContent>

@@ -144,7 +144,7 @@ export class AppointmentRepository extends BaseRepository {
    *
    * @param {string} clinicId
    * @param {{ fromIso?: string; toIso?: string; ascending?: boolean }} [filters]
-   * @returns {Promise<Array<{ id: string; patient_id: string; contact_phone: string; slot_start: string; slot_end: string; status: string; payment_status: string|null; created_at: string; patients: { full_name: string }|null }>>}
+   * @returns {Promise<Array<{ id: string; patient_id: string; contact_phone: string; slot_start: string; slot_end: string; status: string; payment_status: string|null; payment_amount: number|null; created_at: string; patients: { full_name: string }|null }>>}
    */
   async findForClinic(clinicId, { fromIso, toIso, ascending = true } = {}) {
     const PAGE_SIZE = 500;
@@ -159,7 +159,7 @@ export class AppointmentRepository extends BaseRepository {
         () => {
           let query = this._db
             .from(this._table)
-            .select("id, patient_id, contact_phone, slot_start, slot_end, status, payment_status, created_at, patients(full_name)")
+            .select("id, patient_id, contact_phone, slot_start, slot_end, status, payment_status, payment_amount, created_at, patients(full_name)")
             .eq("clinic_id", clinicId)
             .is("deleted_at", null);
 

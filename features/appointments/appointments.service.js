@@ -57,6 +57,7 @@ function formatAppointment(appointment) {
     id: appointment.id,
     patient_id: appointment.patient_id,
     patient_name: relatedPatientName(appointment),
+    contact_phone: appointment.contact_phone ?? null,
     date: localDateKey(slotStart),
     time: new Intl.DateTimeFormat("en-IN", {
       hour: "2-digit",
@@ -73,6 +74,7 @@ function formatAppointment(appointment) {
     type: null,
     status: appointment.status,
     payment_status: appointment.payment_status,
+    payment_amount: appointment.payment_amount ?? null,
   };
 }
 

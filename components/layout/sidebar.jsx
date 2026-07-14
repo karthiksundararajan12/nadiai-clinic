@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/brand-logo";
 import {
   LayoutDashboard,
   Mic,
@@ -49,20 +49,13 @@ export function Sidebar({ collapsed, onToggle }) {
       <div
         className={cn(
           "flex items-center justify-center border-b border-gray-200 dark:border-gray-800",
-          collapsed ? "h-20 px-2" : "h-[100px] px-3"
+          collapsed ? "h-20 px-2" : "h-[120px] px-3 py-3"
         )}
       >
-        <Image
-          src="/logo.png"
-          alt="Nadi AI"
-          width={512}
-          height={512}
-          priority={!collapsed}
-          unoptimized
-          className={cn(
-            "shrink-0 object-contain",
-            collapsed ? "h-16 w-16" : "h-20 w-20"
-          )}
+        <BrandLogo
+          size={collapsed ? "md" : "lg"}
+          showText={!collapsed}
+          priority
         />
       </div>
 
@@ -80,8 +73,8 @@ export function Sidebar({ collapsed, onToggle }) {
                 className={cn(
                   "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive
-                    ? "bg-gray-100 text-gray-900 dark:bg-gray-800 dark:text-gray-100"
-                    : "text-gray-500 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100",
+                    ? "bg-primary/10 text-primary dark:bg-primary/15"
+                    : "text-gray-500 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary",
                   collapsed && "justify-center px-0"
                 )}
               >

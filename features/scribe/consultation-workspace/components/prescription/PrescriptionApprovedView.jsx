@@ -49,7 +49,7 @@ export function PrescriptionApprovedView({ draft, patient, doctor }) {
         </Button>
         <Button
           type="button"
-          className="w-full cursor-pointer gap-2 bg-cyan-600 hover:bg-cyan-700"
+          className="w-full cursor-pointer gap-2 bg-primary hover:bg-primary/90"
           onClick={handleDownload}
           disabled={downloading}
         >

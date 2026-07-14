@@ -8,7 +8,7 @@ function Card({ title, icon: Icon, children, className }) {
   return (
     <div className={cn("bg-white border border-gray-200 rounded-lg shadow-none p-4", className)}>
       <div className="mb-3 flex items-center gap-2">
-        <Icon className="h-4 w-4 text-cyan-600" />
+        <Icon className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
       </div>
       {children}
@@ -80,7 +80,7 @@ export function ICD10Card({ icd, overrideCode, onOverride }) {
           />
           <button
             type="button"
-            className="cursor-pointer rounded bg-cyan-600 px-3 py-1 text-xs text-white"
+            className="cursor-pointer rounded bg-primary px-3 py-1 text-xs text-white"
             onClick={() => { onOverride?.(draft); setEditing(false); }}
           >
             Save
@@ -104,7 +104,7 @@ export function RPMCard({ rpm, enabled, onToggle, readOnly }) {
           <p className="mt-2 text-sm text-gray-700">{rpm.reason}</p>
         </>
       ) : (
-        <p className="text-sm text-gray-500">No AI recommendation. <button type="button" className="cursor-pointer text-cyan-600 hover:underline" onClick={() => !readOnly && onToggle?.(true)}>Enable manually</button></p>
+        <p className="text-sm text-gray-500">No AI recommendation. <button type="button" className="cursor-pointer text-primary hover:underline" onClick={() => !readOnly && onToggle?.(true)}>Enable manually</button></p>
       )}
 
       <label className="mt-4 flex cursor-pointer items-center justify-between gap-3">
@@ -116,7 +116,7 @@ export function RPMCard({ rpm, enabled, onToggle, readOnly }) {
           disabled={readOnly}
           className={cn(
             "relative h-6 w-11 shrink-0 rounded-full transition-all duration-200",
-            enabled ? "bg-cyan-600" : "bg-gray-200",
+            enabled ? "bg-primary" : "bg-gray-200",
             readOnly && "cursor-not-allowed opacity-60",
           )}
           onClick={() => !readOnly && onToggle?.(!enabled)}

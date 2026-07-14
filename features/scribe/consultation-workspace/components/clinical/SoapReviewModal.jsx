@@ -24,7 +24,7 @@ export function SoapReviewModal({ open, onOpenChange, onRegenerate, onEditManual
         <DialogFooter className="flex-col gap-2 sm:flex-col sm:items-stretch">
           <Button
             type="button"
-            className="w-full cursor-pointer gap-2 bg-cyan-600 hover:bg-cyan-700"
+            className="w-full cursor-pointer gap-2 bg-primary hover:bg-primary/90"
             onClick={onRegenerate}
             data-testid="soap-reject-regenerate"
           >

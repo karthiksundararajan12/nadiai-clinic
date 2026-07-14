@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Loader2, Search, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { createPatient, searchPatients } from "../../services/patient.client.js";
 
 function initials(name) {
@@ -56,31 +57,34 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
   if (patient) {
     const days = daysSince(patient.last_visit);
     return (
-      <div className={cn("flex w-full items-center justify-between gap-4 border-b border-gray-200 bg-gray-50 px-6 py-3", className)}>
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-cyan-100 text-sm font-semibold text-cyan-800">
-            {initials(patient.name)}
+      <div className={cn("flex w-full flex-col gap-3 border-b border-primary/20 bg-primary/[0.03] px-6 py-3 ring-1 ring-inset ring-primary/10", className)}>
+        <PatientStepLabel />
+        <div className="flex w-full items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+              {initials(patient.name)}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-900">{patient.name}</p>
+              <p className="text-xs text-gray-600">
+                {[patient.age ? `${patient.age} yrs` : null, patient.gender, patient.phone].filter(Boolean).join(" · ")}
+              </p>
+            </div>
+            {days != null && (
+              <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
+                Last seen {days === 0 ? "today" : `${days} days ago`}
+              </span>
+            )}
           </div>
-          <div>
-            <p className="text-sm font-semibold text-gray-900">{patient.name}</p>
-            <p className="text-xs text-gray-600">
-              {[patient.age ? `${patient.age} yrs` : null, patient.gender, patient.phone].filter(Boolean).join(" · ")}
-            </p>
+          <div className="flex items-center gap-2">
+            <button type="button" className="cursor-pointer rounded-lg border border-gray-200 p-2 transition-all duration-200 hover:bg-white" onClick={onClear} aria-label="Clear patient">
+              <X className="h-4 w-4 text-gray-500" />
+            </button>
+            <button type="button" className="cursor-pointer flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs transition-all duration-200 hover:bg-white" onClick={() => setShowCreate(true)}>
+              <UserPlus className="h-3.5 w-3.5" />
+              New patient
+            </button>
           </div>
-          {days != null && (
-            <span className="rounded-full border border-gray-200 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600">
-              Last seen {days === 0 ? "today" : `${days} days ago`}
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <button type="button" className="cursor-pointer rounded-lg border border-gray-200 p-2 transition-all duration-200 hover:bg-white" onClick={onClear} aria-label="Clear patient">
-            <X className="h-4 w-4 text-gray-500" />
-          </button>
-          <button type="button" className="cursor-pointer flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs transition-all duration-200 hover:bg-white" onClick={() => setShowCreate(true)}>
-            <UserPlus className="h-3.5 w-3.5" />
-            New patient
-          </button>
         </div>
         {showCreate && <CreatePanel form={form} setForm={setForm} creating={creating} onCreate={handleCreate} onClose={() => setShowCreate(false)} />}
       </div>
@@ -88,15 +92,16 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
   }
 
   return (
-    <div className={cn("relative w-full border-b border-gray-200 bg-gray-50 px-6 py-3", className)}>
-      <div className="relative max-w-xl">
+    <div className={cn("relative w-full border-b border-primary/25 bg-primary/[0.03] px-6 py-4 ring-1 ring-inset ring-primary/15", className)}>
+      <PatientStepLabel />
+      <div className="relative mt-3 max-w-xl">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
         <input
           type="search"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Search patient by name or phone..."
-          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-600/30"
+          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30"
         />
         {searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />}
       </div>
@@ -121,11 +126,28 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
         </ul>
       )}
 
-      <button type="button" className="mt-2 flex cursor-pointer items-center gap-1 text-xs text-cyan-600 hover:underline" onClick={() => setShowCreate(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="xs"
+        className="mt-2 gap-1"
+        onClick={() => setShowCreate(true)}
+      >
         <UserPlus className="h-3.5 w-3.5" />
         Create new patient
-      </button>
+      </Button>
       {showCreate && <CreatePanel form={form} setForm={setForm} creating={creating} onCreate={handleCreate} onClose={() => setShowCreate(false)} />}
+    </div>
+  );
+}
+
+function PatientStepLabel() {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-primary text-[10px] font-bold text-primary-foreground">
+        1
+      </span>
+      <span className="text-xs font-semibold uppercase tracking-wide text-gray-700">Patient</span>
     </div>
   );
 }
@@ -144,7 +166,7 @@ function CreatePanel({ form, setForm, creating, onCreate, onClose }) {
         </select>
       </div>
       <div className="mt-3 flex gap-2">
-        <button type="button" className="cursor-pointer rounded-lg bg-cyan-600 px-4 py-2 text-sm text-white disabled:opacity-50" disabled={creating} onClick={onCreate}>
+        <button type="button" className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-50" disabled={creating} onClick={onCreate}>
           {creating ? <Loader2 className="inline h-4 w-4 animate-spin" /> : null}
           Create and Attach
         </button>

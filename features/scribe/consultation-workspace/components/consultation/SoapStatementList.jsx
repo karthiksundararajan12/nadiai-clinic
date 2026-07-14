@@ -54,7 +54,7 @@ export function SoapStatementList({
               className={cn(
                 "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-all duration-300",
                 isActive
-                  ? "border-cyan-400 bg-cyan-50 ring-2 ring-cyan-400/30 animate-evidence-pulse"
+                  ? "border-primary bg-primary/5 ring-2 ring-primary/30 animate-evidence-pulse"
                   : "border-transparent bg-gray-50/80 hover:border-gray-200 hover:bg-gray-50",
               )}
             >

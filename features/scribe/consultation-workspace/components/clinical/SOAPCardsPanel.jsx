@@ -21,7 +21,7 @@ function EvidenceList({ items, onJump }) {
             <button
               type="button"
               onClick={() => onJump?.(item)}
-              className="text-left text-xs text-teal-700 hover:underline"
+              className="text-left text-xs text-primary hover:underline"
             >
               • {item.text}
             </button>
@@ -61,7 +61,7 @@ export function SOAPCardsPanel({
   if (generating) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8" data-testid="soap-review-workspace">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-slate-600">Generating SOAP note…</p>
       </div>
     );
@@ -88,7 +88,7 @@ export function SOAPCardsPanel({
               id={`soap-section-${key}`}
               className={cn(
                 "rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm transition-shadow",
-                isActive && "ring-2 ring-teal-400/40",
+                isActive && "ring-2 ring-primary/30",
                 isEmpty && !disabled && "border-amber-200/80",
               )}
             >
@@ -99,7 +99,7 @@ export function SOAPCardsPanel({
                     type="button"
                     variant="ghost"
                     size="sm"
-                    className="h-7 gap-1 px-2 text-xs text-teal-700"
+                    className="h-7 gap-1 px-2 text-xs text-primary"
                     onClick={() => {
                       setEditingSection(key);
                       onSectionFocus?.(key);
@@ -170,7 +170,7 @@ export function SOAPEmptyState({ generating, error, onRetry }) {
         </>
       ) : generating ? (
         <>
-          <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-slate-600">SOAP note will appear after transcription.</p>
         </>
       ) : (

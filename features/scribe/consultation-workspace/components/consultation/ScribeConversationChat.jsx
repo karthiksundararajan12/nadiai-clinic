@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { AudioLines, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../../transcript-review/components/Timestamp.jsx";
 
@@ -31,7 +31,7 @@ export function ScribeConversationChat({
   if (loading) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-6 text-center">
-        <Loader2 className="h-6 w-6 animate-spin text-cyan-600" />
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
         <p className="text-xs text-gray-500">{loadingMessage ?? "Processing conversation…"}</p>
       </div>
     );
@@ -39,8 +39,11 @@ export function ScribeConversationChat({
 
   if (!segments.length) {
     return (
-      <div className="flex flex-1 items-center justify-center bg-white px-4 py-6 text-center">
-        <p className="text-xs text-gray-400">
+      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-8 text-center">
+        <div className="rounded-full bg-muted p-3">
+          <AudioLines className="h-6 w-6 text-muted-foreground" />
+        </div>
+        <p className="max-w-xs text-xs text-muted-foreground">
           Conversation will appear here after transcription.
         </p>
       </div>
@@ -61,7 +64,7 @@ export function ScribeConversationChat({
               className={cn(
                 "flex w-full rounded-lg transition-all duration-300",
                 doctor ? "justify-end" : "justify-start",
-                isHighlighted && "animate-evidence-pulse ring-2 ring-cyan-400/60 ring-offset-2",
+                isHighlighted && "animate-evidence-pulse ring-2 ring-primary/30 ring-offset-2",
               )}
             >
               <div className={cn("max-w-[88%] min-w-0", doctor ? "items-end" : "items-start")}>
@@ -77,7 +80,7 @@ export function ScribeConversationChat({
                   className={cn(
                     "relative rounded-lg px-3 py-2 text-xs leading-relaxed shadow-sm",
                     doctor
-                      ? "rounded-tr-none bg-cyan-50 text-gray-900"
+                      ? "rounded-tr-none bg-primary/5 text-gray-900"
                       : "rounded-tl-none border border-gray-200 bg-gray-50 text-gray-900",
                   )}
                 >

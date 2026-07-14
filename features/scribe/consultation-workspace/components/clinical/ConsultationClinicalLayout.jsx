@@ -181,7 +181,7 @@ export function ConsultationClinicalLayout({
           {canApprove && (
             <button
               type="button"
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-cyan-600 px-3 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:bg-cyan-700 disabled:opacity-50"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
               onClick={onApprove}
               disabled={approving}
               data-testid="soap-approve"
@@ -277,8 +277,8 @@ export function ConsultationClinicalLayout({
               type="button"
               className={cn(
                 "mt-6 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
-                "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
-                "transition-all duration-200 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-60",
+                "bg-primary text-sm font-semibold text-white shadow-md shadow-primary/20",
+                "transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60",
               )}
               onClick={onGeneratePrescription}
               disabled={generatingPrescription}

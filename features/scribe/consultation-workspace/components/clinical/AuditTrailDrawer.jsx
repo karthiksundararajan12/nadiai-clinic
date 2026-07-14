@@ -26,7 +26,7 @@ export function AuditTrailDrawer({ open, onClose, sessionId }) {
       <aside className="fixed inset-y-0 right-0 z-50 flex w-full max-w-md flex-col border-l bg-white shadow-2xl">
         <div className="flex items-center justify-between border-b px-5 py-4">
           <div className="flex items-center gap-2">
-            <Shield className="h-5 w-5 text-teal-600" />
+            <Shield className="h-5 w-5 text-primary" />
             <h2 className="text-base font-semibold">Audit Trail</h2>
           </div>
           <Button variant="ghost" size="icon" onClick={onClose}><X className="h-4 w-4" /></Button>

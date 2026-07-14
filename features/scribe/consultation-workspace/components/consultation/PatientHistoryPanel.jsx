@@ -32,7 +32,7 @@ export function PatientHistoryPanel({ patient }) {
       </div>
       <div className="flex-1 overflow-y-auto p-3">
         {loading ? (
-          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-cyan-600" /></div>
+          <div className="flex justify-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
         ) : history.length === 0 ? (
           <p className="py-6 text-center text-xs text-gray-500">No prior consultations</p>
         ) : (

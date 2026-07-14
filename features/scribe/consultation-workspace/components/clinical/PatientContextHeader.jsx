@@ -54,7 +54,7 @@ export function PatientContextHeader({
     >
       <div className="flex items-start justify-between gap-4 px-5 py-4 lg:px-6">
         <div className="flex min-w-0 items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-100 text-sm font-semibold text-teal-800 ring-1 ring-teal-200/60">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-primary/5 to-primary/15 text-sm font-semibold text-primary ring-1 ring-primary/20">
             {initials(name)}
           </div>
           <div className="min-w-0">
@@ -62,7 +62,7 @@ export function PatientContextHeader({
             {ageGender && (
               <p className="text-sm text-slate-600">{ageGender}</p>
             )}
-            <p className="text-sm font-medium text-teal-700">{visitType}</p>
+            <p className="text-sm font-medium text-primary">{visitType}</p>
             <p className="mt-0.5 text-xs text-slate-500">{dateLabel}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <Badge

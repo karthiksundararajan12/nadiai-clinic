@@ -27,7 +27,7 @@ export function SoapManualEditBar({ saving, onSave, onCancel }) {
         <Button
           type="button"
           size="sm"
-          className="cursor-pointer gap-1.5 bg-cyan-600 hover:bg-cyan-700"
+          className="cursor-pointer gap-1.5 bg-primary hover:bg-primary/90"
           onClick={onSave}
           disabled={saving}
           data-testid="soap-save-manual-edits"

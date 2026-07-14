@@ -13,7 +13,7 @@ import { SoapStatementList } from "./SoapStatementList.jsx";
 
 const SECTION_STYLES = {
   subjective: { border: "border-l-blue-500", text: "text-blue-600", ring: "focus:ring-blue-500/30" },
-  objective: { border: "border-l-teal-600", text: "text-teal-600", ring: "focus:ring-teal-600/30" },
+  objective: { border: "border-l-primary", text: "text-primary", ring: "focus:ring-primary/30" },
   assessment: { border: "border-l-red-500", text: "text-red-500", ring: "focus:ring-red-500/30" },
   plan: { border: "border-l-green-600", text: "text-green-600", ring: "focus:ring-green-600/30" },
 };
@@ -79,7 +79,7 @@ export function SOAPSection({
       className={cn(
         "bg-white border border-gray-200 rounded-lg shadow-none border-l-4 transition-all duration-200",
         style.border,
-        isActive && "ring-2 ring-cyan-600/20",
+        isActive && "ring-2 ring-primary/20",
       )}
     >
       <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-2.5">
@@ -104,7 +104,7 @@ export function SOAPSection({
           {!readOnly && onRegenerateSection && (
             <button
               type="button"
-              className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-cyan-600"
+              className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-primary"
               onClick={() => onRegenerateSection(sectionKey)}
               disabled={regenerating}
               aria-label="Regenerate section"
@@ -187,7 +187,7 @@ export function SOAPSection({
         {readOnly && isLong && (
           <button
             type="button"
-            className="mt-2 flex cursor-pointer items-center gap-1 text-xs font-medium text-cyan-600 transition-all duration-200 hover:text-cyan-700"
+            className="mt-2 flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-all duration-200 hover:text-primary/90"
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}

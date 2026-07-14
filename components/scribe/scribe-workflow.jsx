@@ -437,18 +437,17 @@ export function ScribeWorkflow() {
     />
   );
 
+  const hasSessions = activeSessions.length + historySessions.length > 0;
+
   const recordPanelFooter = (
-    <div className="space-y-3">
-      {!manualInputMode && languageToggle}
-      <Button
-        variant="outline"
-        size="sm"
-        className="w-full cursor-pointer"
-        onClick={() => setSessionsOpen(true)}
-      >
-        View past sessions
-      </Button>
-    </div>
+    <Button
+      variant="outline"
+      size="sm"
+      className="w-full cursor-pointer"
+      onClick={() => setSessionsOpen(true)}
+    >
+      View past sessions
+    </Button>
   );
 
   const rightPanel = activeSessionId ? (
@@ -475,6 +474,7 @@ export function ScribeWorkflow() {
       processing={pipelineBusy}
       message={pipelineMessage ?? "Processing…"}
       onOpenSessions={() => setSessionsOpen(true)}
+      hasSessions={hasSessions}
     />
   );
 
@@ -520,6 +520,9 @@ export function ScribeWorkflow() {
         onManualModeChange={setManualInputMode}
         onManualSubmit={handleManualTranscriptSubmit}
         manualSubmitting={manualSubmitting}
+        canStartRecording={Boolean(selectedPatient)}
+        patientRequiredHint="Select or create a patient to begin."
+        languageToggle={languageToggle}
         footer={recordPanelFooter}
       />
 

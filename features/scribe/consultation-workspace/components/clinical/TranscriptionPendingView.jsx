@@ -21,7 +21,7 @@ export function TranscriptionPendingView({
         className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 py-12"
         data-testid="transcript-review-workspace"
       >
-        <Loader2 className="h-10 w-10 animate-spin text-cyan-600" aria-hidden />
+        <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />
         <div className="max-w-md text-center">
           <p className="text-sm font-medium text-gray-800">{message}</p>
           <p className="mt-2 text-xs text-gray-500">

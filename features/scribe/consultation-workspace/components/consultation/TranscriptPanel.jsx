@@ -49,7 +49,7 @@ export function CollapsibleTranscriptPanel({
         <div className="border-t border-gray-200 px-4 py-3">
           <textarea
             className={cn(
-              "min-h-[160px] w-full resize-y rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-cyan-600/30",
+              "min-h-[160px] w-full resize-y rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30",
               readOnly && "cursor-default opacity-80",
             )}
             value={editedText}
@@ -62,7 +62,7 @@ export function CollapsibleTranscriptPanel({
           {!readOnly && onRegenerateFromTranscript && (
             <button
               type="button"
-              className="mt-3 flex cursor-pointer items-center gap-2 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="mt-3 flex cursor-pointer items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={onRegenerateFromTranscript}
               disabled={regenerating || saving}
             >

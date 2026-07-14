@@ -29,6 +29,9 @@ export function ScribeRecordPanel({
   onManualModeChange,
   onManualSubmit,
   manualSubmitting = false,
+  canStartRecording = true,
+  patientRequiredHint,
+  languageToggle,
   footer,
 }) {
   const [manualText, setManualText] = useState("");
@@ -102,7 +105,7 @@ export function ScribeRecordPanel({
               placeholder="Paste or type the doctor-patient conversation here..."
               className={cn(
                 "min-h-[200px] w-full resize-y rounded-lg border border-gray-200 bg-white p-3 text-sm text-gray-900",
-                "placeholder:text-gray-400 focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500",
+                "placeholder:text-gray-400 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             />
@@ -112,8 +115,8 @@ export function ScribeRecordPanel({
               onClick={handleManualGenerate}
               className={cn(
                 "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
-                "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
-                "transition-all duration-200 hover:bg-cyan-700",
+                "bg-primary text-sm font-semibold text-white shadow-md shadow-primary/20",
+                "transition-all duration-200 hover:bg-primary/90",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
@@ -141,25 +144,30 @@ export function ScribeRecordPanel({
 
             <div className="flex w-full max-w-[240px] flex-col items-center gap-2">
               {(isIdle || isRequesting) && !disabled && (
-                <button
-                  type="button"
-                  aria-label="Start recording"
-                  disabled={disabled || isProcessing || isRequesting}
-                  onClick={onStart}
-                  className={cn(
-                    "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
-                    "bg-cyan-600 text-sm font-semibold text-white shadow-md shadow-cyan-600/20",
-                    "transition-all duration-200 hover:bg-cyan-700",
-                    "disabled:cursor-not-allowed disabled:opacity-60",
+                <>
+                  <button
+                    type="button"
+                    aria-label="Start recording"
+                    disabled={disabled || isProcessing || isRequesting || !canStartRecording}
+                    onClick={onStart}
+                    className={cn(
+                      "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
+                      "bg-primary text-sm font-semibold text-white shadow-md shadow-primary/20",
+                      "transition-all duration-200 hover:bg-primary/90",
+                      "disabled:cursor-not-allowed disabled:opacity-60",
+                    )}
+                  >
+                    {isRequesting ? (
+                      <Loader2 className="h-5 w-5 animate-spin" />
+                    ) : (
+                      <Mic className="h-5 w-5" />
+                    )}
+                    {isRequesting ? "Starting…" : "Start Recording"}
+                  </button>
+                  {!canStartRecording && patientRequiredHint && (
+                    <p className="text-center text-xs text-gray-500">{patientRequiredHint}</p>
                   )}
-                >
-                  {isRequesting ? (
-                    <Loader2 className="h-5 w-5 animate-spin" />
-                  ) : (
-                    <Mic className="h-5 w-5" />
-                  )}
-                  {isRequesting ? "Starting…" : "Start Recording"}
-                </button>
+                </>
               )}
 
               {isProcessing && (
@@ -221,18 +229,23 @@ export function ScribeRecordPanel({
               )}
             </div>
 
-            {canUseManualEntry && (
+            {(isIdle || isRequesting) && !disabled && !manualMode && (
               <>
                 <p className="max-w-[240px] text-center text-xs leading-relaxed text-gray-500">
                   Speak clearly and louder. Minimum recording length is 10 seconds.
                 </p>
-                <button
-                  type="button"
-                  onClick={enterManualMode}
-                  className="text-sm text-gray-400 underline cursor-pointer hover:text-gray-600"
-                >
-                  Or enter transcript manually
-                </button>
+                {languageToggle && (
+                  <div className="flex w-full max-w-[280px] justify-center">{languageToggle}</div>
+                )}
+                {canUseManualEntry && (
+                  <button
+                    type="button"
+                    onClick={enterManualMode}
+                    className="text-sm text-gray-400 underline cursor-pointer hover:text-gray-600"
+                  >
+                    Or enter transcript manually
+                  </button>
+                )}
               </>
             )}
           </>

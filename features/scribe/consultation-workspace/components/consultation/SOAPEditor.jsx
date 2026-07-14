@@ -42,7 +42,7 @@ export function SOAPEditor({
   if (generating) {
     return (
       <div className="flex flex-col items-center justify-center gap-3 p-8" data-testid="soap-review-workspace">
-        <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-gray-600">Generating SOAP note…</p>
       </div>
     );
@@ -78,7 +78,7 @@ export function SOAPEditor({
         />
       ))}
       {dirty && Object.keys(dirty).length > 0 && (
-        <p className="text-center text-[11px] text-cyan-600">Unsaved changes</p>
+        <p className="text-center text-[11px] text-primary">Unsaved changes</p>
       )}
     </div>
   );
@@ -96,7 +96,7 @@ export function SOAPEditorEmpty({ generating, error, onRetry }) {
         </>
       ) : generating ? (
         <>
-          <Loader2 className="h-8 w-8 animate-spin text-cyan-600" />
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
           <p className="text-sm text-gray-600">SOAP note will appear after transcription.</p>
         </>
       ) : (

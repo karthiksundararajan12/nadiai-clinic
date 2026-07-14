@@ -4,10 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
+import { BrandLogo } from "@/components/brand-logo";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Activity,
   ArrowRight,
   ArrowLeft,
   User,
@@ -116,16 +116,9 @@ export default function OnboardingPage() {
       {/* Header */}
       <div className="w-full border-b border-border bg-card/50 glass">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-              <Activity className="h-5 w-5 text-primary-foreground" />
-            </div>
-            <div>
-              <p className="text-sm font-bold text-foreground">Nadi AI</p>
-              <p className="text-[11px] text-muted-foreground">
-                Doctor Onboarding
-              </p>
-            </div>
+          <div>
+            <BrandLogo size="sm" showText className="items-start" />
+            <p className="mt-1 text-[11px] text-muted-foreground">Doctor Onboarding</p>
           </div>
           <div className="flex items-center gap-1.5">
             {STEPS.map((s) => (

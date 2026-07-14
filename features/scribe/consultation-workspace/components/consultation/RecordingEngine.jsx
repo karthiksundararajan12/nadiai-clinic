@@ -39,7 +39,7 @@ export function RecordingEngine({
     <footer className="fixed bottom-0 left-0 right-0 z-50 flex h-[72px] items-center justify-between border-t border-gray-200 bg-white px-6 md:left-[260px]">
       {/* LEFT — patient chip */}
       <div className="flex min-w-0 items-center gap-2">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-cyan-100 text-xs font-semibold text-cyan-800">
+        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
           {initials(name)}
         </div>
         <div className="min-w-0 hidden sm:block">
@@ -88,7 +88,7 @@ export function RecordingEngine({
         {canApprove && (
           <button
             type="button"
-            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-cyan-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
             onClick={onApprove}
             disabled={approving}
             data-testid="soap-approve"

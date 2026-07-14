@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import Image from "next/image";
+import { BrandLogo } from "@/components/brand-logo";
 import { Shield, Mic, CalendarDays, ArrowRight, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
@@ -73,7 +73,7 @@ export default function LoginPage() {
   return (
     <div className="flex min-h-screen">
       {/* Left panel — branding */}
-      <div className="relative hidden w-1/2 lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#0a2520] via-[#0d3530] to-[#0a1f1c] p-12 text-white">
+      <div className="relative hidden w-1/2 lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#1a1035] via-[#2a1f5c] to-[#150d2e] p-12 text-white">
         <div className="absolute inset-0 opacity-[0.03]" style={{
           backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
           backgroundSize: '40px 40px',
@@ -82,14 +82,10 @@ export default function LoginPage() {
         <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
 
         <div className="relative z-10">
-          <Image
-            src="/logo.png"
-            alt="Nadi AI"
-            width={512}
-            height={512}
+          <BrandLogo
+            size="xl"
+            textClassName="text-white text-2xl"
             priority
-            unoptimized
-            className="h-24 w-24 object-contain"
           />
         </div>
 
@@ -97,7 +93,7 @@ export default function LoginPage() {
           <h2 className="text-4xl font-bold leading-[1.15] tracking-tight mb-6">
             The AI assistant
             <br />
-            <span className="text-primary">doctors trust</span>
+            <span className="text-accent">doctors trust</span>
           </h2>
           <p className="text-base text-white/60 leading-relaxed mb-10">
             Transform your practice with AI-powered clinical documentation
@@ -108,7 +104,7 @@ export default function LoginPage() {
             {FEATURES.map((f, i) => (
               <div key={i} className="flex items-start gap-4">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.08]">
-                  <f.icon className="h-5 w-5 text-primary" />
+                  <f.icon className="h-5 w-5 text-accent" />
                 </div>
                 <div>
                   <p className="text-sm font-semibold text-white/90">
@@ -127,7 +123,7 @@ export default function LoginPage() {
               {["AM", "RK", "PS"].map((initials, i) => (
                 <div
                   key={i}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#0d3530] bg-primary/20 text-[10px] font-semibold text-primary"
+                  className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2a1f5c] bg-primary/20 text-[10px] font-semibold text-accent"
                 >
                   {initials}
                 </div>
@@ -149,16 +145,8 @@ export default function LoginPage() {
       <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 bg-background">
         <div className="w-full max-w-[400px]">
           {/* Mobile logo */}
-          <div className="mb-10 lg:hidden">
-            <Image
-              src="/logo.png"
-              alt="Nadi AI"
-              width={512}
-              height={512}
-              priority
-              unoptimized
-              className="h-20 w-20 object-contain"
-            />
+          <div className="mb-10 flex justify-center lg:hidden">
+            <BrandLogo size="lg" priority />
           </div>
 
           <div className="mb-8">

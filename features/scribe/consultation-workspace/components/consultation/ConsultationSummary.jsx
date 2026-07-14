@@ -27,7 +27,7 @@ function EditableField({ label, value, onSave, readOnly, icon: Icon }) {
         {!editing && (
           <button
             type="button"
-            className="cursor-pointer rounded p-1 text-gray-400 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:text-cyan-600"
+            className="cursor-pointer rounded p-1 text-gray-400 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:text-primary"
             onClick={() => { setDraft(value ?? ""); setEditing(true); }}
           >
             <Edit2 className="h-3.5 w-3.5" />
@@ -37,13 +37,13 @@ function EditableField({ label, value, onSave, readOnly, icon: Icon }) {
       {editing ? (
         <div className="mt-2 flex gap-2">
           <input
-            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-cyan-600/30"
+            className="flex-1 rounded border border-gray-200 bg-white px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
           />
           <button
             type="button"
-            className="cursor-pointer rounded bg-cyan-600 px-2 py-1 text-white transition-all duration-200 hover:bg-cyan-700"
+            className="cursor-pointer rounded bg-primary px-2 py-1 text-white transition-all duration-200 hover:bg-primary/90"
             onClick={() => { onSave?.(draft); setEditing(false); }}
           >
             <Check className="h-4 w-4" />
@@ -63,7 +63,7 @@ function EditableSymptom({ symptom, onSave, onRemove, readOnly }) {
   if (readOnly) {
     return (
       <li className="flex items-start gap-2 text-sm text-gray-800">
-        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-600" />
+        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
         {symptom}
       </li>
     );
@@ -71,11 +71,11 @@ function EditableSymptom({ symptom, onSave, onRemove, readOnly }) {
 
   return (
     <li className="group flex items-center gap-2 text-sm text-gray-800">
-      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-cyan-600" />
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
       {editing ? (
         <>
           <input className="flex-1 rounded border border-gray-200 px-2 py-0.5 text-sm" value={draft} onChange={(e) => setDraft(e.target.value)} />
-          <button type="button" className="cursor-pointer text-cyan-600" onClick={() => { onSave?.(draft); setEditing(false); }}>
+          <button type="button" className="cursor-pointer text-primary" onClick={() => { onSave?.(draft); setEditing(false); }}>
             <Check className="h-3.5 w-3.5" />
           </button>
         </>
@@ -84,7 +84,7 @@ function EditableSymptom({ symptom, onSave, onRemove, readOnly }) {
           <span className="flex-1">{symptom}</span>
           <button
             type="button"
-            className="cursor-pointer rounded p-0.5 text-gray-400 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:text-cyan-600"
+            className="cursor-pointer rounded p-0.5 text-gray-400 opacity-0 transition-all duration-200 group-hover:opacity-100 hover:text-primary"
             onClick={() => setEditing(true)}
           >
             <Edit2 className="h-3 w-3" />
@@ -110,7 +110,7 @@ export function ConsultationSummary({
   return (
     <div className={cn("bg-white border border-gray-200 rounded-lg shadow-none p-4", className)}>
       <div className="mb-3 flex items-center gap-2">
-        <Stethoscope className="h-4 w-4 text-cyan-600" />
+        <Stethoscope className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-gray-900">Consultation Summary</h3>
       </div>
 
@@ -165,7 +165,7 @@ export function ConsultationSummary({
         {!readOnly && (
           <button
             type="button"
-            className="mt-2 cursor-pointer text-xs text-cyan-600 transition-all duration-200 hover:underline"
+            className="mt-2 cursor-pointer text-xs text-primary transition-all duration-200 hover:underline"
             onClick={() => onUpdateKeyFindings?.(keyFindings.length ? keyFindings : [" "])}
           >
             <Edit2 className="mr-1 inline h-3 w-3" />

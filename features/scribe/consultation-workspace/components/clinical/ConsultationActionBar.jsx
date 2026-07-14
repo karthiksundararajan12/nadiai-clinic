@@ -64,7 +64,7 @@ export function ConsultationActionBar({
         <div className="flex flex-wrap items-center gap-2">
           {canApprove && (
             <Button
-              className="gap-2 bg-teal-600 px-5 hover:bg-teal-700"
+              className="gap-2 bg-primary px-5 hover:bg-primary/90"
               onClick={onApprove}
               disabled={saving || regenerating || hasDirty || blockingApproval}
               data-testid="soap-approve"

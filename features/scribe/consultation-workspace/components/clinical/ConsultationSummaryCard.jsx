@@ -14,7 +14,7 @@ export function ConsultationSummaryCard({ summary, className }) {
       )}
     >
       <div className="mb-3 flex items-center gap-2">
-        <Stethoscope className="h-4 w-4 text-teal-600" />
+        <Stethoscope className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-slate-900">Consultation Summary</h3>
       </div>
 
@@ -47,7 +47,7 @@ export function ConsultationSummaryCard({ summary, className }) {
           <ul className="mt-2 space-y-1">
             {summary.symptoms.map((symptom) => (
               <li key={symptom} className="flex items-start gap-2 text-sm text-slate-800">
-                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-teal-500" />
+                <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
                 {symptom}
               </li>
             ))}

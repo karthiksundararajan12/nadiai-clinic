@@ -26,7 +26,7 @@ export function ProductivityInsightsCard({ metrics, className }) {
       )}
     >
       <div className="mb-3 flex items-center gap-2">
-        <Sparkles className="h-4 w-4 text-teal-600" />
+        <Sparkles className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-slate-900">Productivity Insights</h3>
       </div>
 

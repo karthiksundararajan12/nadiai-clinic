@@ -70,7 +70,7 @@ export function ChatTranscriptPanel({
   if (pipelineMessage) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3 p-8" data-testid="transcript-review-workspace">
-        <Loader2 className="h-8 w-8 animate-spin text-teal-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
         <p className="text-sm text-slate-600">{pipelineMessage}</p>
       </div>
     );
@@ -88,7 +88,7 @@ export function ChatTranscriptPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search conversation…"
-            className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-teal-400 focus:bg-white"
+            className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-primary focus:bg-white"
           />
         </div>
       </div>
@@ -125,7 +125,7 @@ export function ChatTranscriptPanel({
                   <div
                     className={cn(
                       "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
-                      doctor ? "bg-teal-100 text-teal-700" : "bg-slate-100 text-slate-600",
+                      doctor ? "bg-primary/10 text-primary" : "bg-slate-100 text-slate-600",
                     )}
                   >
                     {doctor ? <Stethoscope className="h-4 w-4" /> : <User className="h-4 w-4" />}
@@ -138,7 +138,7 @@ export function ChatTranscriptPanel({
                       </span>
                       <button
                         type="button"
-                        className="font-mono text-[10px] text-slate-400 hover:text-teal-600"
+                        className="font-mono text-[10px] text-slate-400 hover:text-primary"
                         onClick={() => onSegmentClick?.(segment)}
                       >
                         {formatTimestamp(segment.start_seconds)}
@@ -155,10 +155,10 @@ export function ChatTranscriptPanel({
                       className={cn(
                         "group relative rounded-2xl px-4 py-3 text-sm leading-relaxed shadow-sm",
                         doctor
-                          ? "rounded-tr-md bg-teal-600 text-white"
+                          ? "rounded-tr-md bg-primary text-white"
                           : "rounded-tl-md border border-slate-200 bg-white text-slate-800",
                         low && !doctor && "border-amber-300 bg-amber-50/80",
-                        active && "ring-2 ring-teal-400/50",
+                        active && "ring-2 ring-primary/30",
                         dirty[segment.id] && "ring-2 ring-indigo-300",
                       )}
                     >

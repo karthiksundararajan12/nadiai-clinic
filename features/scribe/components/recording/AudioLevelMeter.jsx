@@ -104,7 +104,7 @@ export function AudioLevelMeter({
       <div
         className={cn(
           "absolute inset-0 rounded-2xl transition-colors duration-300",
-          isPaused ? "bg-amber-400/10" : "bg-cyan-400/15 shadow-[inset_0_0_24px_rgba(6,182,212,0.12)]",
+          isPaused ? "bg-amber-400/10" : "bg-primary/15 shadow-[inset_0_0_24px_rgba(91,75,154,0.12)]",
         )}
       />
 
@@ -119,7 +119,7 @@ export function AudioLevelMeter({
               "h-full w-[5px] origin-center rounded-full shadow-sm",
               isPaused
                 ? "bg-gradient-to-t from-amber-600 via-amber-400 to-yellow-300"
-                : "bg-gradient-to-t from-teal-600 via-cyan-400 to-emerald-300",
+                : "bg-gradient-to-t from-primary via-primary/80 to-primary/50",
             )}
             style={{ transform: "scaleY(0.12)" }}
           />
@@ -134,20 +134,20 @@ export function AudioLevelMeter({
       >
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#14b8a6" stopOpacity="0.85" />
-            <stop offset="35%" stopColor="#06b6d4" stopOpacity="1" />
-            <stop offset="65%" stopColor="#22d3ee" stopOpacity="1" />
-            <stop offset="100%" stopColor="#2dd4bf" stopOpacity="0.85" />
+            <stop offset="0%" stopColor="#5b4b9a" stopOpacity="0.85" />
+            <stop offset="35%" stopColor="#6d5cad" stopOpacity="1" />
+            <stop offset="65%" stopColor="#7a6bb8" stopOpacity="1" />
+            <stop offset="100%" stopColor="#8b7cc8" stopOpacity="0.85" />
           </linearGradient>
           <linearGradient id={fillGradientId} x1="0%" y1="0%" x2="0%" y2="100%">
-            <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
+            <stop offset="0%" stopColor="#7a6bb8" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="#5b4b9a" stopOpacity="0" />
           </linearGradient>
         </defs>
         <path
           ref={glowRef}
           fill="none"
-          stroke="#67e8f9"
+          stroke="#a89ad4"
           strokeWidth="4"
           strokeLinecap="round"
           strokeLinejoin="round"

@@ -27,7 +27,7 @@ function Waveform({ progress, bars = 48, className }) {
             key={i}
             className={cn(
               "w-1 rounded-full transition-colors",
-              filled ? "bg-teal-500" : "bg-slate-200",
+              filled ? "bg-primary" : "bg-slate-200",
             )}
             style={{ height: `${h}%` }}
           />
@@ -146,7 +146,7 @@ export function ClinicalAudioPlayer({ sessionId, onTimeUpdate, onSeekReady, clas
 
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <Volume2 className="h-4 w-4 text-teal-600" />
+          <Volume2 className="h-4 w-4 text-primary" />
           <span className="text-sm font-semibold text-slate-900">Consultation Audio</span>
         </div>
         <span className="font-mono text-xs tabular-nums text-slate-500">
@@ -160,7 +160,7 @@ export function ClinicalAudioPlayer({ sessionId, onTimeUpdate, onSeekReady, clas
         <Button
           type="button"
           size="icon"
-          className="h-9 w-9 rounded-full bg-teal-600 hover:bg-teal-700"
+          className="h-9 w-9 rounded-full bg-primary hover:bg-primary/90"
           onClick={togglePlay}
         >
           {playing ? <Pause className="h-4 w-4 text-white" /> : <Play className="h-4 w-4 text-white" />}
@@ -173,7 +173,7 @@ export function ClinicalAudioPlayer({ sessionId, onTimeUpdate, onSeekReady, clas
           step={0.1}
           value={currentTime}
           onChange={(e) => seekTo(Number(e.target.value))}
-          className="h-1.5 min-w-[120px] flex-1 cursor-pointer accent-teal-600"
+          className="h-1.5 min-w-[120px] flex-1 cursor-pointer accent-primary"
           aria-label="Seek playback"
         />
 

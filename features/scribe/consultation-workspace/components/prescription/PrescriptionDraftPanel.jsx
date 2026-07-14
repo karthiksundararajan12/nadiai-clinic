@@ -42,7 +42,7 @@ export function PrescriptionDraftPanel({
           disabled={approving}
           className={cn(
             "flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-white",
-            "bg-cyan-600 transition-all duration-200 hover:bg-cyan-700 disabled:opacity-60",
+            "bg-primary transition-all duration-200 hover:bg-primary/90 disabled:opacity-60",
           )}
           data-testid="prescription-approve-header"
         >
@@ -117,7 +117,7 @@ export function PrescriptionDraftPanel({
             <button
               type="button"
               onClick={onAddMedication}
-              className="mt-3 cursor-pointer text-sm font-medium text-cyan-600 hover:text-cyan-700"
+              className="mt-3 cursor-pointer text-sm font-medium text-primary hover:text-primary/90"
             >
               + Add Medicine
             </button>
@@ -155,7 +155,7 @@ export function PrescriptionDraftPanel({
       <div className="shrink-0 space-y-2 border-t border-gray-200 px-4 py-4">
         <Button
           type="button"
-          className="w-full cursor-pointer bg-cyan-600 hover:bg-cyan-700"
+          className="w-full cursor-pointer bg-primary hover:bg-primary/90"
           onClick={onApprove}
           disabled={approving}
           data-testid="prescription-approve-footer"

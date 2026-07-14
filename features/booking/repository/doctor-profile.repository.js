@@ -69,4 +69,48 @@ export class DoctorProfileRepository extends BaseRepository {
       "findPrimaryByClinicId",
     );
   }
+
+  /**
+   * Dashboard settings lookup — scoped to both clinic and auth user so a
+   * doctor can only read their own profile row.
+   *
+   * @param {string} clinicId
+   * @param {string} userId
+   * @returns {Promise<{ id: string; consultation_fee: number|null }|null>}
+   */
+  async findByUserId(clinicId, userId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from(this._table)
+          .select("id, consultation_fee")
+          .eq("clinic_id", clinicId)
+          .eq("user_id", userId)
+          .single(),
+      "findByUserId",
+    );
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} userId
+   * @param {number} consultationFee
+   * @returns {Promise<{ consultation_fee: number }>}
+   */
+  async updateConsultationFee(clinicId, userId, consultationFee) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .update({
+            consultation_fee: consultationFee,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("clinic_id", clinicId)
+          .eq("user_id", userId)
+          .select("consultation_fee")
+          .single(),
+      "updateConsultationFee",
+    );
+  }
 }

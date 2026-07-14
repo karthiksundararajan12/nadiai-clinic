@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { useConsultationFeeSettings } from "@/hooks/use-consultation-fee-settings";
 import {
   User,
   Building,
@@ -20,7 +21,11 @@ import {
   Globe,
   Camera,
   Save,
+  IndianRupee,
 } from "lucide-react";
+
+const CONSULTATION_FEE_MIN = 0;
+const CONSULTATION_FEE_MAX = 100_000;
 
 export default function SettingsPage() {
   const [profile, setProfile] = useState({
@@ -40,6 +45,55 @@ export default function SettingsPage() {
     scribeComplete: true,
     dailyDigest: false,
   });
+  const {
+    consultationFee,
+    loading: consultationFeeLoading,
+    error: consultationFeeLoadError,
+    saveConsultationFee,
+  } = useConsultationFeeSettings();
+  const [feeInput, setFeeInput] = useState("");
+  const [feeSaving, setFeeSaving] = useState(false);
+  const [feeError, setFeeError] = useState("");
+  const [feeSuccess, setFeeSuccess] = useState("");
+
+  useEffect(() => {
+    if (!consultationFeeLoading) {
+      setFeeInput(
+        consultationFee === null || consultationFee === undefined
+          ? ""
+          : String(consultationFee),
+      );
+    }
+  }, [consultationFee, consultationFeeLoading]);
+
+  const handleSaveConsultationFee = async () => {
+    setFeeError("");
+    setFeeSuccess("");
+
+    const parsedFee = Number(feeInput);
+    if (
+      feeInput === "" ||
+      !Number.isFinite(parsedFee) ||
+      !Number.isInteger(parsedFee) ||
+      parsedFee < CONSULTATION_FEE_MIN ||
+      parsedFee > CONSULTATION_FEE_MAX
+    ) {
+      setFeeError(
+        `Enter a whole number between ₹${CONSULTATION_FEE_MIN} and ₹${CONSULTATION_FEE_MAX.toLocaleString("en-IN")}.`,
+      );
+      return;
+    }
+
+    setFeeSaving(true);
+    try {
+      await saveConsultationFee(parsedFee);
+      setFeeSuccess("Consultation fee saved. New WhatsApp bookings will use this amount.");
+    } catch (saveError) {
+      setFeeError(saveError.message);
+    } finally {
+      setFeeSaving(false);
+    }
+  };
 
   return (
     <>
@@ -203,6 +257,63 @@ export default function SettingsPage() {
           </TabsContent>
 
           <TabsContent value="clinic">
+            <div className="space-y-6">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Consultation Fee</CardTitle>
+                  <CardDescription>
+                    Used for WhatsApp booking payment links. Past appointments keep the amount charged at booking time.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {(consultationFeeLoadError || feeError) && (
+                    <p className="text-sm text-destructive">
+                      {feeError || consultationFeeLoadError.message}
+                    </p>
+                  )}
+                  {feeSuccess && (
+                    <p className="text-sm text-emerald-700">{feeSuccess}</p>
+                  )}
+                  <div className="max-w-xs space-y-2">
+                    <Label htmlFor="consultation-fee">Fee per consultation</Label>
+                    <div className="relative">
+                      <IndianRupee className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="consultation-fee"
+                        type="number"
+                        min={CONSULTATION_FEE_MIN}
+                        max={CONSULTATION_FEE_MAX}
+                        step={1}
+                        inputMode="numeric"
+                        placeholder="e.g. 500"
+                        value={feeInput}
+                        disabled={consultationFeeLoading || feeSaving}
+                        className="pl-9"
+                        onChange={(e) => {
+                          setFeeInput(e.target.value);
+                          setFeeSuccess("");
+                          setFeeError("");
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Set to ₹0 for free consultations. Whole rupees only.
+                    </p>
+                  </div>
+                  <div className="flex justify-end">
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleSaveConsultationFee}
+                      disabled={consultationFeeLoading || feeSaving || feeInput === ""}
+                    >
+                      <Save className="h-3.5 w-3.5" />
+                      {feeSaving ? "Saving…" : "Save Fee"}
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Clinic Information</CardTitle>
@@ -285,6 +396,7 @@ export default function SettingsPage() {
                 </div>
               </CardContent>
             </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="notifications">

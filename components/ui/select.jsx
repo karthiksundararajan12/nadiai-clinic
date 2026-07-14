@@ -19,7 +19,7 @@ function Select({ value, onValueChange, children, ...props }) {
   }, []);
 
   return (
-    <div ref={ref} className="relative" {...props}>
+    <div ref={ref} className={cn("relative", open && "z-50")} {...props}>
       {typeof children === "function"
         ? children({ open, setOpen, value, onValueChange })
         : children}
@@ -54,7 +54,7 @@ function SelectContent({ className, children, open, ...props }) {
   return (
     <div
       className={cn(
-        "absolute z-50 mt-1 w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
+        "absolute z-[100] mt-1 w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
         className
       )}
       {...props}

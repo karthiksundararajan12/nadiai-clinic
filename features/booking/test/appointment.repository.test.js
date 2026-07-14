@@ -557,12 +557,13 @@ test("claimReminder: a non-constraint DB error throws DatabaseError instead of b
 // Session 5 — completeExpiredConfirmed (no-response timeout)
 // ─────────────────────────────────────────────────────────────
 
-test("completeExpiredConfirmed: bulk-completes past-due CONFIRMED rows, scoped by clinic/status/not-deleted/slot_end", async () => {
+test("completeExpiredConfirmed: bulk-completes CONFIRMED rows past the grace period after slot_end", async () => {
   const completed = [{ id: "appt-1" }, { id: "appt-2" }];
   const db = createFakeSupabaseClient({ data: completed, error: null });
   const repo = new AppointmentRepository(db);
 
-  const result = await repo.completeExpiredConfirmed("clinic-1", "2026-07-06T10:00:00.000Z");
+  const nowIso = "2026-07-06T11:00:00.000Z";
+  const result = await repo.completeExpiredConfirmed("clinic-1", nowIso);
 
   assert.deepEqual(result, completed);
   assert.equal(db.lastBuilder.updatedWith.status, "completed");
@@ -570,6 +571,24 @@ test("completeExpiredConfirmed: bulk-completes past-due CONFIRMED rows, scoped b
   assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
   const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
   assert.deepEqual(ltArgs, ["slot_end", "2026-07-06T10:00:00.000Z"]);
+});
+
+test("completeExpiredConfirmed: appointments still within the grace window after slot_end do not match the auto-complete filter", async () => {
+  const nowIso = "2026-07-06T11:00:00.000Z";
+  const db = createFakeSupabaseClient({ data: [], error: null });
+  const repo = new AppointmentRepository(db);
+
+  await repo.completeExpiredConfirmed("clinic-1", nowIso);
+
+  const cutoffIso = "2026-07-06T10:00:00.000Z";
+  const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
+  assert.deepEqual(ltArgs, ["slot_end", cutoffIso]);
+
+  const slotEndWithinGrace = "2026-07-06T10:30:00.000Z";
+  assert.ok(
+    Date.parse(slotEndWithinGrace) >= Date.parse(cutoffIso),
+    "a slot that ended 30 minutes ago should remain confirmed until the grace period elapses",
+  );
 });
 
 // ─────────────────────────────────────────────────────────────

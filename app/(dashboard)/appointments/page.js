@@ -388,7 +388,7 @@ export default function AppointmentsPage() {
               <DialogTitle>New Appointment</DialogTitle>
             </DialogHeader>
             <div className="grid gap-4 py-4">
-              <div className="space-y-2">
+              <div className="relative z-50 space-y-2">
                 <Label>Patient</Label>
                 <Select
                   value={newApt.patientId}
@@ -396,7 +396,7 @@ export default function AppointmentsPage() {
                     setNewApt((prev) => ({ ...prev, patientId }))
                   }
                 >
-                  {({ open, setOpen }) => (
+                  {({ open, setOpen, value, onValueChange }) => (
                     <>
                       <SelectTrigger
                         open={open}
@@ -410,12 +410,9 @@ export default function AppointmentsPage() {
                           <SelectItem
                             key={patient.id}
                             value={patient.id}
-                            selected={patient.id === newApt.patientId}
+                            selected={patient.id === value}
                             onSelect={() => {
-                              setNewApt((prev) => ({
-                                ...prev,
-                                patientId: patient.id,
-                              }));
+                              onValueChange(patient.id);
                               setOpen(false);
                             }}
                           >

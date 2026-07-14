@@ -444,6 +444,14 @@ export const REMINDER_DEFAULT_OFFSET_MINUTES = Object.freeze({
 export const REMINDER_WINDOW_MINUTES = 20;
 
 /**
+ * Grace period after `slot_end` before a CONFIRMED appointment with no
+ * reminder reply is auto-completed by the booking-reminders cron
+ * (`completeExpiredConfirmed`). Keeps the Scribe "Start consultation"
+ * window open for late-running consultations.
+ */
+export const CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES = 60;
+
+/**
  * Placeholder WhatsApp template names (Session 5 spec) — the real templates
  * are still pending Meta review. Matches the existing UTILITY-category
  * naming convention (`appt_booking_confirmed`, etc. — see doc comments

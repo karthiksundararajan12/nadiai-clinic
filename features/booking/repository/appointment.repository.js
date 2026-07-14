@@ -51,7 +51,7 @@
 import { DatabaseError } from "../errors.js";
 import { BaseRepository } from "./base.repository.js";
 import { isBlockingAppointmentRow } from "../lib/appointment-availability.js";
-import { APPOINTMENT_STATUS } from "../constants.js";
+import { APPOINTMENT_STATUS, CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES } from "../constants.js";
 
 const NO_DOUBLE_BOOKING_CONSTRAINT = "appointments_no_double_booking";
 const WA_MESSAGE_ID_CONSTRAINT = "appointments_wa_message_id_key";
@@ -524,17 +524,22 @@ export class AppointmentRepository extends BaseRepository {
 
   /**
    * Bulk, idempotent no-response timeout (Session 5 step 5): any CONFIRMED
-   * appointment whose slot has already passed with no reply moves straight
-   * to COMPLETED. NO_SHOW tracking is explicitly deferred per spec — this
-   * is COMPLETED-only, no clinic config flag. A plain bulk UPDATE (not a
-   * per-row claim) is safe here because re-running it is naturally a
-   * no-op: once a row is COMPLETED it no longer matches `status = 'confirmed'`.
+   * appointment whose slot ended more than CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES
+   * ago with no reply moves straight to COMPLETED. NO_SHOW tracking is
+   * explicitly deferred per spec — this is COMPLETED-only, no clinic config
+   * flag. A plain bulk UPDATE (not a per-row claim) is safe here because
+   * re-running it is naturally a no-op: once a row is COMPLETED it no longer
+   * matches `status = 'confirmed'`.
    *
    * @param {string} clinicId
    * @param {string} nowIso
    * @returns {Promise<Array<{ id: string }>>} rows that were transitioned, for logging.
    */
   async completeExpiredConfirmed(clinicId, nowIso) {
+    const cutoffIso = new Date(
+      Date.parse(nowIso) - CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES * 60_000,
+    ).toISOString();
+
     return this._run(
       () =>
         this._db
@@ -543,7 +548,7 @@ export class AppointmentRepository extends BaseRepository {
           .eq("clinic_id", clinicId)
           .eq("status", APPOINTMENT_STATUS.CONFIRMED)
           .is("deleted_at", null)
-          .lt("slot_end", nowIso)
+          .lt("slot_end", cutoffIso)
           .select("id"),
       "completeExpiredConfirmed",
     );

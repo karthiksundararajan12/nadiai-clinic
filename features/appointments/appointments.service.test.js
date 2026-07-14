@@ -33,7 +33,7 @@ function createService({
   rescheduleResult,
   findByIdResult,
 } = {}) {
-  const calls = { list: [], create: [], cancel: [], reschedule: [], findById: [] };
+  const calls = { list: [], create: [], cancel: [], reschedule: [], findById: [], findAllForClinic: [] };
   const appointmentRepository = {
     async findForClinic(clinicId, filters) {
       calls.list.push({ clinicId, filters });
@@ -70,7 +70,8 @@ function createService({
     async findById() {
       return patient;
     },
-    async findAllForClinic() {
+    async findAllForClinic(clinicId) {
+      calls.findAllForClinic.push(clinicId);
       return [patient];
     },
   };
@@ -88,6 +89,15 @@ function createService({
     ),
   };
 }
+
+test("lists patient options for the new-appointment dialog", async () => {
+  const { service, calls } = createService();
+
+  const result = await service.listPatientOptions("clinic-1");
+
+  assert.deepEqual(result, [{ id: "patient-1", name: "Asha Kumar" }]);
+  assert.deepEqual(calls.findAllForClinic, ["clinic-1"]);
+});
 
 test("lists today's real appointments using clinic-local boundaries", async () => {
   const { service, calls } = createService({

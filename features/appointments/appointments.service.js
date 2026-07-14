@@ -121,6 +121,29 @@ export class AppointmentsService {
     }));
   }
 
+  async getById(clinicId, appointmentId) {
+    const appointment = await this._appointments.findByIdForClinic(
+      clinicId,
+      appointmentId,
+    );
+    if (!appointment) {
+      throw new AppointmentRequestError("Appointment not found", 404);
+    }
+
+    const patient = appointment.patient_id
+      ? await this._patients.findById(clinicId, appointment.patient_id)
+      : null;
+
+    return {
+      ...formatAppointment({
+        ...appointment,
+        patients: patient ? { full_name: patient.full_name } : null,
+      }),
+      patient_age: patient?.age_years ?? null,
+      patient_gender: patient?.gender ?? null,
+    };
+  }
+
   async create(clinicId, input) {
     if (!input.patientId) {
       throw new AppointmentRequestError("patientId is required");

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -24,12 +25,20 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { useAppointmentsData } from "@/hooks/use-appointments-data";
+import { formatPhoneForDisplay, normalizePhoneForWhatsApp } from "@/features/booking/lib/phone.js";
 import {
   Plus,
   CalendarDays,
   Clock,
   User,
+  Mic,
 } from "lucide-react";
+
+const CONSULTATION_STATUSES = new Set([
+  "pending",
+  "payment_pending",
+  "confirmed",
+]);
 
 function clinicDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-IN", {
@@ -92,17 +101,25 @@ function AppointmentList({ items, loading, onCancel, onReschedule }) {
                 <span>{appointment.duration} min</span>
                 {appointment.contact_phone && (
                   <a
-                    href={`tel:${appointment.contact_phone}`}
+                    href={`tel:+${normalizePhoneForWhatsApp(appointment.contact_phone)}`}
                     className="text-muted-foreground hover:underline"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    {appointment.contact_phone}
+                    {formatPhoneForDisplay(appointment.contact_phone)}
                   </a>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2">
+              {CONSULTATION_STATUSES.has(appointment.status) && (
+                <Link href={`/scribe?appointment_id=${appointment.id}`}>
+                  <Button variant="outline" size="xs" className="gap-1">
+                    <Mic className="h-3 w-3" />
+                    Start consultation
+                  </Button>
+                </Link>
+              )}
               {appointment.payment_amount != null && (
                 <span className="text-sm text-muted-foreground">
                   ₹{appointment.payment_amount}

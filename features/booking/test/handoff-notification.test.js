@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { normalizePhoneForWhatsApp } from "../lib/phone.js";
+import { normalizePhoneForWhatsApp, formatPhoneForDisplay } from "../lib/phone.js";
 import { describeInboundMessageForHandoff, describeContactForHandoff } from "../lib/handoff-summary.js";
 
 test("normalizePhoneForWhatsApp strips formatting down to digits", () => {
@@ -13,6 +13,11 @@ test("normalizePhoneForWhatsApp returns null for empty/unusable input", () => {
   assert.equal(normalizePhoneForWhatsApp(undefined), null);
   assert.equal(normalizePhoneForWhatsApp(""), null);
   assert.equal(normalizePhoneForWhatsApp("N/A"), null);
+});
+
+test("formatPhoneForDisplay adds + and space after Indian country code", () => {
+  assert.equal(formatPhoneForDisplay("919840227132"), "+91 9840227132");
+  assert.equal(formatPhoneForDisplay("+91 98402-27132"), "+91 9840227132");
 });
 
 test("describeInboundMessageForHandoff quotes free text", () => {

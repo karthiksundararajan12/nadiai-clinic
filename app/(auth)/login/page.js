@@ -83,13 +83,13 @@ export default function LoginPage() {
 
         <div className="relative z-10">
           <Image
-            src="/logo.svg"
+            src="/logo.png"
             alt="Nadi AI"
-            width={740}
-            height={205}
+            width={512}
+            height={512}
             priority
             unoptimized
-            className="h-32 w-auto max-w-[520px] object-contain"
+            className="h-24 w-24 object-contain"
           />
         </div>
 
@@ -151,13 +151,13 @@ export default function LoginPage() {
           {/* Mobile logo */}
           <div className="mb-10 lg:hidden">
             <Image
-              src="/logo.svg"
+              src="/logo.png"
               alt="Nadi AI"
-              width={740}
-              height={205}
+              width={512}
+              height={512}
               priority
               unoptimized
-              className="h-24 w-auto max-w-[360px] object-contain"
+              className="h-20 w-20 object-contain"
             />
           </div>
 

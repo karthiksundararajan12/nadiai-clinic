@@ -51,7 +51,17 @@ export async function GET(request) {
     if (!resolved) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const scope = new URL(request.url).searchParams.get("scope") ?? "all";
+    const params = new URL(request.url).searchParams;
+    const appointmentId = params.get("appointmentId");
+    if (appointmentId) {
+      const appointment = await resolved.service.getById(
+        resolved.ctx.clinicId,
+        appointmentId,
+      );
+      return NextResponse.json({ appointment }, { status: 200 });
+    }
+
+    const scope = params.get("scope") ?? "all";
     const [appointments, patients] = await Promise.all([
       resolved.service.list(resolved.ctx.clinicId, scope),
       resolved.service.listPatientOptions(resolved.ctx.clinicId),

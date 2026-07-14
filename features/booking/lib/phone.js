@@ -18,3 +18,20 @@ export function normalizePhoneForWhatsApp(rawPhone) {
   const digitsOnly = String(rawPhone).replace(/\D/g, "");
   return digitsOnly.length > 0 ? digitsOnly : null;
 }
+
+/**
+ * Formats a stored contact phone for UI display (e.g. `919840227132` →
+ * `+91 9840227132`). Pilot clinics are India-based; other country codes fall
+ * back to `+{digits}` without inserting a space.
+ *
+ * @param {string|null|undefined} rawPhone
+ * @returns {string}
+ */
+export function formatPhoneForDisplay(rawPhone) {
+  const digits = normalizePhoneForWhatsApp(rawPhone);
+  if (!digits) return rawPhone ?? "";
+  if (digits.startsWith("91") && digits.length === 12) {
+    return `+91 ${digits.slice(2)}`;
+  }
+  return `+${digits}`;
+}

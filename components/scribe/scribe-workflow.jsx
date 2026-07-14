@@ -12,6 +12,9 @@ import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace"
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
 import { ScribeRecordPanel } from "@/features/scribe/consultation-workspace/components/consultation/ScribeRecordPanel.jsx";
 import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
+import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
+import { appointmentToPatientPrefill } from "@/features/appointments/appointment-prefill.js";
+import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
 import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
@@ -57,6 +60,9 @@ export function ScribeWorkflow() {
   const [viewFromHistory, setViewFromHistory] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
   const [selectedPatient, setSelectedPatient] = useState(null);
+  const [appointmentId, setAppointmentId] = useState(null);
+  const [appointmentPrefillLoading, setAppointmentPrefillLoading] = useState(false);
+  const [appointmentPrefillError, setAppointmentPrefillError] = useState(null);
 
   const [activeSessions, setActiveSessions] = useState([]);
   const [historySessions, setHistorySessions] = useState([]);
@@ -81,9 +87,36 @@ export function ScribeWorkflow() {
   });
 
   const mountedRef = useRef(true);
+  const appointmentPrefillAttemptedRef = useRef(false);
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get("appointment_id");
+    if (!id || appointmentPrefillAttemptedRef.current) return;
+
+    appointmentPrefillAttemptedRef.current = true;
+    setAppointmentId(id);
+    setAppointmentPrefillLoading(true);
+    setAppointmentPrefillError(null);
+
+    void fetchAppointmentById(id)
+      .then((appointment) => {
+        if (!mountedRef.current) return;
+        setSelectedPatient(appointmentToPatientPrefill(appointment));
+      })
+      .catch((err) => {
+        if (!mountedRef.current) return;
+        setAppointmentPrefillError(
+          err instanceof Error ? err : new Error(String(err)),
+        );
+      })
+      .finally(() => {
+        if (mountedRef.current) setAppointmentPrefillLoading(false);
+      });
   }, []);
 
   const recording = useRecording({
@@ -194,6 +227,7 @@ export function ScribeWorkflow() {
         audioDurationSeconds,
         language,
         patientId: selectedPatient?.id,
+        appointmentId,
         onProgress: (event) => {
           if (event.phase === "uploading") {
             setPipelineMessage(`Uploading… ${event.progress ?? 0}%`);
@@ -225,7 +259,7 @@ export function ScribeWorkflow() {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
-  }, [language, runTranscription, selectedPatient?.id]);
+  }, [appointmentId, language, runTranscription, selectedPatient?.id]);
 
   const handleStopRecording = useCallback(async () => {
     try {
@@ -285,6 +319,7 @@ export function ScribeWorkflow() {
     setManualInputMode(false);
     setManualSubmitting(false);
     setSessionsOpen(false);
+    setAppointmentPrefillError(null);
     setWorkspaceState({
       segments: [],
       transcriptLoading: false,
@@ -304,6 +339,7 @@ export function ScribeWorkflow() {
         text,
         language,
         patientId: selectedPatient?.id,
+        appointmentId,
       });
 
       const sessionId = result?.session?.id;
@@ -323,7 +359,7 @@ export function ScribeWorkflow() {
     } finally {
       setManualSubmitting(false);
     }
-  }, [language, loadConsultations, selectedPatient?.id]);
+  }, [appointmentId, language, loadConsultations, selectedPatient?.id]);
 
   const openSession = useCallback((sessionId, fromHistory = false) => {
     setViewFromHistory(fromHistory);
@@ -444,9 +480,25 @@ export function ScribeWorkflow() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col md:flex-row"
+      className="relative flex h-full min-h-0 flex-col"
       data-testid="scribe-workflow"
     >
+      <PatientSelector
+        patient={selectedPatient}
+        onSelect={setSelectedPatient}
+        onClear={() => setSelectedPatient(null)}
+      />
+      {appointmentPrefillLoading && (
+        <p className="border-b border-gray-200 bg-amber-50 px-6 py-2 text-xs text-amber-800">
+          Loading appointment details…
+        </p>
+      )}
+      {appointmentPrefillError && (
+        <p className="border-b border-gray-200 bg-destructive/5 px-6 py-2 text-xs text-destructive">
+          {appointmentPrefillError.message}
+        </p>
+      )}
+      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
       <ScribeRecordPanel
         recordState={recordState}
         durationLabel={recording.formattedDuration}
@@ -503,6 +555,7 @@ export function ScribeWorkflow() {
       )}
 
       {sessionsDrawer}
+    </div>
     </div>
   );
 }

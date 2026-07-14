@@ -52,26 +52,18 @@ export function Sidebar({ collapsed, onToggle }) {
           collapsed ? "h-20 px-2" : "h-[100px] px-3"
         )}
       >
-        {collapsed ? (
-          <Image
-            src="/logo-icon.svg"
-            alt="Nadi AI"
-            width={205}
-            height={205}
-            unoptimized
-            className="h-16 w-16 shrink-0 object-contain"
-          />
-        ) : (
-          <Image
-            src="/logo.svg"
-            alt="Nadi AI"
-            width={740}
-            height={205}
-            priority
-            unoptimized
-            className="w-full max-w-[236px] h-auto object-contain"
-          />
-        )}
+        <Image
+          src="/logo.png"
+          alt="Nadi AI"
+          width={512}
+          height={512}
+          priority={!collapsed}
+          unoptimized
+          className={cn(
+            "shrink-0 object-contain",
+            collapsed ? "h-16 w-16" : "h-20 w-20"
+          )}
+        />
       </div>
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin">

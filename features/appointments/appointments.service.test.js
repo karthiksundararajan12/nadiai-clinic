@@ -31,8 +31,9 @@ function createService({
   createResult,
   cancelResult,
   rescheduleResult,
+  findByIdResult,
 } = {}) {
-  const calls = { list: [], create: [], cancel: [], reschedule: [] };
+  const calls = { list: [], create: [], cancel: [], reschedule: [], findById: [] };
   const appointmentRepository = {
     async findForClinic(clinicId, filters) {
       calls.list.push({ clinicId, filters });
@@ -46,11 +47,18 @@ function createService({
       calls.cancel.push({ clinicId, appointmentId });
       return cancelResult === undefined ? { id: appointmentId } : cancelResult;
     },
-    async findByIdForClinic() {
+    async findByIdForClinic(clinicId, appointmentId) {
+      calls.findById.push({ clinicId, appointmentId });
+      if (findByIdResult !== undefined) return findByIdResult;
       return {
         id: "appointment-1",
+        patient_id: "patient-1",
+        contact_phone: "919876543210",
         slot_start: "2026-07-12T03:30:00.000Z",
         slot_end: "2026-07-12T04:00:00.000Z",
+        status: "confirmed",
+        payment_status: "paid",
+        payment_amount: 500,
       };
     },
     async rescheduleFromDashboard(clinicId, appointmentId, slotStart, slotEnd) {
@@ -163,6 +171,29 @@ test("creates a confirmed appointment through createIfAvailable", async () => {
     wa_message_id: null,
     payment_status: "not_required",
   });
+});
+
+test("gets an appointment by id with patient context for scribe prefill", async () => {
+  const { service } = createService();
+
+  const result = await service.getById("clinic-1", "appointment-1");
+
+  assert.equal(result.id, "appointment-1");
+  assert.equal(result.patient_name, "Asha Kumar");
+  assert.equal(result.contact_phone, "919876543210");
+  assert.equal(result.patient_age, null);
+  assert.equal(result.patient_gender, null);
+});
+
+test("getById returns 404 when appointment is missing", async () => {
+  const { service } = createService({ findByIdResult: null });
+
+  await assert.rejects(
+    () => service.getById("clinic-1", "missing"),
+    (error) =>
+      error instanceof AppointmentRequestError &&
+      error.statusCode === 404,
+  );
 });
 
 test("surfaces slot conflicts and non-cancellable states", async () => {

@@ -125,7 +125,7 @@ export class PatientRepository extends BaseRepository {
         () =>
           this._db
             .from(this._table)
-            .select("id, full_name, contact_phone")
+            .select("id, full_name, contact_phone, age_years, gender, created_at, updated_at")
             .eq("clinic_id", clinicId)
             .is("deleted_at", null)
             .order("full_name", { ascending: true })

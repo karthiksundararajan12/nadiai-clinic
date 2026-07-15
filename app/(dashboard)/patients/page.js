@@ -22,69 +22,101 @@ import {
   Plus,
   Users,
   Phone,
-  Mail,
   Calendar,
-  Activity,
-  MoreVertical,
-  Stethoscope,
+  CalendarClock,
+  Loader2,
 } from "lucide-react";
 
+function patientInitials(name) {
+  return String(name ?? "")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase() || "?";
+}
+
+function formatVisitDate(isoValue) {
+  if (!isoValue) return "No visits yet";
+  return new Date(isoValue).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatGenderAge(patient) {
+  const parts = [];
+  if (patient.age != null) parts.push(`${patient.age} yrs`);
+  if (patient.gender) parts.push(patient.gender);
+  return parts.length > 0 ? parts.join(" · ") : "Details not recorded";
+}
+
 export default function PatientsPage() {
-  const { patients, addPatient, deletePatient } = usePatients();
+  const { patients, stats, loading, error, addPatient } = usePatients();
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [viewMode, setViewMode] = useState("grid");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [newPatient, setNewPatient] = useState({
     name: "",
     age: "",
     gender: "Male",
     phone: "",
-    email: "",
-    condition: "",
   });
 
-  const filteredPatients = patients.filter(
-    (p) =>
-      p.name.toLowerCase().includes(search.toLowerCase()) ||
-      p.condition.toLowerCase().includes(search.toLowerCase()) ||
-      p.phone.includes(search)
-  );
+  const filteredPatients = patients.filter((patient) => {
+    const query = search.trim().toLowerCase();
+    if (!query) return true;
+    return (
+      patient.name.toLowerCase().includes(query) ||
+      patient.phone.replace(/\s+/g, "").includes(query.replace(/\s+/g, ""))
+    );
+  });
 
-  const handleAddPatient = () => {
-    if (newPatient.name && newPatient.phone) {
-      addPatient(newPatient);
+  const handleAddPatient = async () => {
+    setSaveError("");
+    setSaving(true);
+    try {
+      await addPatient(newPatient);
       setNewPatient({
         name: "",
         age: "",
         gender: "Male",
         phone: "",
-        email: "",
-        condition: "",
       });
       setDialogOpen(false);
+    } catch (saveErr) {
+      setSaveError(saveErr.message);
+    } finally {
+      setSaving(false);
     }
   };
-
-  const activeCount = patients.filter((p) => p.status === "active").length;
 
   return (
     <>
       <Header
         title="Patients"
-        subtitle="Manage your patient records and medical history"
+        subtitle="Manage your clinic's patient records"
       />
 
       <div className="flex-1 p-6 space-y-6">
+        {(error || saveError) && (
+          <p className="text-sm text-destructive">{saveError || error?.message}</p>
+        )}
+
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <SearchInput
               value={search}
               onChange={setSearch}
-              placeholder="Search patients..."
+              placeholder="Search by name or phone..."
               className="w-64"
             />
             <Badge variant="secondary" className="hidden sm:flex">
-              {filteredPatients.length} patients
+              {loading ? "Loading…" : `${filteredPatients.length} patients`}
             </Badge>
           </div>
           <div className="flex items-center gap-2">
@@ -113,7 +145,10 @@ export default function PatientsPage() {
             <Button
               size="sm"
               className="gap-1.5"
-              onClick={() => setDialogOpen(true)}
+              onClick={() => {
+                setSaveError("");
+                setDialogOpen(true);
+              }}
             >
               <Plus className="h-3.5 w-3.5" />
               Add Patient
@@ -128,7 +163,9 @@ export default function PatientsPage() {
                 <Users className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{patients.length}</p>
+                <p className="text-2xl font-bold">
+                  {loading ? "—" : stats.totalPatients}
+                </p>
                 <p className="text-xs text-muted-foreground">Total Patients</p>
               </div>
             </div>
@@ -136,39 +173,52 @@ export default function PatientsPage() {
           <Card className="p-4">
             <div className="flex items-center gap-3">
               <div className="rounded-lg bg-success/10 p-2">
-                <Activity className="h-4 w-4 text-success" />
+                <CalendarClock className="h-4 w-4 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{activeCount}</p>
-                <p className="text-xs text-muted-foreground">Active</p>
+                <p className="text-2xl font-bold">
+                  {loading ? "—" : stats.withUpcomingVisit}
+                </p>
+                <p className="text-xs text-muted-foreground">Upcoming Visits</p>
               </div>
             </div>
           </Card>
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-warning/10 p-2">
-                <Stethoscope className="h-4 w-4 text-warning" />
+              <div className="rounded-lg bg-muted p-2">
+                <Calendar className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>
                 <p className="text-2xl font-bold">
-                  {patients.length - activeCount}
+                  {loading ? "—" : stats.noAppointmentsYet}
                 </p>
-                <p className="text-xs text-muted-foreground">Need Follow-up</p>
+                <p className="text-xs text-muted-foreground">No Appointments Yet</p>
               </div>
             </div>
           </Card>
         </div>
 
-        {filteredPatients.length === 0 ? (
+        {loading ? (
+          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            Loading patients…
+          </div>
+        ) : filteredPatients.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No patients found"
-            description="Try adjusting your search or add a new patient"
+            title={patients.length === 0 ? "No patients yet" : "No patients found"}
+            description={
+              patients.length === 0
+                ? "Add your first patient or wait for bookings to create records automatically."
+                : "Try adjusting your search."
+            }
             action={
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
-                <Plus className="h-3.5 w-3.5 mr-1.5" />
-                Add Patient
-              </Button>
+              patients.length === 0 ? (
+                <Button size="sm" onClick={() => setDialogOpen(true)}>
+                  <Plus className="h-3.5 w-3.5 mr-1.5" />
+                  Add Patient
+                </Button>
+              ) : null
             }
           />
         ) : viewMode === "grid" ? (
@@ -182,64 +232,39 @@ export default function PatientsPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-11 w-11">
-                        <AvatarFallback>
-                          {patient.name
-                            .split(" ")
-                            .map((n) => n[0])
-                            .join("")}
-                        </AvatarFallback>
+                        <AvatarFallback>{patientInitials(patient.name)}</AvatarFallback>
                       </Avatar>
                       <div>
-                        <p className="text-sm font-semibold">
-                          {patient.name}
-                        </p>
+                        <p className="text-sm font-semibold">{patient.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {patient.age} yrs &middot; {patient.gender}
+                          {formatGenderAge(patient)}
                         </p>
                       </div>
                     </div>
-                    <Badge
-                      variant={
-                        patient.status === "active" ? "success" : "secondary"
-                      }
-                      className="text-[10px]"
-                    >
-                      {patient.status}
-                    </Badge>
+                    {patient.upcomingVisit && (
+                      <Badge variant="success" className="text-[10px]">
+                        Upcoming
+                      </Badge>
+                    )}
                   </div>
 
                   <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Stethoscope className="h-3 w-3 text-primary" />
-                      <span>{patient.condition}</span>
-                    </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Phone className="h-3 w-3" />
                       <span>{patient.phone}</span>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Calendar className="h-3 w-3" />
-                      <span>
-                        Last visit:{" "}
-                        {new Date(patient.last_visit).toLocaleDateString(
-                          "en-IN",
-                          {
-                            day: "numeric",
-                            month: "short",
-                            year: "numeric",
-                          }
-                        )}
-                      </span>
+                      <span>Last visit: {formatVisitDate(patient.lastVisit)}</span>
                     </div>
-                  </div>
-
-                  <div className="mt-4 flex gap-2">
-                    <Button variant="outline" size="xs" className="flex-1">
-                      View Details
-                    </Button>
-                    <Button variant="ghost" size="icon-xs">
-                      <MoreVertical className="h-3.5 w-3.5" />
-                    </Button>
+                    {patient.upcomingVisit && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <CalendarClock className="h-3 w-3" />
+                        <span>
+                          Next visit: {formatVisitDate(patient.upcomingVisit)}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -254,30 +279,19 @@ export default function PatientsPage() {
                   className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
                 >
                   <Avatar className="h-10 w-10">
-                    <AvatarFallback>
-                      {patient.name
-                        .split(" ")
-                        .map((n) => n[0])
-                        .join("")}
-                    </AvatarFallback>
+                    <AvatarFallback>{patientInitials(patient.name)}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">
-                        {patient.name}
-                      </p>
-                      <Badge
-                        variant={
-                          patient.status === "active" ? "success" : "secondary"
-                        }
-                        className="text-[10px]"
-                      >
-                        {patient.status}
-                      </Badge>
+                      <p className="text-sm font-medium truncate">{patient.name}</p>
+                      {patient.upcomingVisit && (
+                        <Badge variant="success" className="text-[10px]">
+                          Upcoming
+                        </Badge>
+                      )}
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      {patient.age} yrs &middot; {patient.gender} &middot;{" "}
-                      {patient.condition}
+                      {formatGenderAge(patient)}
                     </p>
                   </div>
                   <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
@@ -287,15 +301,9 @@ export default function PatientsPage() {
                     </span>
                     <span className="flex items-center gap-1">
                       <Calendar className="h-3 w-3" />
-                      {new Date(patient.last_visit).toLocaleDateString("en-IN", {
-                        day: "numeric",
-                        month: "short",
-                      })}
+                      {formatVisitDate(patient.lastVisit)}
                     </span>
                   </div>
-                  <Button variant="outline" size="xs">
-                    View
-                  </Button>
                 </div>
               ))}
             </div>
@@ -309,10 +317,12 @@ export default function PatientsPage() {
             </DialogHeader>
             <div className="grid gap-4 py-4">
               <div className="space-y-2">
-                <Label>Full Name</Label>
+                <Label htmlFor="patient-name">Full Name</Label>
                 <Input
+                  id="patient-name"
                   placeholder="Enter patient's full name"
                   value={newPatient.name}
+                  disabled={saving}
                   onChange={(e) =>
                     setNewPatient((prev) => ({ ...prev, name: e.target.value }))
                   }
@@ -320,11 +330,15 @@ export default function PatientsPage() {
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-2">
-                  <Label>Age</Label>
+                  <Label htmlFor="patient-age">Age (optional)</Label>
                   <Input
+                    id="patient-age"
                     type="number"
+                    min={0}
+                    max={150}
                     placeholder="Age"
                     value={newPatient.age}
+                    disabled={saving}
                     onChange={(e) =>
                       setNewPatient((prev) => ({
                         ...prev,
@@ -334,11 +348,13 @@ export default function PatientsPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label>Gender</Label>
+                  <Label>Gender (optional)</Label>
                   <div className="flex gap-2">
                     {["Male", "Female", "Other"].map((g) => (
                       <button
                         key={g}
+                        type="button"
+                        disabled={saving}
                         onClick={() =>
                           setNewPatient((prev) => ({ ...prev, gender: g }))
                         }
@@ -355,10 +371,12 @@ export default function PatientsPage() {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Phone Number</Label>
+                <Label htmlFor="patient-phone">Phone Number</Label>
                 <Input
-                  placeholder="+91 XXXXX XXXXX"
+                  id="patient-phone"
+                  placeholder="+91 98765 43210"
                   value={newPatient.phone}
+                  disabled={saving}
                   onChange={(e) =>
                     setNewPatient((prev) => ({
                       ...prev,
@@ -367,42 +385,21 @@ export default function PatientsPage() {
                   }
                 />
               </div>
-              <div className="space-y-2">
-                <Label>Email (Optional)</Label>
-                <Input
-                  type="email"
-                  placeholder="patient@email.com"
-                  value={newPatient.email}
-                  onChange={(e) =>
-                    setNewPatient((prev) => ({
-                      ...prev,
-                      email: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Primary Condition</Label>
-                <Input
-                  placeholder="e.g., Hypertension, Diabetes"
-                  value={newPatient.condition}
-                  onChange={(e) =>
-                    setNewPatient((prev) => ({
-                      ...prev,
-                      condition: e.target.value,
-                    }))
-                  }
-                />
-              </div>
             </div>
             <DialogFooter>
               <Button
                 variant="outline"
+                disabled={saving}
                 onClick={() => setDialogOpen(false)}
               >
                 Cancel
               </Button>
-              <Button onClick={handleAddPatient}>Add Patient</Button>
+              <Button
+                onClick={handleAddPatient}
+                disabled={saving || !newPatient.name.trim() || !newPatient.phone.trim()}
+              >
+                {saving ? "Saving…" : "Add Patient"}
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>

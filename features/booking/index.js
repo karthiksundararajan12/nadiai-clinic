@@ -418,7 +418,10 @@ export function createBookingServices(supabaseClient) {
     patientRepository,
     whatsappClient,
     doctorNotificationService,
-    { templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true" },
+    {
+      templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+      doctorProfileRepository,
+    },
   );
 
   return {

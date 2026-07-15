@@ -18,6 +18,8 @@ import { fetchAppointmentById } from "@/features/appointments/appointments.clien
 import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
+import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
+import { SCRIBE_LANGUAGE } from "@/features/scribe/constants.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -55,7 +57,9 @@ async function fetchConsultations(bucket) {
 }
 
 export function ScribeWorkflow() {
-  const [language, setLanguage] = useState("english");
+  const { preferences, loading: profileSettingsLoading } = useDoctorProfileSettings();
+  const [language, setLanguage] = useState(SCRIBE_LANGUAGE.HINGLISH);
+  const [languageInitialized, setLanguageInitialized] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [viewFromHistory, setViewFromHistory] = useState(false);
   const [sessionsOpen, setSessionsOpen] = useState(false);
@@ -92,6 +96,13 @@ export function ScribeWorkflow() {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
+
+  useEffect(() => {
+    if (!profileSettingsLoading && preferences && !languageInitialized) {
+      setLanguage(preferences.defaultScribeLanguage ?? SCRIBE_LANGUAGE.HINGLISH);
+      setLanguageInitialized(true);
+    }
+  }, [preferences, profileSettingsLoading, languageInitialized]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);

@@ -18,6 +18,8 @@ CREATE TABLE IF NOT EXISTS public.doctor_profiles (
   consultation_fee DECIMAL(10,2) DEFAULT 500,
   working_hours_start TEXT DEFAULT '09:00',
   working_hours_end TEXT DEFAULT '18:00',
+  reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  default_scribe_language TEXT NOT NULL DEFAULT 'hinglish',
   whatsapp_phone_number_id TEXT,
   onboarding_complete BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT now(),

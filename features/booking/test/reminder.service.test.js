@@ -64,6 +64,7 @@ function createFakeRepos({
   findByIdForClinicImpl = null,
   cancelViaReminderReplyImpl = null,
   requestRescheduleViaReminderReplyImpl = null,
+  remindersEnabledByClinic = true,
 } = {}) {
   const calls = {
     findDueForReminder: [],
@@ -72,6 +73,7 @@ function createFakeRepos({
     findByIdForClinic: [],
     cancelViaReminderReply: [],
     requestRescheduleViaReminderReply: [],
+    isRemindersEnabledForClinic: [],
   };
 
   const clinicRepository = {
@@ -118,7 +120,17 @@ function createFakeRepos({
     },
   };
 
-  return { calls, clinicRepository, appointmentRepository, patientRepository };
+  const doctorProfileRepository = {
+    async isRemindersEnabledForClinic(clinicId) {
+      calls.isRemindersEnabledForClinic.push(clinicId);
+      if (typeof remindersEnabledByClinic === "function") {
+        return remindersEnabledByClinic(clinicId);
+      }
+      return remindersEnabledByClinic;
+    },
+  };
+
+  return { calls, clinicRepository, appointmentRepository, patientRepository, doctorProfileRepository };
 }
 
 function createFakeWhatsAppClient() {
@@ -192,6 +204,33 @@ test("runReminderSweep: falls back to the default offset when a clinic row preda
   const h24Call = calls.findDueForReminder.find((c) => c.column === REMINDER_SENT_AT_COLUMN[REMINDER_KIND.H24]);
   const h24WindowEnd = Date.parse(h24Call.toIso);
   assert.ok(Math.abs(h24WindowEnd - (before + 1440 * 60_000)) < 5000, "should default to 1440 minutes (24h)");
+});
+
+test("runReminderSweep: skips reminder queries when reminders_enabled is false for the clinic", async () => {
+  const { calls, clinicRepository, appointmentRepository, patientRepository, doctorProfileRepository } =
+    createFakeRepos({
+      remindersEnabledByClinic: false,
+      findDueForReminderImpl: () => {
+        throw new Error("should not query when reminders are disabled");
+      },
+    });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const service = new ReminderService(
+    clinicRepository,
+    appointmentRepository,
+    patientRepository,
+    wa,
+    doctorNotifier,
+    { doctorProfileRepository, templatesLive: true },
+  );
+
+  const summary = await service.runReminderSweep();
+
+  assert.deepEqual(calls.isRemindersEnabledForClinic, ["clinic-1"]);
+  assert.equal(calls.findDueForReminder.length, 0);
+  assert.equal(summary.remindersSent, 0);
+  assert.equal(calls.completeExpiredConfirmed.length, 1, "no-response timeout still runs");
 });
 
 // ─────────────────────────────────────────────────────────────

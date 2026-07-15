@@ -99,4 +99,21 @@ export class ClinicRepository extends BaseRepository {
 
     return all;
   }
+
+  async updateById(clinicId, { name, phone, address }) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .update({
+            name,
+            phone,
+            address,
+          })
+          .eq("id", clinicId)
+          .select("id, name, phone, address")
+          .single(),
+      "updateById",
+    );
+  }
 }

@@ -50,14 +50,15 @@ export class ReminderService {
    * @param {import("../repository/patient.repository.js").PatientRepository} patientRepository
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("./doctor-notification.service.js").DoctorNotificationService} doctorNotificationService
-   * @param {{ templatesLive?: boolean }} [opts]
+   * @param {{ templatesLive?: boolean; doctorProfileRepository?: import("../repository/doctor-profile.repository.js").DoctorProfileRepository|null }} [opts]
    */
-  constructor(clinicRepository, appointmentRepository, patientRepository, whatsappClient, doctorNotificationService, { templatesLive = false } = {}) {
+  constructor(clinicRepository, appointmentRepository, patientRepository, whatsappClient, doctorNotificationService, { templatesLive = false, doctorProfileRepository = null } = {}) {
     this._clinicRepo      = clinicRepository;
     this._appointmentRepo = appointmentRepository;
     this._patientRepo     = patientRepository;
     this._wa              = whatsappClient;
     this._doctorNotifier  = doctorNotificationService;
+    this._doctorProfileRepo = doctorProfileRepository;
     this._templatesLive   = templatesLive;
     this._log             = createLogger({ component: "ReminderService" });
   }
@@ -77,10 +78,15 @@ export class ReminderService {
     for (const clinic of clinics) {
       const log = this._log.child({ clinicId: clinic.id });
 
-      for (const kind of Object.values(REMINDER_KIND)) {
-        const { sent, failed } = await this._sweepClinicForKind(clinic, kind, nowIso, log);
-        summary.remindersSent += sent;
-        summary.remindersFailed += failed;
+      const remindersEnabled = await this._areRemindersEnabledForClinic(clinic.id, log);
+      if (remindersEnabled) {
+        for (const kind of Object.values(REMINDER_KIND)) {
+          const { sent, failed } = await this._sweepClinicForKind(clinic, kind, nowIso, log);
+          summary.remindersSent += sent;
+          summary.remindersFailed += failed;
+        }
+      } else {
+        log.info("Reminders disabled for clinic — skipping reminder send sweep");
       }
 
       try {
@@ -98,6 +104,22 @@ export class ReminderService {
 
     this._log.info("Reminder sweep finished", summary);
     return summary;
+  }
+
+  /**
+   * Defaults to enabled when no repository is wired (tests) or no profile row exists.
+   */
+  async _areRemindersEnabledForClinic(clinicId, log) {
+    if (!this._doctorProfileRepo) return true;
+
+    try {
+      return await this._doctorProfileRepo.isRemindersEnabledForClinic(clinicId);
+    } catch (err) {
+      log.error("Failed to read reminders_enabled — defaulting to enabled", {
+        error: err instanceof Error ? err.message : String(err),
+      });
+      return true;
+    }
   }
 
   /** @returns {Promise<{ sent: number; failed: number }>} */

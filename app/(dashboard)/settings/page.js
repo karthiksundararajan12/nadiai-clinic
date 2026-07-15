@@ -11,7 +11,10 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { useConsultationFeeSettings } from "@/hooks/use-consultation-fee-settings";
+import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
+import { useTheme } from "@/hooks/use-theme";
+import { LanguageToggle } from "@/components/scribe/language-toggle";
+import { formatPhoneForDisplay } from "@/features/booking/lib/phone.js";
 import {
   User,
   Building,
@@ -27,44 +30,107 @@ import {
 const CONSULTATION_FEE_MIN = 0;
 const CONSULTATION_FEE_MAX = 100_000;
 
-export default function SettingsPage() {
-  const [profile, setProfile] = useState({
-    name: "Dr. Ananya Mehta",
-    email: "dr.ananya@nadiai.com",
-    phone: "+91 98765 43210",
-    specialization: "Cardiologist",
-    license: "MCI-123456",
-    clinic: "Nadi Heart Care Clinic",
-    address: "123, MG Road, Bengaluru, Karnataka 560001",
-  });
+function profileInitials(fullName) {
+  const parts = String(fullName ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
-  const [notifications, setNotifications] = useState({
-    appointments: true,
-    email: false,
-    sms: true,
-    scribeComplete: true,
-    dailyDigest: false,
-  });
+export default function SettingsPage() {
   const {
     consultationFee,
-    loading: consultationFeeLoading,
-    error: consultationFeeLoadError,
+    clinic,
+    personalProfile,
+    notifications,
+    loading: profileSettingsLoading,
+    error: profileSettingsLoadError,
     saveConsultationFee,
-  } = useConsultationFeeSettings();
+    saveClinicSettings,
+    savePersonalProfile,
+    saveNotificationSettings,
+    preferences,
+    savePreferences,
+  } = useDoctorProfileSettings();
+  const { theme } = useTheme();
   const [feeInput, setFeeInput] = useState("");
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeError, setFeeError] = useState("");
   const [feeSuccess, setFeeSuccess] = useState("");
+  const [profileForm, setProfileForm] = useState({
+    fullName: "",
+    specialization: "",
+    email: "",
+    phone: "",
+    licenseNumber: "",
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileError, setProfileError] = useState("");
+  const [profileSuccess, setProfileSuccess] = useState("");
+  const [clinicForm, setClinicForm] = useState({
+    name: "",
+    phone: "",
+    address: "",
+    workingHoursStart: "09:00",
+    workingHoursEnd: "18:00",
+  });
+  const [clinicSaving, setClinicSaving] = useState(false);
+  const [clinicError, setClinicError] = useState("");
+  const [clinicSuccess, setClinicSuccess] = useState("");
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
+  const [remindersSaving, setRemindersSaving] = useState(false);
+  const [remindersError, setRemindersError] = useState("");
+  const [remindersSuccess, setRemindersSuccess] = useState("");
+  const [defaultScribeLanguage, setDefaultScribeLanguage] = useState("hinglish");
+  const [scribeLanguageSaving, setScribeLanguageSaving] = useState(false);
+  const [scribeLanguageError, setScribeLanguageError] = useState("");
+  const [scribeLanguageSuccess, setScribeLanguageSuccess] = useState("");
 
   useEffect(() => {
-    if (!consultationFeeLoading) {
+    if (!profileSettingsLoading) {
       setFeeInput(
         consultationFee === null || consultationFee === undefined
           ? ""
           : String(consultationFee),
       );
     }
-  }, [consultationFee, consultationFeeLoading]);
+  }, [consultationFee, profileSettingsLoading]);
+
+  useEffect(() => {
+    if (!profileSettingsLoading && personalProfile) {
+      setProfileForm({
+        fullName: personalProfile.fullName ?? "",
+        specialization: personalProfile.specialization ?? "",
+        email: personalProfile.email ?? "",
+        phone: personalProfile.phone ? formatPhoneForDisplay(personalProfile.phone) : "",
+        licenseNumber: personalProfile.licenseNumber ?? "",
+      });
+    }
+  }, [personalProfile, profileSettingsLoading]);
+
+  useEffect(() => {
+    if (!profileSettingsLoading && clinic) {
+      setClinicForm({
+        name: clinic.name ?? "",
+        phone: clinic.phone ? formatPhoneForDisplay(clinic.phone) : "",
+        address: clinic.address ?? "",
+        workingHoursStart: clinic.workingHoursStart ?? "09:00",
+        workingHoursEnd: clinic.workingHoursEnd ?? "18:00",
+      });
+    }
+  }, [clinic, profileSettingsLoading]);
+
+  useEffect(() => {
+    if (!profileSettingsLoading && notifications) {
+      setRemindersEnabled(notifications.remindersEnabled ?? true);
+    }
+  }, [notifications, profileSettingsLoading]);
+
+  useEffect(() => {
+    if (!profileSettingsLoading && preferences) {
+      setDefaultScribeLanguage(preferences.defaultScribeLanguage ?? "hinglish");
+    }
+  }, [preferences, profileSettingsLoading]);
 
   const handleSaveConsultationFee = async () => {
     setFeeError("");
@@ -92,6 +158,76 @@ export default function SettingsPage() {
       setFeeError(saveError.message);
     } finally {
       setFeeSaving(false);
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    setProfileError("");
+    setProfileSuccess("");
+
+    setProfileSaving(true);
+    try {
+      await savePersonalProfile(profileForm);
+      setProfileSuccess("Profile saved.");
+    } catch (saveError) {
+      setProfileError(saveError.message);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleDefaultScribeLanguageChange = async (language) => {
+    const previous = defaultScribeLanguage;
+    setScribeLanguageError("");
+    setScribeLanguageSuccess("");
+    setDefaultScribeLanguage(language);
+    setScribeLanguageSaving(true);
+
+    try {
+      await savePreferences({ defaultScribeLanguage: language });
+      setScribeLanguageSuccess("Default Scribe language saved.");
+    } catch (saveError) {
+      setDefaultScribeLanguage(previous);
+      setScribeLanguageError(saveError.message);
+    } finally {
+      setScribeLanguageSaving(false);
+    }
+  };
+
+  const handleRemindersToggle = async (enabled) => {
+    const previous = remindersEnabled;
+    setRemindersError("");
+    setRemindersSuccess("");
+    setRemindersEnabled(enabled);
+    setRemindersSaving(true);
+
+    try {
+      await saveNotificationSettings({ remindersEnabled: enabled });
+      setRemindersSuccess(
+        enabled
+          ? "Patient WhatsApp reminders enabled."
+          : "Patient WhatsApp reminders disabled. T-24h and T-2h reminders will not be sent.",
+      );
+    } catch (saveError) {
+      setRemindersEnabled(previous);
+      setRemindersError(saveError.message);
+    } finally {
+      setRemindersSaving(false);
+    }
+  };
+
+  const handleSaveClinicSettings = async () => {
+    setClinicError("");
+    setClinicSuccess("");
+
+    setClinicSaving(true);
+    try {
+      await saveClinicSettings(clinicForm);
+      setClinicSuccess("Clinic information saved.");
+    } catch (saveError) {
+      setClinicError(saveError.message);
+    } finally {
+      setClinicSaving(false);
     }
   };
 
@@ -130,80 +266,123 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {(profileSettingsLoadError || profileError) && (
+                    <p className="text-sm text-destructive">
+                      {profileError || profileSettingsLoadError?.message}
+                    </p>
+                  )}
+                  {profileSuccess && (
+                    <p className="text-sm text-emerald-700">{profileSuccess}</p>
+                  )}
                   <div className="flex items-center gap-4 mb-6">
                     <Avatar className="h-20 w-20">
-                      <AvatarFallback className="text-xl">AM</AvatarFallback>
+                      <AvatarFallback className="text-xl">
+                        {profileInitials(profileForm.fullName)}
+                      </AvatarFallback>
                     </Avatar>
                     <div>
-                      <Button variant="outline" size="sm" className="gap-1.5">
+                      <Button variant="outline" size="sm" className="gap-1.5" disabled>
                         <Camera className="h-3.5 w-3.5" />
                         Change Photo
                       </Button>
                       <p className="text-xs text-muted-foreground mt-1.5">
-                        JPG, PNG. Max 2MB.
+                        JPG, PNG. Max 2MB. Photo upload coming soon.
                       </p>
                     </div>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
-                      <Label>Full Name</Label>
+                      <Label htmlFor="profile-full-name">Full Name</Label>
                       <Input
-                        value={profile.name}
-                        onChange={(e) =>
-                          setProfile((p) => ({ ...p, name: e.target.value }))
-                        }
+                        id="profile-full-name"
+                        value={profileForm.fullName}
+                        disabled={profileSettingsLoading || profileSaving}
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({ ...prev, fullName: e.target.value }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Specialization</Label>
+                      <Label htmlFor="profile-specialization">Specialization</Label>
                       <Input
-                        value={profile.specialization}
-                        onChange={(e) =>
-                          setProfile((p) => ({
-                            ...p,
+                        id="profile-specialization"
+                        value={profileForm.specialization}
+                        disabled={profileSettingsLoading || profileSaving}
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({
+                            ...prev,
                             specialization: e.target.value,
-                          }))
-                        }
+                          }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Email</Label>
+                      <Label htmlFor="profile-email">Email</Label>
                       <Input
+                        id="profile-email"
                         type="email"
-                        value={profile.email}
-                        onChange={(e) =>
-                          setProfile((p) => ({ ...p, email: e.target.value }))
-                        }
+                        value={profileForm.email}
+                        disabled={profileSettingsLoading || profileSaving}
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({ ...prev, email: e.target.value }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Phone</Label>
+                      <Label htmlFor="profile-phone">Phone</Label>
                       <Input
-                        value={profile.phone}
-                        onChange={(e) =>
-                          setProfile((p) => ({ ...p, phone: e.target.value }))
-                        }
+                        id="profile-phone"
+                        value={profileForm.phone}
+                        disabled={profileSettingsLoading || profileSaving}
+                        placeholder="+91 98765 43210"
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({ ...prev, phone: e.target.value }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
                       />
                     </div>
                     <div className="space-y-2 sm:col-span-2">
-                      <Label>Medical License Number</Label>
+                      <Label htmlFor="profile-license">Medical License Number</Label>
                       <Input
-                        value={profile.license}
-                        onChange={(e) =>
-                          setProfile((p) => ({
-                            ...p,
-                            license: e.target.value,
-                          }))
-                        }
+                        id="profile-license"
+                        value={profileForm.licenseNumber}
+                        disabled={profileSettingsLoading || profileSaving}
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            licenseNumber: e.target.value,
+                          }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
                       />
                     </div>
                   </div>
 
                   <div className="flex justify-end pt-2">
-                    <Button size="sm" className="gap-1.5">
+                    <Button
+                      size="sm"
+                      className="gap-1.5"
+                      onClick={handleSaveProfile}
+                      disabled={
+                        profileSettingsLoading ||
+                        profileSaving ||
+                        !profileForm.fullName.trim() ||
+                        !profileForm.specialization.trim() ||
+                        !profileForm.email.trim() ||
+                        !profileForm.phone.trim()
+                      }
+                    >
                       <Save className="h-3.5 w-3.5" />
-                      Save Changes
+                      {profileSaving ? "Saving…" : "Save Changes"}
                     </Button>
                   </div>
                 </CardContent>
@@ -266,9 +445,9 @@ export default function SettingsPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  {(consultationFeeLoadError || feeError) && (
+                  {(profileSettingsLoadError || feeError) && (
                     <p className="text-sm text-destructive">
-                      {feeError || consultationFeeLoadError.message}
+                      {feeError || profileSettingsLoadError.message}
                     </p>
                   )}
                   {feeSuccess && (
@@ -287,7 +466,7 @@ export default function SettingsPage() {
                         inputMode="numeric"
                         placeholder="e.g. 500"
                         value={feeInput}
-                        disabled={consultationFeeLoading || feeSaving}
+                        disabled={profileSettingsLoading || feeSaving}
                         className="pl-9"
                         onChange={(e) => {
                           setFeeInput(e.target.value);
@@ -305,7 +484,7 @@ export default function SettingsPage() {
                       size="sm"
                       className="gap-1.5"
                       onClick={handleSaveConsultationFee}
-                      disabled={consultationFeeLoading || feeSaving || feeInput === ""}
+                      disabled={profileSettingsLoading || feeSaving || feeInput === ""}
                     >
                       <Save className="h-3.5 w-3.5" />
                       {feeSaving ? "Saving…" : "Save Fee"}
@@ -322,27 +501,53 @@ export default function SettingsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {(profileSettingsLoadError || clinicError) && (
+                  <p className="text-sm text-destructive">
+                    {clinicError || profileSettingsLoadError?.message}
+                  </p>
+                )}
+                {clinicSuccess && (
+                  <p className="text-sm text-emerald-700">{clinicSuccess}</p>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Clinic Name</Label>
+                    <Label htmlFor="clinic-name">Clinic Name</Label>
                     <Input
-                      value={profile.clinic}
-                      onChange={(e) =>
-                        setProfile((p) => ({ ...p, clinic: e.target.value }))
-                      }
+                      id="clinic-name"
+                      value={clinicForm.name}
+                      disabled={profileSettingsLoading || clinicSaving}
+                      onChange={(e) => {
+                        setClinicForm((prev) => ({ ...prev, name: e.target.value }));
+                        setClinicSuccess("");
+                        setClinicError("");
+                      }}
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label>Phone</Label>
-                    <Input value="+91 80 4567 8901" />
+                    <Label htmlFor="clinic-phone">Phone</Label>
+                    <Input
+                      id="clinic-phone"
+                      value={clinicForm.phone}
+                      disabled={profileSettingsLoading || clinicSaving}
+                      placeholder="+91 98765 43210"
+                      onChange={(e) => {
+                        setClinicForm((prev) => ({ ...prev, phone: e.target.value }));
+                        setClinicSuccess("");
+                        setClinicError("");
+                      }}
+                    />
                   </div>
                   <div className="space-y-2 sm:col-span-2">
-                    <Label>Address</Label>
+                    <Label htmlFor="clinic-address">Address</Label>
                     <Input
-                      value={profile.address}
-                      onChange={(e) =>
-                        setProfile((p) => ({ ...p, address: e.target.value }))
-                      }
+                      id="clinic-address"
+                      value={clinicForm.address}
+                      disabled={profileSettingsLoading || clinicSaving}
+                      onChange={(e) => {
+                        setClinicForm((prev) => ({ ...prev, address: e.target.value }));
+                        setClinicSuccess("");
+                        setClinicError("");
+                      }}
                     />
                   </div>
                 </div>
@@ -350,48 +555,55 @@ export default function SettingsPage() {
                 <Separator />
 
                 <div>
-                  <h4 className="text-sm font-medium mb-3">Working Hours</h4>
-                  <div className="grid gap-3">
-                    {[
-                      { day: "Monday - Friday", start: "09:00", end: "18:00" },
-                      { day: "Saturday", start: "09:00", end: "14:00" },
-                      { day: "Sunday", start: "", end: "" },
-                    ].map((schedule, i) => (
-                      <div
-                        key={i}
-                        className="flex items-center gap-4 rounded-lg border border-border p-3"
-                      >
-                        <span className="w-40 text-sm font-medium">
-                          {schedule.day}
-                        </span>
-                        {schedule.start ? (
-                          <div className="flex items-center gap-2">
-                            <Input
-                              type="time"
-                              defaultValue={schedule.start}
-                              className="w-28"
-                            />
-                            <span className="text-sm text-muted-foreground">
-                              to
-                            </span>
-                            <Input
-                              type="time"
-                              defaultValue={schedule.end}
-                              className="w-28"
-                            />
-                          </div>
-                        ) : (
-                          <Badge variant="secondary">Closed</Badge>
-                        )}
-                      </div>
-                    ))}
+                  <h4 className="text-sm font-medium mb-1">Working Hours</h4>
+                  <p className="mb-3 text-xs text-muted-foreground">
+                    Used for WhatsApp booking slot generation. The same hours apply every day — per-day schedules (e.g. closed Sundays) are not supported yet.
+                  </p>
+                  <div className="flex items-center gap-4 rounded-lg border border-border p-3">
+                    <span className="w-40 text-sm font-medium">Daily</span>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="time"
+                        value={clinicForm.workingHoursStart}
+                        disabled={profileSettingsLoading || clinicSaving}
+                        className="w-28"
+                        onChange={(e) => {
+                          setClinicForm((prev) => ({
+                            ...prev,
+                            workingHoursStart: e.target.value,
+                          }));
+                          setClinicSuccess("");
+                          setClinicError("");
+                        }}
+                      />
+                      <span className="text-sm text-muted-foreground">to</span>
+                      <Input
+                        type="time"
+                        value={clinicForm.workingHoursEnd}
+                        disabled={profileSettingsLoading || clinicSaving}
+                        className="w-28"
+                        onChange={(e) => {
+                          setClinicForm((prev) => ({
+                            ...prev,
+                            workingHoursEnd: e.target.value,
+                          }));
+                          setClinicSuccess("");
+                          setClinicError("");
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
 
                 <div className="flex justify-end pt-2">
-                  <Button size="sm" className="gap-1.5">
+                  <Button
+                    size="sm"
+                    className="gap-1.5"
+                    onClick={handleSaveClinicSettings}
+                    disabled={profileSettingsLoading || clinicSaving || !clinicForm.name.trim()}
+                  >
                     <Save className="h-3.5 w-3.5" />
-                    Save Changes
+                    {clinicSaving ? "Saving…" : "Save Changes"}
                   </Button>
                 </div>
               </CardContent>
@@ -404,58 +616,50 @@ export default function SettingsPage() {
               <CardHeader>
                 <CardTitle>Notification Preferences</CardTitle>
                 <CardDescription>
-                  Choose how and when you want to be notified
+                  Control WhatsApp notifications for your clinic
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {[
-                  {
-                    key: "appointments",
-                    title: "Appointment Reminders",
-                    desc: "Get notified about upcoming appointments",
-                  },
-                  {
-                    key: "sms",
-                    title: "SMS Notifications",
-                    desc: "Receive important updates via SMS",
-                  },
-                  {
-                    key: "scribeComplete",
-                    title: "Scribe Completion",
-                    desc: "Notify when AI clinical notes are ready",
-                  },
-                  {
-                    key: "email",
-                    title: "Email Notifications",
-                    desc: "Receive daily email summaries",
-                  },
-                  {
-                    key: "dailyDigest",
-                    title: "Daily Digest",
-                    desc: "Morning summary of the day's schedule",
-                  },
-                ].map((item) => (
-                  <div key={item.key}>
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <p className="text-sm font-medium">{item.title}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.desc}
-                        </p>
-                      </div>
-                      <Switch
-                        checked={notifications[item.key]}
-                        onCheckedChange={(v) =>
-                          setNotifications((prev) => ({
-                            ...prev,
-                            [item.key]: v,
-                          }))
-                        }
-                      />
+                {(profileSettingsLoadError || remindersError) && (
+                  <p className="text-sm text-destructive">
+                    {remindersError || profileSettingsLoadError?.message}
+                  </p>
+                )}
+                {remindersSuccess && (
+                  <p className="text-sm text-emerald-700">{remindersSuccess}</p>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Appointment Reminders</p>
+                      <p className="text-xs text-muted-foreground">
+                        Send WhatsApp reminders to patients T-24h and T-2h before their visit
+                      </p>
                     </div>
-                    <Separator className="mt-4" />
+                    <Switch
+                      checked={remindersEnabled}
+                      disabled={profileSettingsLoading || remindersSaving}
+                      onCheckedChange={handleRemindersToggle}
+                    />
                   </div>
-                ))}
+                  <Separator className="mt-4" />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Scribe Completion</p>
+                      <p className="text-xs text-muted-foreground">
+                        Notify when AI clinical notes are ready
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="secondary">Coming soon</Badge>
+                      <Switch checked={false} disabled />
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -467,17 +671,29 @@ export default function SettingsPage() {
                   <CardTitle>Language & Region</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  {(profileSettingsLoadError || scribeLanguageError) && (
+                    <p className="text-sm text-destructive">
+                      {scribeLanguageError || profileSettingsLoadError?.message}
+                    </p>
+                  )}
+                  {scribeLanguageSuccess && (
+                    <p className="text-sm text-emerald-700">{scribeLanguageSuccess}</p>
+                  )}
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <Globe className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">Default Scribe Language</p>
                         <p className="text-xs text-muted-foreground">
-                          Language for voice transcription
+                          Pre-selected on the Scribe page — you can still change it per session
                         </p>
                       </div>
                     </div>
-                    <Badge variant="secondary">Hinglish</Badge>
+                    <LanguageToggle
+                      value={defaultScribeLanguage}
+                      disabled={profileSettingsLoading || scribeLanguageSaving}
+                      onChange={handleDefaultScribeLanguageChange}
+                    />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -507,34 +723,19 @@ export default function SettingsPage() {
                   <CardTitle>Appearance</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center justify-between">
+                  <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-3">
                       <Palette className="h-4 w-4 text-muted-foreground" />
                       <div>
                         <p className="text-sm font-medium">Theme</p>
                         <p className="text-xs text-muted-foreground">
-                          Select your preferred theme
+                          Use the sun/moon icon in the top bar to switch between light and dark mode
                         </p>
                       </div>
                     </div>
-                    <div className="flex gap-2">
-                      {[
-                        { label: "Light", active: true },
-                        { label: "Dark", active: false },
-                        { label: "System", active: false },
-                      ].map((theme) => (
-                        <button
-                          key={theme.label}
-                          className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
-                            theme.active
-                              ? "border-primary bg-primary/10 text-primary"
-                              : "border-border text-muted-foreground hover:bg-muted"
-                          }`}
-                        >
-                          {theme.label}
-                        </button>
-                      ))}
-                    </div>
+                    <Badge variant="secondary" className="capitalize shrink-0">
+                      {theme}
+                    </Badge>
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -544,7 +745,7 @@ export default function SettingsPage() {
                         Reduce spacing for more content
                       </p>
                     </div>
-                    <Switch />
+                    <Switch checked={false} disabled />
                   </div>
                   <Separator />
                   <div className="flex items-center justify-between">
@@ -554,7 +755,7 @@ export default function SettingsPage() {
                         Start with collapsed sidebar
                       </p>
                     </div>
-                    <Switch />
+                    <Switch checked={false} disabled />
                   </div>
                 </CardContent>
               </Card>

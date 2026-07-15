@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { DoctorProfileRepository, bookingLogger } from "@/features/booking";
+import {
+  ClinicRepository,
+  DoctorProfileRepository,
+  bookingLogger,
+} from "@/features/booking";
 import {
   DoctorProfileRequestError,
   DoctorProfileService,
@@ -28,7 +32,10 @@ function errorResponse(error) {
 
 async function resolveDoctorProfileService() {
   const supabase = getSupabaseAdminClient();
-  return new DoctorProfileService(new DoctorProfileRepository(supabase));
+  return new DoctorProfileService(
+    new DoctorProfileRepository(supabase),
+    new ClinicRepository(supabase),
+  );
 }
 
 export async function GET(request) {
@@ -39,7 +46,7 @@ export async function GET(request) {
     }
 
     const service = await resolveDoctorProfileService();
-    const result = await service.getConsultationFee(ctx.clinicId, ctx.actorId);
+    const result = await service.getSettings(ctx.clinicId, ctx.actorId);
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     return errorResponse(error);
@@ -55,12 +62,63 @@ export async function PATCH(request) {
 
     const body = await request.json().catch(() => ({}));
     const service = await resolveDoctorProfileService();
-    const result = await service.updateConsultationFee(
-      ctx.clinicId,
-      ctx.actorId,
-      body.consultationFee,
+
+    if (body.consultationFee !== undefined && body.clinic !== undefined) {
+      const [feeResult, clinicResult] = await Promise.all([
+        service.updateConsultationFee(ctx.clinicId, ctx.actorId, body.consultationFee),
+        service.updateClinicSettings(ctx.clinicId, ctx.actorId, body.clinic),
+      ]);
+      return NextResponse.json({ ...feeResult, ...clinicResult }, { status: 200 });
+    }
+
+    if (body.consultationFee !== undefined) {
+      const result = await service.updateConsultationFee(
+        ctx.clinicId,
+        ctx.actorId,
+        body.consultationFee,
+      );
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    if (body.clinic !== undefined) {
+      const result = await service.updateClinicSettings(
+        ctx.clinicId,
+        ctx.actorId,
+        body.clinic,
+      );
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    if (body.profile !== undefined) {
+      const result = await service.updatePersonalProfile(
+        ctx.clinicId,
+        ctx.actorId,
+        body.profile,
+      );
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    if (body.notifications !== undefined) {
+      const result = await service.updateNotificationSettings(
+        ctx.clinicId,
+        ctx.actorId,
+        body.notifications,
+      );
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    if (body.preferences !== undefined) {
+      const result = await service.updatePreferences(
+        ctx.clinicId,
+        ctx.actorId,
+        body.preferences,
+      );
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    throw new DoctorProfileRequestError(
+      "Request must include consultationFee, clinic, profile, notifications, and/or preferences",
     );
-    return NextResponse.json(result, { status: 200 });
   } catch (error) {
     return errorResponse(error);
   }

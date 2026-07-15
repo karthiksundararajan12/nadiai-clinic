@@ -3,6 +3,7 @@ import {
   SLOT_DEFAULT_CONSULTATION_DURATION_MINUTES,
   SLOT_TIMEZONE_OFFSET,
 } from "../booking/constants.js";
+import { PatientsService } from "../patients/patients.service.js";
 
 const CLINIC_TIME_ZONE = "Asia/Kolkata";
 const CLINIC_OFFSET_MS = 330 * 60 * 1000;
@@ -83,6 +84,10 @@ export class AppointmentsService {
     this._appointments = appointmentRepository;
     this._patients = patientRepository;
     this._doctors = doctorProfileRepository;
+    this._patientDirectory = new PatientsService(
+      patientRepository,
+      appointmentRepository,
+    );
   }
 
   async list(clinicId, scope = "all", now = new Date()) {
@@ -114,11 +119,7 @@ export class AppointmentsService {
   }
 
   async listPatientOptions(clinicId) {
-    const patients = await this._patients.findAllForClinic(clinicId);
-    return patients.map((patient) => ({
-      id: patient.id,
-      name: patient.full_name,
-    }));
+    return this._patientDirectory.listOptions(clinicId);
   }
 
   async getById(clinicId, appointmentId) {

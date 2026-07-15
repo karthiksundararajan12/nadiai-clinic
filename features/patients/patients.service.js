@@ -133,10 +133,17 @@ export class PatientsService {
   }
 
   async list(clinicId, now = new Date()) {
-    const [patients, appointments] = await Promise.all([
-      this._patients.findAllForClinic(clinicId),
-      this._appointments.findForClinic(clinicId, { ascending: false }),
-    ]);
+    const patients = await this._patients.findAllForClinic(clinicId);
+
+    let appointments = [];
+    try {
+      appointments = await this._appointments.findForClinic(clinicId, {
+        ascending: false,
+      });
+    } catch {
+      // Visit metadata is best-effort — patient rows must still load if the
+      // appointments query fails (e.g. transient DB/embed error).
+    }
 
     const visitIndex = buildVisitIndex(appointments, now.getTime());
     const formatted = patients.map((patient) => formatPatientRow(patient, visitIndex));
@@ -145,6 +152,31 @@ export class PatientsService {
       patients: formatted,
       stats: buildStats(patients, visitIndex),
     };
+  }
+
+  async search(clinicId, query, now = new Date()) {
+    const result = await this.list(clinicId, now);
+    const needle = String(query ?? "").trim().toLowerCase();
+    if (needle.length < 2) {
+      return { patients: [], stats: result.stats };
+    }
+
+    const normalizedNeedle = needle.replace(/\s+/g, "");
+    const patients = result.patients.filter((patient) => {
+      const name = patient.name.toLowerCase();
+      const phone = patient.phone.replace(/\s+/g, "").toLowerCase();
+      return name.includes(needle) || phone.includes(normalizedNeedle);
+    });
+
+    return { patients, stats: result.stats };
+  }
+
+  async listOptions(clinicId) {
+    const patients = await this._patients.findAllForClinic(clinicId);
+    return patients.map((patient) => ({
+      id: patient.id,
+      name: patient.full_name,
+    }));
   }
 
   async create(clinicId, input) {

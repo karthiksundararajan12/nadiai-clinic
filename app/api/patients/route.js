@@ -46,7 +46,12 @@ export async function GET(request) {
     }
 
     const service = await resolvePatientsService();
-    const result = await service.list(ctx.clinicId);
+    const params = new URL(request.url).searchParams;
+    const query = params.get("q");
+
+    const result = query
+      ? await service.search(ctx.clinicId, query)
+      : await service.list(ctx.clinicId);
     return NextResponse.json(result, { status: 200 });
   } catch (error) {
     return errorResponse(error);

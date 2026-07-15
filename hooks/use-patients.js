@@ -1,14 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-
-async function readResponse(response) {
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error ?? "Failed to load patients");
-  }
-  return payload;
-}
+import { fetchPatients, createPatient as createPatientRequest } from "@/features/patients/patients.client";
 
 const EMPTY_STATS = {
   totalPatients: 0,
@@ -26,9 +19,7 @@ export function usePatients() {
     setLoading(true);
     setError(null);
     try {
-      const payload = await readResponse(
-        await fetch("/api/patients", { cache: "no-store", signal }),
-      );
+      const payload = await fetchPatients({ signal });
       setPatients(payload.patients ?? []);
       setStats(payload.stats ?? EMPTY_STATS);
     } catch (loadError) {
@@ -51,13 +42,7 @@ export function usePatients() {
   const addPatient = useCallback(
     async (patientInput) => {
       setError(null);
-      const payload = await readResponse(
-        await fetch("/api/patients", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patientInput),
-        }),
-      );
+      const payload = await createPatientRequest(patientInput);
       await load();
       return payload.patient;
     },

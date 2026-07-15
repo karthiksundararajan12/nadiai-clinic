@@ -162,3 +162,35 @@ test("create rejects invalid phone numbers", async () => {
       /Indian mobile/.test(error.message),
   );
 });
+
+test("search returns patients matching name or phone", async () => {
+  const { service } = createService({
+    appointments: [
+      {
+        patient_id: "patient-1",
+        slot_start: "2026-07-01T09:00:00.000Z",
+        status: APPOINTMENT_STATUS.COMPLETED,
+      },
+    ],
+  });
+
+  const byName = await service.search("clinic-1", "karthik", NOW);
+  const byPhone = await service.search("clinic-1", "9840227132", NOW);
+  const miss = await service.search("clinic-1", "zzzz", NOW);
+
+  assert.equal(byName.patients.length, 1);
+  assert.equal(byName.patients[0].name, "Karthik Sundar");
+  assert.equal(byPhone.patients.length, 1);
+  assert.equal(miss.patients.length, 0);
+});
+
+test("listOptions returns id and name for appointment dropdowns", async () => {
+  const { service } = createService();
+
+  const options = await service.listOptions("clinic-1");
+
+  assert.deepEqual(options, [
+    { id: "patient-1", name: "Karthik Sundar" },
+    { id: "patient-2", name: "Asha Kumar" },
+  ]);
+});

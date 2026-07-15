@@ -1,48 +1,22 @@
 "use client";
 
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import {
+  createPatient as createPatientRequest,
+  fetchPatients,
+  toScribePatient,
+} from "@/features/patients/patients.client.js";
 
 export async function searchPatients(query) {
   const q = String(query ?? "").trim();
   if (q.length < 2) return [];
 
-  const supabase = getSupabaseBrowserClient();
-  const { data, error } = await supabase
-    .from("patients")
-    .select("id, name, age, gender, phone, last_visit, condition")
-    .or(`name.ilike.%${q}%,phone.ilike.%${q}%`)
-    .limit(8);
-
-  if (error) throw new Error(error.message);
-  return data ?? [];
+  const payload = await fetchPatients({ query: q });
+  return (payload.patients ?? []).map(toScribePatient);
 }
 
-export async function createPatient({ name, phone, age, gender }) {
-  const supabase = getSupabaseBrowserClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
-  const { data: doctor } = await supabase
-    .from("doctors")
-    .select("id")
-    .eq("user_id", user.id)
-    .single();
-
-  const { data, error } = await supabase
-    .from("patients")
-    .insert({
-      doctor_id: doctor?.id ?? user.id,
-      name: name.trim(),
-      phone: phone.trim(),
-      age: Number(age) || null,
-      gender: gender ?? null,
-      status: "active",
-    })
-    .select("id, name, age, gender, phone, last_visit, condition")
-    .single();
-
-  if (error) throw new Error(error.message);
-  return data;
+export async function createPatient(input) {
+  const payload = await createPatientRequest(input);
+  return toScribePatient(payload.patient);
 }
 
 export async function attachPatientToSession(sessionId, patientId) {
@@ -52,6 +26,8 @@ export async function attachPatientToSession(sessionId, patientId) {
     body: JSON.stringify({ action: "update", patient_id: patientId }),
   });
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(payload?.error || `Failed to attach patient (${res.status})`);
+  if (!res.ok) {
+    throw new Error(payload?.error || `Failed to attach patient (${res.status})`);
+  }
   return payload;
 }

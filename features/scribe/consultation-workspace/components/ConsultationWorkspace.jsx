@@ -28,6 +28,12 @@ import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
 import { resolveSoapDisplayDate, resolveSoapDateLabel } from "../lib/format-datetime.js";
 import { usePrescriptionPanel } from "../../prescription-review/hooks/use-prescription-panel.js";
+import { ConsultationToolbar } from "./ConsultationToolbar.jsx";
+import {
+  canManualGenerateSOAP,
+  resolveSoapEmptyPresentation,
+  runSoapGenerationAttempt,
+} from "../lib/soap-generation-ui.js";
 
 const PRESCRIPTION_READY_STATUSES = new Set([
   "PRESCRIPTION_DRAFT_READY",
@@ -132,6 +138,7 @@ export function ConsultationWorkspace({
     transcript.generatingSOAP || soap.regenerating || resolvedSessionStatus === "GENERATING_SOAP";
 
   const [autoPipelineRunning, setAutoPipelineRunning] = useState(false);
+  const [soapGenerationError, setSoapGenerationError] = useState(null);
   const [exporting, setExporting] = useState(false);
   const [activeSegmentId, setActiveSegmentId] = useState(null);
   const [activeStatementId, setActiveStatementId] = useState(null);
@@ -181,6 +188,7 @@ export function ConsultationWorkspace({
     autoTranscribeAttemptedRef.current = false;
     parentTranscriptionRef.current = false;
     transcriptionCompleteHandledRef.current = false;
+    setSoapGenerationError(null);
     setApprovalLocked(false);
     prescription.reset();
     setFrozenQuality(null);
@@ -534,9 +542,48 @@ export function ConsultationWorkspace({
 
   const sessionComplete = soapApproved;
 
+  const hasTranscript = transcript.segments.length > 0;
+  const transcriptWorkspaceAvailable = isTranscriptWorkspaceAvailable(resolvedSessionStatus);
+
+  const handleGenerateSOAP = useCallback(async () => {
+    setSoapGenerationError(null);
+    setAutoPipelineRunning(true);
+    const result = await runSoapGenerationAttempt(async () => {
+      if (resolvedSessionStatus === "REVIEWING" && transcript.segments.length > 0) {
+        await transcript.completeReview();
+        await transcript.load();
+      }
+      await transcript.generateSOAP();
+      await statusPoll.refresh?.();
+    });
+
+    if (!result.ok) {
+      setSoapGenerationError(result.error);
+    } else {
+      setSoapGenerationError(null);
+      try {
+        await soap.load();
+      } catch {
+        /* SOAP review hook enables after status poll — load runs on next render */
+      }
+    }
+
+    setAutoPipelineRunning(false);
+    return result;
+  }, [
+    resolvedSessionStatus,
+    soap.load,
+    statusPoll.refresh,
+    transcript.completeReview,
+    transcript.generateSOAP,
+    transcript.load,
+    transcript.segments.length,
+  ]);
+
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
     setAutoPipelineRunning(false);
+    setSoapGenerationError(null);
   }, [sessionId]);
 
   useEffect(() => {
@@ -553,19 +600,24 @@ export function ConsultationWorkspace({
     autoPipelineAttemptedRef.current = true;
     setAutoPipelineRunning(true);
 
-    (async () => {
-      try {
+    void (async () => {
+      const result = await runSoapGenerationAttempt(async () => {
         if (shouldCompleteAndGenerate) {
           await transcript.completeReview();
           await transcript.load();
         }
         await transcript.generateSOAP();
+        await statusPoll.refresh?.();
         await soap.load();
-      } catch {
-        // Do not reset — avoids infinite auto-generate retry loop on API errors.
-      } finally {
-        setAutoPipelineRunning(false);
+      });
+
+      if (!result.ok) {
+        setSoapGenerationError(result.error);
+      } else {
+        setSoapGenerationError(null);
+        await soap.load();
       }
+      setAutoPipelineRunning(false);
     })();
   }, [
     autoGenerateNote,
@@ -581,6 +633,7 @@ export function ConsultationWorkspace({
     autoPipelineRunning,
     generatingSOAP,
     poorTranscription,
+    statusPoll.refresh,
   ]);
 
   const awaitingStatus = Boolean(sessionId) && !polledStatus && !transcript.session;
@@ -621,9 +674,52 @@ export function ConsultationWorkspace({
     activeSegmentId,
   ]);
 
-  const transcriptLoadError = waitingForTranscript ? null : transcript.error;
+  const noteGenerating =
+    !soapApproved &&
+    !soapGenerationError &&
+    (waitingForTranscript || autoPipelineRunning || generatingSOAP);
 
-  const noteGenerating = !soapApproved && (waitingForTranscript || autoPipelineRunning || generatingSOAP);
+  const soapEmptyPresentation = resolveSoapEmptyPresentation({
+    hasTranscript,
+    generating: noteGenerating,
+    error: soapGenerationError,
+  });
+
+  const canGenerateSOAP = canManualGenerateSOAP({
+    readOnly,
+    waitingForTranscript,
+    segmentCount: transcript.segments.length,
+    generating: noteGenerating,
+    hasSoap,
+    transcriptWorkspaceAvailable,
+    soapApproved,
+  });
+
+  const canCompleteReview =
+    !soapApproved &&
+    !readOnly &&
+    resolvedSessionStatus === "REVIEWING" &&
+    !waitingForTranscript;
+
+  const workspaceToolbar = !waitingForTranscript && !soapApproved ? (
+    <ConsultationToolbar
+      sessionStatus={resolvedSessionStatus}
+      transcriptDirty={transcript.hasChanges}
+      soapDirty={soap.hasChanges}
+      saving={transcript.saving || soap.saving}
+      autosaveStatus={transcript.autosaveStatus ?? soap.autosaveStatus ?? "idle"}
+      canCompleteReview={canCompleteReview}
+      canGenerateSOAP={canGenerateSOAP || Boolean(soapGenerationError)}
+      generatingSOAP={noteGenerating}
+      canApproveSOAP={canApproveSOAP}
+      soapApproved={soapApproved}
+      onSave={handleSaveDraft}
+      onCompleteReview={handleGenerateSOAP}
+      onGenerateSOAP={handleGenerateSOAP}
+      onApproveSOAP={handleApproveSOAP}
+      onRejectSOAP={handleOpenSoapReview}
+    />
+  ) : null;
 
   const saveStatus = transcript.saving || soap.saving
     ? "saving"
@@ -752,7 +848,9 @@ export function ConsultationWorkspace({
   }
 
   return (
-    <div className="h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col">
+      {workspaceToolbar}
+      <div className="min-h-0 flex-1">
       <ConsultationClinicalLayout
         sessionId={sessionId}
         sessionDate={soapDisplayDate}
@@ -844,15 +942,17 @@ export function ConsultationWorkspace({
             onRegenerate: handleRegenerateSOAP,
           },
           empty: {
-            generating:
-              soapApproved || approving || hasDraftContent
-                ? false
-                : noteGenerating || (hasSoap && soap.loading),
-            error: soap.error,
-            onRetry: soap.load,
+            generating: soapEmptyPresentation.variant === "generating",
+            error:
+              soapEmptyPresentation.variant === "error"
+                ? { message: soapEmptyPresentation.message }
+                : null,
+            hasTranscript,
+            onRetry: soapEmptyPresentation.showRetry ? handleGenerateSOAP : undefined,
           },
         }}
       />
+      </div>
     </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
 import {
   LayoutDashboard,
@@ -20,6 +20,10 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
+import {
+  confirmRecordingLeave,
+  shouldBlockNavigation,
+} from "@/features/scribe/recording/recording-guard.js";
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -31,9 +35,23 @@ const ICON_MAP = {
 
 export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
+  const router = useRouter();
   const { displayName, initials, specialization } = useUser();
 
+  const navigateIfAllowed = (href, event) => {
+    if (!shouldBlockNavigation(pathname, href)) return true;
+    event?.preventDefault();
+    if (confirmRecordingLeave()) {
+      router.push(href);
+      return true;
+    }
+    return false;
+  };
+
   const handleSignOut = async () => {
+    if (shouldBlockNavigation(pathname, "/login") && !confirmRecordingLeave()) {
+      return;
+    }
     const supabase = getSupabaseBrowserClient();
     await supabase.auth.signOut();
     window.location.href = "/login";
@@ -70,6 +88,9 @@ export function Sidebar({ collapsed, onToggle }) {
             const linkContent = (
               <Link
                 href={item.href}
+                onClick={(event) => {
+                  navigateIfAllowed(item.href, event);
+                }}
                 className={cn(
                   "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                   isActive

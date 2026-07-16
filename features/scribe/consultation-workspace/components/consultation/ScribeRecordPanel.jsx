@@ -77,6 +77,15 @@ export function ScribeRecordPanel({
 
   return (
     <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
+      {isLive && (
+        <div
+          className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900"
+          data-testid="recording-leave-warning"
+          role="status"
+        >
+          Recording in progress — don&apos;t close this tab
+        </div>
+      )}
       <div className="flex shrink-0 flex-col items-center gap-4 border-b border-gray-200 px-4 py-5">
         {showRecordingControls && isLive && (
           <AudioLevelMeter

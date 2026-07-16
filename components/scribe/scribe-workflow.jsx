@@ -20,6 +20,7 @@ import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import { SCRIBE_LANGUAGE } from "@/features/scribe/constants.js";
+import { setRecordingGuardActive } from "@/features/scribe/recording/recording-guard.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -137,6 +138,11 @@ export function ScribeWorkflow() {
 
   const isRecordingLive = recording.isRecording || recording.isPaused;
   const { level: audioLevel } = useAudioLevel(recording.analyserNode, isRecordingLive);
+
+  useEffect(() => {
+    setRecordingGuardActive(isRecordingLive);
+    return () => setRecordingGuardActive(false);
+  }, [isRecordingLive]);
   const audioStatsRef = useRef({ sum: 0, count: 0, peak: 0 });
 
   useEffect(() => {

@@ -84,23 +84,40 @@ export function SOAPEditor({
   );
 }
 
-export function SOAPEditorEmpty({ generating, error, onRetry }) {
+export function SOAPEditorEmpty({
+  generating,
+  error,
+  onRetry,
+  hasTranscript = false,
+  idleMessage = "Start a recording to generate a SOAP note.",
+  pendingMessage = "SOAP note will appear here after generation.",
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white p-8 text-center shadow-none">
+    <div
+      className="flex flex-col items-center justify-center gap-3 rounded-lg border border-gray-200 bg-white p-8 text-center shadow-none"
+      data-testid="soap-empty-panel"
+    >
       {error ? (
         <>
-          <p className="text-sm text-red-600">{error.message}</p>
+          <p className="text-sm text-red-600" data-testid="soap-generation-error">{error.message}</p>
           {onRetry && (
-            <button type="button" className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm" onClick={onRetry}>Retry</button>
+            <button
+              type="button"
+              className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm"
+              data-testid="soap-generation-retry"
+              onClick={onRetry}
+            >
+              Retry
+            </button>
           )}
         </>
       ) : generating ? (
         <>
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-gray-600">SOAP note will appear after transcription.</p>
+          <p className="text-sm text-gray-600">Generating SOAP note…</p>
         </>
       ) : (
-        <p className="text-sm text-gray-500">Start a recording to generate a SOAP note.</p>
+        <p className="text-sm text-gray-500">{hasTranscript ? pendingMessage : idleMessage}</p>
       )}
     </div>
   );

@@ -3,13 +3,13 @@ import { Card } from "@/components/ui/card";
 
 export function StatsCard({ title, value, change, changeType, icon: Icon, className }) {
   return (
-    <Card className={cn("p-5", className)}>
+    <Card className={cn("p-5 transition-shadow duration-150 hover:shadow-clinical", className)}>
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
-          <span className="text-sm font-medium text-muted-foreground">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {title}
           </span>
-          <span className="text-2xl font-bold tracking-tight text-foreground">
+          <span className="font-display text-2xl font-bold tracking-tight text-foreground">
             {value}
           </span>
           {change && (
@@ -32,7 +32,7 @@ export function StatsCard({ title, value, change, changeType, icon: Icon, classN
           )}
         </div>
         {Icon && (
-          <div className="rounded-lg bg-primary/10 p-2.5">
+          <div className="rounded-lg border border-primary/15 bg-primary/10 p-2.5">
             <Icon className="h-5 w-5 text-primary" />
           </div>
         )}

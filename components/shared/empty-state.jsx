@@ -9,11 +9,11 @@ export function EmptyState({ icon: Icon, title, description, action, className }
       )}
     >
       {Icon && (
-        <div className="mb-4 rounded-full bg-muted p-4">
+        <div className="mb-4 rounded-full border border-border bg-muted/50 p-4">
           <Icon className="h-8 w-8 text-muted-foreground" />
         </div>
       )}
-      <h3 className="text-lg font-semibold text-foreground">{title}</h3>
+      <h3 className="font-display text-lg font-semibold text-foreground">{title}</h3>
       {description && (
         <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
           {description}

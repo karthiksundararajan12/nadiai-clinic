@@ -77,9 +77,9 @@ function AppointmentList({ items, loading, onCancel, onReschedule }) {
         return (
           <div
             key={appointment.id}
-            className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
+            className="flex items-center gap-4 p-4 transition-colors duration-150 hover:bg-muted/60"
           >
-            <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl bg-primary/5 text-primary">
+            <div className="flex h-12 w-12 shrink-0 flex-col items-center justify-center rounded-xl border border-primary/15 bg-primary/10 font-display text-primary">
               <span className="text-xs font-semibold">
                 {clinicDate.toLocaleDateString("en-IN", { day: "2-digit" })}
               </span>
@@ -292,36 +292,36 @@ export default function AppointmentsPage() {
         </div>
 
         <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="p-4">
+          <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
+              <div className="rounded-lg border border-primary/15 bg-primary/10 p-2">
                 <CalendarDays className="h-4 w-4 text-primary" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{countLabel(todayApts.length)}</p>
-                <p className="text-xs text-muted-foreground">Today</p>
+                <p className="font-display text-2xl font-bold">{countLabel(todayApts.length)}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Today</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-accent/10 p-2">
-                <Clock className="h-4 w-4 text-accent" />
+              <div className="rounded-lg border border-warning/25 bg-warning/10 p-2">
+                <Clock className="h-4 w-4 text-warning" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{countLabel(upcomingApts.length)}</p>
-                <p className="text-xs text-muted-foreground">Upcoming</p>
+                <p className="font-display text-2xl font-bold">{countLabel(upcomingApts.length)}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Upcoming</p>
               </div>
             </div>
           </Card>
-          <Card className="p-4">
+          <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-success/10 p-2">
+              <div className="rounded-lg border border-success/25 bg-success/10 p-2">
                 <User className="h-4 w-4 text-success" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{countLabel(pastApts.length)}</p>
-                <p className="text-xs text-muted-foreground">Past</p>
+                <p className="font-display text-2xl font-bold">{countLabel(pastApts.length)}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Past</p>
               </div>
             </div>
           </Card>

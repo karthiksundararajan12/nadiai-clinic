@@ -19,10 +19,10 @@ export function RecentPatients({ patients = [], loading = false }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <CardTitle className="text-base">Recent Patients</CardTitle>
+        <CardTitle className="text-base font-display">Recent Patients</CardTitle>
         <Link
           href="/patients"
-          className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          className="flex items-center gap-1 text-xs font-medium text-primary transition-colors duration-150 hover:text-primary/80"
         >
           View all <ArrowRight className="h-3 w-3" />
         </Link>
@@ -44,7 +44,7 @@ export function RecentPatients({ patients = [], loading = false }) {
             {patients.map((patient) => (
               <div
                 key={patient.id}
-                className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
+                className="flex items-center gap-3 px-6 py-3 transition-colors duration-150 hover:bg-muted/60"
               >
                 <Avatar className="h-9 w-9">
                   <AvatarFallback className="text-xs">

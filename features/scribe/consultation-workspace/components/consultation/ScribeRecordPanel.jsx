@@ -7,6 +7,10 @@ import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { AudioLevelMeter } from "@/features/scribe/components/recording/AudioLevelMeter.jsx";
 import { ScribeConversationChat } from "./ScribeConversationChat.jsx";
 import { Button } from "@/components/ui/button";
+import {
+  RECORD_PANEL_CONTEXT,
+  resolveRecordPanelCopy,
+} from "../../lib/record-panel-session-context.js";
 
 export function ScribeRecordPanel({
   recordState = "idle",
@@ -33,6 +37,7 @@ export function ScribeRecordPanel({
   patientRequiredHint,
   languageToggle,
   footer,
+  sessionContext = RECORD_PANEL_CONTEXT.IDLE,
 }) {
   const [manualText, setManualText] = useState("");
 
@@ -49,19 +54,14 @@ export function ScribeRecordPanel({
 
   const { level, waveformData } = useAudioLevel(analyserNode, isLive && !manualMode);
 
-  const statusTitle = isProcessing
-    ? "Processing…"
-    : isRequesting
-      ? "Requesting microphone…"
-      : isPaused
-        ? "Paused"
-        : isRecording
-          ? "Recording"
-          : disabled
-            ? "Session in progress"
-            : manualMode
-              ? "Manual transcript"
-              : "Ready to record";
+  const panelCopy = resolveRecordPanelCopy(sessionContext, {
+    isProcessing,
+    isRequesting,
+    isPaused,
+    isRecording,
+  });
+  const statusTitle = manualMode ? "Manual transcript" : panelCopy.title;
+  const sessionHint = manualMode ? null : panelCopy.hint;
 
   const showRecordingControls = !manualMode;
   const canUseManualEntry = (isIdle || isRequesting) && !disabled && !manualSubmitting;
@@ -143,6 +143,9 @@ export function ScribeRecordPanel({
           <>
             <div className="text-center">
               <p className="text-sm font-medium text-gray-900">{statusTitle}</p>
+              {sessionHint && !isLive && !isProcessing && (
+                <p className="mt-1 max-w-[260px] text-xs text-gray-500">{sessionHint}</p>
+              )}
               {durationLabel && isLive && (
                 <p className="mt-0.5 font-mono text-xs tabular-nums text-gray-500">{durationLabel}</p>
               )}
@@ -186,9 +189,17 @@ export function ScribeRecordPanel({
                 </div>
               )}
 
-              {disabled && !isLive && !isProcessing && (
-                <div className="w-full rounded-xl border border-dashed border-gray-300 bg-white px-4 py-3 text-center text-xs text-gray-500">
-                  Finish or end the open consultation to record again
+              {disabled && !isLive && !isProcessing && sessionHint && (
+                <div
+                  className={cn(
+                    "w-full rounded-xl border border-dashed px-4 py-3 text-center text-xs",
+                    sessionContext === RECORD_PANEL_CONTEXT.APPROVED_REVIEW
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-gray-300 bg-white text-gray-500",
+                  )}
+                  data-testid="record-panel-session-hint"
+                >
+                  {sessionHint}
                 </div>
               )}
 

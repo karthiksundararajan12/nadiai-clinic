@@ -109,14 +109,14 @@ export default function DashboardPage() {
               loading={loading}
             />
 
-            <Card className="border-primary/20 bg-gradient-to-br from-primary/5 via-background to-accent/5">
+            <Card className="border border-primary/15 bg-gradient-to-br from-primary/5 via-card to-card">
               <CardContent className="p-5">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-lg bg-primary/10 p-2">
+                  <div className="rounded-lg border border-primary/15 bg-primary/10 p-2">
                     <Sparkles className="h-5 w-5 text-primary" />
                   </div>
                   <div className="flex-1">
-                    <h3 className="text-sm font-semibold text-foreground">
+                    <h3 className="font-display text-sm font-semibold text-foreground">
                       AI Scribe Ready
                     </h3>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -137,29 +137,29 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Quick Actions</CardTitle>
+                <CardTitle className="text-base font-display">Quick Actions</CardTitle>
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-2">
                 <Link href="/scribe">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-background p-4 text-center transition-colors hover:bg-muted">
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <Mic className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium">New Scribe</span>
                   </button>
                 </Link>
                 <Link href="/appointments">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-background p-4 text-center transition-colors hover:bg-muted">
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <CalendarDays className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium">Book Slot</span>
                   </button>
                 </Link>
                 <Link href="/patients">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-background p-4 text-center transition-colors hover:bg-muted">
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <Users className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium">Add Patient</span>
                   </button>
                 </Link>
                 <Link href="/settings">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-background p-4 text-center transition-colors hover:bg-muted">
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <Settings className="h-5 w-5 text-primary" />
                     <span className="text-xs font-medium">Settings</span>
                   </button>

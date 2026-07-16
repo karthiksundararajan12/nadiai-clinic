@@ -11,7 +11,7 @@ export function ActivityChart({ activity = [], loading = false }) {
   return (
     <Card>
       <CardHeader className="pb-4">
-        <CardTitle className="text-base">Weekly Activity</CardTitle>
+        <CardTitle className="text-base font-display">Weekly Activity</CardTitle>
       </CardHeader>
       <CardContent>
         {loading ? (
@@ -40,8 +40,8 @@ export function ActivityChart({ activity = [], loading = false }) {
                     </span>
                     <div className="w-full max-w-[40px] relative">
                       <div
-                        className={`w-full rounded-md transition-all duration-500 ${
-                          day.isToday ? "bg-primary" : "bg-primary/20"
+                        className={`w-full rounded-md transition-all duration-300 ${
+                          day.isToday ? "bg-primary" : "bg-primary/15"
                         }`}
                         style={{ height: `${height}px` }}
                       />

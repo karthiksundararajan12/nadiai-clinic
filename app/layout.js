@@ -1,8 +1,14 @@
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Source_Sans_3, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  variable: "--font-inter",
+const sourceSans = Source_Sans_3({
+  variable: "--font-source-sans",
+  subsets: ["latin"],
+  display: "swap",
+});
+
+const plusJakarta = Plus_Jakarta_Sans({
+  variable: "--font-plus-jakarta",
   subsets: ["latin"],
   display: "swap",
 });
@@ -21,7 +27,10 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${inter.variable} ${jetbrainsMono.variable} h-full`}>
+    <html
+      lang="en"
+      className={`${sourceSans.variable} ${plusJakarta.variable} ${jetbrainsMono.variable} h-full`}
+    >
       <body className="min-h-full bg-background font-sans antialiased">
         {children}
       </body>

@@ -21,6 +21,7 @@ import { logSessionEvent } from "@/features/scribe/consultation-workspace/servic
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import { SCRIBE_LANGUAGE } from "@/features/scribe/constants.js";
 import { setRecordingGuardActive } from "@/features/scribe/recording/recording-guard.js";
+import { resolveRecordPanelContext } from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -329,6 +330,22 @@ export function ScribeWorkflow() {
     recording.isRecording,
   ]);
 
+  const recordPanelSessionContext = useMemo(
+    () =>
+      resolveRecordPanelContext({
+        hasOpenSession: Boolean(activeSessionId),
+        viewFromHistory,
+        sessionComplete: workspaceState.sessionComplete,
+        sessionStatus: workspaceState.status,
+      }),
+    [
+      activeSessionId,
+      viewFromHistory,
+      workspaceState.sessionComplete,
+      workspaceState.status,
+    ],
+  );
+
   const goLive = useCallback(() => {
     setActiveSessionId(null);
     setViewFromHistory(false);
@@ -541,6 +558,7 @@ export function ScribeWorkflow() {
         patientRequiredHint="Select or create a patient to begin."
         languageToggle={languageToggle}
         footer={recordPanelFooter}
+        sessionContext={recordPanelSessionContext}
       />
 
       <main className="min-h-0 min-w-0 w-full md:w-[60%]">

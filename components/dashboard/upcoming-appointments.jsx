@@ -10,10 +10,10 @@ export function UpcomingAppointments({ appointments = [], loading = false }) {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <CardTitle className="text-base">Today&apos;s Appointments</CardTitle>
+        <CardTitle className="text-base font-display">Today&apos;s Appointments</CardTitle>
         <Link
           href="/appointments"
-          className="flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+          className="flex items-center gap-1 text-xs font-medium text-primary transition-colors duration-150 hover:text-primary/80"
         >
           View all <ArrowRight className="h-3 w-3" />
         </Link>
@@ -35,9 +35,9 @@ export function UpcomingAppointments({ appointments = [], loading = false }) {
             {appointments.map((apt) => (
               <div
                 key={apt.id}
-                className="flex items-center gap-3 px-6 py-3 transition-colors hover:bg-muted/50"
+                className="flex items-center gap-3 px-6 py-3 transition-colors duration-150 hover:bg-muted/60"
               >
-                <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg bg-primary/5 text-primary">
+                <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-primary">
                   <Clock className="h-4 w-4" />
                 </div>
                 <div className="flex-1 min-w-0">

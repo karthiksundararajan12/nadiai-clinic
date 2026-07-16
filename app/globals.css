@@ -28,6 +28,8 @@
   --popover-foreground: oklch(0.24 0.025 250);
 
   --primary: oklch(0.36 0.055 215);
+  --clinical: var(--primary);
+  --clinical-foreground: oklch(0.98 0.005 215);
   --primary-hover: oklch(0.44 0.055 215);
   --primary-active: oklch(0.40 0.055 215);
   --primary-foreground: oklch(0.98 0.005 215);
@@ -84,6 +86,8 @@
   --popover-foreground: oklch(0.93 0.008 90);
 
   --primary: oklch(0.55 0.07 215);
+  --clinical: var(--primary);
+  --clinical-foreground: oklch(0.98 0.005 215);
   --primary-hover: oklch(0.62 0.07 215);
   --primary-active: oklch(0.58 0.07 215);
   --primary-foreground: oklch(0.16 0.02 215);
@@ -131,6 +135,8 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-clinical: var(--clinical);
+  --color-clinical-foreground: var(--clinical-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
   --color-primary-foreground: var(--primary-foreground);

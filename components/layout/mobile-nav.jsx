@@ -32,8 +32,8 @@ export function MobileNav({ open, onClose }) {
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="fixed inset-0 bg-black/50 glass" onClick={onClose} />
       <div className="fixed inset-y-0 left-0 w-[280px] bg-white text-gray-900 shadow-xl animate-in slide-in-from-left dark:bg-gray-950 dark:text-gray-100">
-        <div className="flex h-[120px] items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
-          <BrandLogo size="md" priority />
+        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
+          <BrandLogo size="md" />
           <button
             onClick={onClose}
             className="rounded-md p-1 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-100"

@@ -66,14 +66,13 @@ export function Sidebar({ collapsed, onToggle }) {
     >
       <div
         className={cn(
-          "flex items-center justify-center border-b border-gray-200 dark:border-gray-800",
-          collapsed ? "h-20 px-2" : "h-[120px] px-3 py-3"
+          "flex items-center border-b border-gray-200 px-3 dark:border-gray-800",
+          collapsed ? "h-14" : "h-14"
         )}
       >
         <BrandLogo
-          size={collapsed ? "md" : "lg"}
+          size={collapsed ? "sm" : "md"}
           showText={!collapsed}
-          priority
         />
       </div>
 
@@ -178,7 +177,7 @@ export function Sidebar({ collapsed, onToggle }) {
 
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-20 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        className="absolute -right-3 top-14 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-100"
       >
         {collapsed ? (
           <ChevronRight className="h-3 w-3" />

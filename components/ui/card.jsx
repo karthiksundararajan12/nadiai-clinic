@@ -5,7 +5,7 @@ function Card({ className, ...props }) {
     <div
       data-slot="card"
       className={cn(
-        "rounded-xl border border-border/80 bg-card text-card-foreground shadow-clinical",
+        "rounded-xl border border-border bg-card text-card-foreground shadow-clinical",
         className
       )}
       {...props}
@@ -27,7 +27,7 @@ function CardTitle({ className, ...props }) {
   return (
     <h3
       data-slot="card-title"
-      className={cn("text-lg font-semibold leading-none tracking-tight font-display", className)}
+      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
       {...props}
     />
   );

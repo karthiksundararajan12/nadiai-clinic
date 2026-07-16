@@ -1,4 +1,4 @@
-import { Source_Sans_3, Plus_Jakarta_Sans, JetBrains_Mono } from "next/font/google";
+import { Source_Sans_3, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
 const sourceSans = Source_Sans_3({
@@ -7,9 +7,10 @@ const sourceSans = Source_Sans_3({
   display: "swap",
 });
 
-const plusJakarta = Plus_Jakarta_Sans({
-  variable: "--font-plus-jakarta",
+const ibmPlexSans = IBM_Plex_Sans({
+  variable: "--font-ibm-plex",
   subsets: ["latin"],
+  weight: ["500", "600"],
   display: "swap",
 });
 
@@ -29,7 +30,7 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${sourceSans.variable} ${plusJakarta.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${sourceSans.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full bg-background font-sans antialiased">
         {children}

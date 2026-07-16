@@ -27,7 +27,7 @@ export function Header({ title, subtitle, onMenuClick }) {
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border/80 bg-background/90 px-6 glass">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background/90 px-6 glass">
       <div className="flex items-center gap-4">
         <button
           onClick={onMenuClick}

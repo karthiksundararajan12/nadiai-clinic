@@ -9,7 +9,7 @@ export function StatsCard({ title, value, change, changeType, icon: Icon, classN
           <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             {title}
           </span>
-          <span className="font-display text-2xl font-bold tracking-tight text-foreground">
+          <span className="text-2xl font-semibold tracking-tight text-foreground">
             {value}
           </span>
           {change && (

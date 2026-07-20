@@ -79,7 +79,11 @@ import {
   formatSlotLabel,
   parseSlotRowId,
 } from "../lib/slot-engine.js";
-import { buildSlotListPage, buildOfferedSlotRows } from "../lib/slot-list.js";
+import {
+  buildSlotListPage,
+  buildOfferedSlotRows,
+  matchOfferedSlotByReplyId,
+} from "../lib/slot-list.js";
 import { resolveConsultationFee } from "../lib/consultation-fee.js";
 import { DatabaseError } from "../errors.js";
 import { createLogger } from "../logger.js";
@@ -291,9 +295,35 @@ export class SlotSelectionService {
       });
     }
 
-    const chosenIso = replyId ? parseSlotRowId(replyId) : null;
     const offered = row.context?.offeredSlots ?? [];
-    const matched = chosenIso ? offered.find((s) => s.slotStart === chosenIso) : null;
+    // Match using the same row-id encoding slot-list.js puts on WhatsApp rows
+    // (exact id equality), not a parallel "raw ISO in, raw ISO out" path that
+    // can drift from what was actually sent in the list payload.
+    let matched = matchOfferedSlotByReplyId(offered, replyId);
+
+    // Pagination only keeps the *current page* in offeredSlots. A tap on an
+    // earlier page's list message still carries a valid booking_slot:<iso>
+    // id — resolve it against live availability so we don't falsely reject.
+    if (!matched) {
+      const chosenIso = replyId ? parseSlotRowId(replyId) : null;
+      if (chosenIso) {
+        const doctorForLookup = await this._doctorRepo.findPrimaryByClinicId(clinic.id);
+        if (doctorForLookup) {
+          const available = await this._computeAvailableSlots(clinic, doctorForLookup);
+          const found = available.find((s) => s.slotStart.toISOString() === chosenIso);
+          if (found) {
+            matched = {
+              slotStart: found.slotStart.toISOString(),
+              slotEnd: found.slotEnd.toISOString(),
+            };
+            log.info("Accepted slot tap from a prior list page", {
+              contactPhone: message.contactPhone,
+              chosenIso,
+            });
+          }
+        }
+      }
+    }
 
     if (!matched) {
       await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
@@ -305,7 +335,10 @@ export class SlotSelectionService {
         context: this._touch(row.context, message.waMessageId),
         last_message_at: new Date().toISOString(),
       });
-      log.info("Re-prompted slot selection after unrecognized reply", { contactPhone: message.contactPhone });
+      log.info("Re-prompted slot selection after unrecognized reply", {
+        contactPhone: message.contactPhone,
+        replyId,
+      });
       return { handled: true, action: "SELECTION_REPROMPTED", currentState: CONVERSATION_STATE.SLOT_SELECTION };
     }
 

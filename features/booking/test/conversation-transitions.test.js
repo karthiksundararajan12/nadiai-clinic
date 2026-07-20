@@ -41,3 +41,17 @@ test("assertValidConversationTransition does not throw for a valid transition", 
     assertValidConversationTransition(CONVERSATION_STATE.START, CONVERSATION_STATE.COLLECTING_PATIENT),
   );
 });
+
+test("SLOT_SELECTION -> START is valid (global reset keywords)", () => {
+  assert.equal(
+    canTransitionConversation(CONVERSATION_STATE.SLOT_SELECTION, CONVERSATION_STATE.START),
+    true,
+  );
+});
+
+test("CONFIRMED -> START is valid (conversation reset only, not appointment cancel)", () => {
+  assert.equal(
+    canTransitionConversation(CONVERSATION_STATE.CONFIRMED, CONVERSATION_STATE.START),
+    true,
+  );
+});

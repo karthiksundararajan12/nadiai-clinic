@@ -15,7 +15,43 @@ import {
   SLOT_SELECTION_COPY,
   WHATSAPP_CONFIG,
 } from "../constants.js";
-import { formatSlotLabel, slotRowId } from "./slot-engine.js";
+import { formatSlotLabel, parseSlotRowId, slotRowId } from "./slot-engine.js";
+
+/**
+ * Row id for a persisted offered slot — must match what buildSlotListPage /
+ * buildOfferedSlotRows put in the WhatsApp list payload.
+ *
+ * @param {{ slotStart: string|Date }} slot
+ * @returns {string}
+ */
+export function offeredSlotRowId(slot) {
+  return slotRowId(slot.slotStart instanceof Date ? slot.slotStart : new Date(slot.slotStart));
+}
+
+/**
+ * Resolve a WhatsApp list_reply id to one of the currently offered slots.
+ * Uses the exact same row-id encoding as the list builder (not a parallel
+ * ISO-string convention) so pagination / re-prompt paths cannot drift.
+ *
+ * @param {Array<{ slotStart: string; slotEnd: string }>|null|undefined} offeredSlots
+ * @param {string|null|undefined} replyId
+ * @returns {{ slotStart: string; slotEnd: string }|null}
+ */
+export function matchOfferedSlotByReplyId(offeredSlots, replyId) {
+  if (!replyId || replyId === SLOT_LIST_MORE_ROW_ID) return null;
+  const offered = offeredSlots ?? [];
+
+  const byExactRowId = offered.find((s) => offeredSlotRowId(s) === replyId);
+  if (byExactRowId) return byExactRowId;
+
+  // Defensive: accept a parseable booking_slot:<iso> even if string form
+  // differs slightly (e.g. missing milliseconds) from the stored ISO.
+  const chosenIso = parseSlotRowId(replyId);
+  if (!chosenIso) return null;
+  const chosenMs = new Date(chosenIso).getTime();
+  if (Number.isNaN(chosenMs)) return null;
+  return offered.find((s) => new Date(s.slotStart).getTime() === chosenMs) ?? null;
+}
 
 /**
  * @param {{ slotStart: Date; slotEnd: Date }[]} candidates - open slots, earliest first
@@ -36,7 +72,7 @@ export function buildSlotListPage(candidates, offset = 0) {
   const pageSlots = remaining.slice(0, pageSize);
 
   const rows = pageSlots.map((slot) => ({
-    id: slotRowId(slot.slotStart),
+    id: offeredSlotRowId(slot),
     title: formatSlotLabel(slot.slotStart),
   }));
 
@@ -65,7 +101,7 @@ export function buildSlotListPage(candidates, offset = 0) {
  */
 export function buildOfferedSlotRows(offeredSlots, hasMore = false) {
   const rows = (offeredSlots ?? []).map((s) => ({
-    id: slotRowId(new Date(s.slotStart)),
+    id: offeredSlotRowId(s),
     title: formatSlotLabel(new Date(s.slotStart)),
   }));
   if (hasMore) {

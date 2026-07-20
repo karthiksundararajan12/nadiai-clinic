@@ -8,8 +8,11 @@
  * shared by every state:
  *   - Fresh/expired conversation detection (> 24h inactivity resets to START).
  *   - Idempotency on wa_message_id (Meta may redeliver the same webhook).
- *   - The global "cancel" keyword, which resets any in-flight conversation
- *     back to START regardless of which state it's currently in.
+ *   - Global reset keywords (RESET_KEYWORDS — "restart", "cancel", …) which
+ *     short-circuit normal state routing and reset conversation_state to
+ *     START. PAYMENT_PENDING gets an explicit confirmation step first so we
+ *     don't silently abandon a mid-flight Razorpay hold from chat alone
+ *     (the hold is left to expire; we never cancel/refund appointments here).
  *
  * Doctor HUMAN_HANDOFF notifications are shared across every state via
  * DoctorNotificationService (see that file) rather than owned here, since
@@ -37,8 +40,9 @@ import {
   START_MENU_COPY,
   START_MENU_RETRY_LIMIT,
   HANDOFF_REASON,
-  COLLECTING_PATIENT_COPY,
-  CANCEL_KEYWORD,
+  RESET_KEYWORDS,
+  RESET_CONFIRM_INTENT,
+  RESET_COPY,
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { isConversationExpired } from "../lib/conversation-expiry.js";
@@ -87,10 +91,13 @@ export class ConversationStateService {
       return { handled: true, action: "DUPLICATE_SKIPPED", currentState: row.current_state };
     }
 
-    // Global escape hatch: works from any state, including mid-flow states
-    // that don't otherwise support free text (e.g. AWAITING_SELECTION).
-    if (this._isCancelKeyword(message)) {
-      return this._handleCancel({ clinic, message, row, log });
+    // Global reset intercept — before any per-state routing. Also covers the
+    // PAYMENT_PENDING confirmation follow-up (yes/no buttons).
+    if (row.context?.awaitingResetConfirmation) {
+      return this._handleResetConfirmationReply({ clinic, message, row, log });
+    }
+    if (this._isResetKeyword(message)) {
+      return this._handleResetKeyword({ clinic, message, row, log });
     }
 
     if (row.current_state === CONVERSATION_STATE.START) {
@@ -115,20 +122,132 @@ export class ConversationStateService {
     };
   }
 
-  _isCancelKeyword(message) {
-    return message.type === "text" && String(message.text ?? "").trim().toLowerCase() === CANCEL_KEYWORD;
+  /**
+   * Exact phrase match against RESET_KEYWORDS after trim + lower-case.
+   * @param {import("../lib/webhook-parser.js").NormalizedInboundMessage} message
+   */
+  _isResetKeyword(message) {
+    if (message.type !== "text") return false;
+    const normalized = String(message.text ?? "").trim().toLowerCase();
+    return RESET_KEYWORDS.includes(normalized);
   }
 
-  async _handleCancel({ clinic, message, row, log }) {
-    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, COLLECTING_PATIENT_COPY.CANCEL_ACKNOWLEDGED);
+  async _handleResetKeyword({ clinic, message, row, log }) {
+    // Mid-payment: confirm before wiping conversation_state so the contact
+    // knows a Razorpay link may still be live. We still do NOT cancel the
+    // appointment or refund — the hold expires on its own.
+    if (row.current_state === CONVERSATION_STATE.PAYMENT_PENDING) {
+      return this._promptPaymentPendingResetConfirmation({ clinic, message, row, log });
+    }
+    return this._resetConversationToStart({ clinic, message, row, log });
+  }
+
+  async _promptPaymentPendingResetConfirmation({ clinic, message, row, log }) {
+    await this._wa.sendInteractiveButtons(clinic.whatsapp_phone_number_id, message.contactPhone, {
+      bodyText: RESET_COPY.PAYMENT_PENDING_CONFIRM,
+      buttons: [
+        { id: RESET_CONFIRM_INTENT.YES, title: RESET_COPY.PAYMENT_PENDING_YES_LABEL },
+        { id: RESET_CONFIRM_INTENT.NO, title: RESET_COPY.PAYMENT_PENDING_NO_LABEL },
+      ],
+    });
+    await this._repo.update(row.id, {
+      context: {
+        ...row.context,
+        last_wa_message_id: message.waMessageId,
+        awaitingResetConfirmation: true,
+      },
+      last_message_at: new Date().toISOString(),
+    });
+    log.info("Prompted for PAYMENT_PENDING reset confirmation", { contactPhone: message.contactPhone });
+    return {
+      handled: true,
+      action: "RESET_CONFIRMATION_PROMPTED",
+      currentState: CONVERSATION_STATE.PAYMENT_PENDING,
+    };
+  }
+
+  async _handleResetConfirmationReply({ clinic, message, row, log }) {
+    const replyId =
+      message.type === "button_reply" || message.type === "list_reply" ? message.replyId : null;
+
+    if (replyId === RESET_CONFIRM_INTENT.YES || this._isResetKeyword(message)) {
+      return this._resetConversationToStart({ clinic, message, row, log });
+    }
+
+    if (replyId === RESET_CONFIRM_INTENT.NO) {
+      await this._wa.sendText(
+        clinic.whatsapp_phone_number_id,
+        message.contactPhone,
+        RESET_COPY.PAYMENT_PENDING_KEEP,
+      );
+      const restContext = { ...(row.context ?? {}) };
+      delete restContext.awaitingResetConfirmation;
+      await this._repo.update(row.id, {
+        context: { ...restContext, last_wa_message_id: message.waMessageId },
+        last_message_at: new Date().toISOString(),
+      });
+      log.info("Contact kept PAYMENT_PENDING booking after reset prompt", {
+        contactPhone: message.contactPhone,
+      });
+      return {
+        handled: true,
+        action: "RESET_ABORTED",
+        currentState: CONVERSATION_STATE.PAYMENT_PENDING,
+      };
+    }
+
+    await this._wa.sendInteractiveButtons(clinic.whatsapp_phone_number_id, message.contactPhone, {
+      bodyText: RESET_COPY.PAYMENT_PENDING_REPROMPT,
+      buttons: [
+        { id: RESET_CONFIRM_INTENT.YES, title: RESET_COPY.PAYMENT_PENDING_YES_LABEL },
+        { id: RESET_CONFIRM_INTENT.NO, title: RESET_COPY.PAYMENT_PENDING_NO_LABEL },
+      ],
+    });
+    await this._repo.update(row.id, {
+      context: { ...row.context, last_wa_message_id: message.waMessageId, awaitingResetConfirmation: true },
+      last_message_at: new Date().toISOString(),
+    });
+    return {
+      handled: true,
+      action: "RESET_CONFIRMATION_REPROMPTED",
+      currentState: CONVERSATION_STATE.PAYMENT_PENDING,
+    };
+  }
+
+  /**
+   * Clears conversation_state back to START and re-sends the intent menu.
+   * Does not touch appointments / Razorpay — conversation flow only.
+   */
+  async _resetConversationToStart({ clinic, message, row, log }) {
+    if (row.current_state !== CONVERSATION_STATE.START) {
+      assertValidConversationTransition(row.current_state, CONVERSATION_STATE.START);
+    }
+
     const updated = await this._repo.update(row.id, {
       current_state: CONVERSATION_STATE.START,
       retry_count: 0,
       context: { last_wa_message_id: message.waMessageId },
       last_message_at: new Date().toISOString(),
     });
-    log.info("Conversation cancelled by contact — reset to START", { contactPhone: message.contactPhone });
-    return { handled: true, action: "CANCELLED", currentState: updated.current_state };
+
+    await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
+      bodyText: RESET_COPY.ACKNOWLEDGED,
+      buttonLabel: START_MENU_COPY.BUTTON_LABEL,
+      rows: START_MENU_ROWS,
+    });
+    await this._repo.update(updated.id, {
+      context: {
+        ...updated.context,
+        menu_sent_at: new Date().toISOString(),
+      },
+      last_message_at: new Date().toISOString(),
+    });
+
+    log.info("Conversation reset to START by contact keyword", {
+      contactPhone: message.contactPhone,
+      fromState: row.current_state,
+    });
+    return { handled: true, action: "RESET_TO_START", currentState: CONVERSATION_STATE.START };
   }
 
   // ─────────────────────────────────────────────────────────────

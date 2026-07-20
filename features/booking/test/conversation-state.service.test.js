@@ -2,7 +2,12 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { ConversationStateService } from "../services/conversation-state.service.js";
 import { DoctorNotificationService } from "../services/doctor-notification.service.js";
-import { CONVERSATION_STATE, START_MENU_INTENT } from "../constants.js";
+import {
+  CONVERSATION_STATE,
+  START_MENU_INTENT,
+  RESET_COPY,
+  RESET_CONFIRM_INTENT,
+} from "../constants.js";
 
 const CLINIC = { id: "clinic-1", name: "Test Clinic", whatsapp_phone_number_id: "PNID_1" };
 
@@ -381,7 +386,7 @@ test("inbound message while COLLECTING_PATIENT dispatches to PatientCollectionSe
   assert.equal(patientSvc.calls[0].method, "handleReply");
 });
 
-test("'cancel' resets an in-flight COLLECTING_PATIENT conversation back to START without touching PatientCollectionService", async () => {
+test("'restart' from COLLECTING_PATIENT resets to START, greets fresh, skips PatientCollectionService", async () => {
   const repo = createFakeConversationRepo();
   const wa = createFakeWhatsAppClient();
   const patientSvc = createFakePatientCollectionService();
@@ -396,24 +401,214 @@ test("'cancel' resets an in-flight COLLECTING_PATIENT conversation back to START
     contact_phone: "919876543210",
     current_state: CONVERSATION_STATE.COLLECTING_PATIENT,
     context: { last_wa_message_id: "wamid.0", collectingPatientStep: "AWAITING_NAME" },
+    retry_count: 2,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "  Restart  " }),
+  });
+
+  assert.equal(result.action, "RESET_TO_START");
+  assert.equal(result.currentState, CONVERSATION_STATE.START);
+  assert.equal(patientSvc.calls.length, 0);
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "list");
+  assert.equal(wa.calls[0].opts.bodyText, RESET_COPY.ACKNOWLEDGED);
+
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.current_state, CONVERSATION_STATE.START);
+  assert.equal(row.retry_count, 0);
+  assert.equal(row.context.last_wa_message_id, "wamid.1");
+  assert.ok(row.context.menu_sent_at);
+  assert.equal(row.context.collectingPatientStep, undefined);
+});
+
+test("'restart' from SLOT_SELECTION resets to START without touching SlotSelectionService", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const slotSvc = createFakeSlotSelectionService();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), slotSvc,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.SLOT_SELECTION,
+    context: {
+      last_wa_message_id: "wamid.0",
+      slotSelectionStep: "AWAITING_SELECTION",
+      offeredSlots: [{ slotStart: "2026-07-06T03:30:00.000Z", slotEnd: "2026-07-06T04:00:00.000Z" }],
+    },
     retry_count: 0,
     last_message_at: new Date().toISOString(),
   });
 
   const result = await service.processInboundMessage({
     clinic: CLINIC,
-    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "  Cancel  " }),
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "restart" }),
   });
 
-  assert.equal(result.action, "CANCELLED");
+  assert.equal(result.action, "RESET_TO_START");
   assert.equal(result.currentState, CONVERSATION_STATE.START);
-  assert.equal(patientSvc.calls.length, 0);
-  assert.equal(wa.calls.length, 1);
-  assert.equal(wa.calls[0].type, "text");
+  assert.equal(slotSvc.calls.length, 0);
+  assert.equal(wa.calls[0].type, "list");
+  assert.equal(wa.calls[0].opts.bodyText, RESET_COPY.ACKNOWLEDGED);
 
   const row = repo.rows.get("clinic-1:919876543210");
-  assert.equal(row.retry_count, 0);
-  assert.equal(row.context.last_wa_message_id, "wamid.1");
+  assert.equal(row.current_state, CONVERSATION_STATE.START);
+  assert.equal(row.context.offeredSlots, undefined);
+});
+
+test("reset keywords are case-insensitive and trim whitespace (e.g. '  Start Over  ')", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const patientSvc = createFakePatientCollectionService();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    patientSvc, createFakeSlotSelectionService(),
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.COLLECTING_PATIENT,
+    context: { last_wa_message_id: "wamid.0" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "  Start Over  " }),
+  });
+
+  assert.equal(result.action, "RESET_TO_START");
+  assert.equal(patientSvc.calls.length, 0);
+});
+
+test("'cancel' from PAYMENT_PENDING prompts confirmation instead of silently wiping state", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: {
+      last_wa_message_id: "wamid.0",
+      appointmentId: "appt-1",
+      paymentLinkId: "plink_1",
+    },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "cancel" }),
+  });
+
+  assert.equal(result.action, "RESET_CONFIRMATION_PROMPTED");
+  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "buttons");
+  assert.match(wa.calls[0].opts.bodyText, /payment in progress/i);
+
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(row.context.awaitingResetConfirmation, true);
+  assert.equal(row.context.appointmentId, "appt-1");
+});
+
+test("PAYMENT_PENDING reset confirmation YES clears conversation to START without cancelling payment context via appointment APIs", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: {
+      last_wa_message_id: "wamid.0",
+      appointmentId: "appt-1",
+      awaitingResetConfirmation: true,
+    },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "button_reply",
+      replyId: RESET_CONFIRM_INTENT.YES,
+    }),
+  });
+
+  assert.equal(result.action, "RESET_TO_START");
+  assert.equal(result.currentState, CONVERSATION_STATE.START);
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.current_state, CONVERSATION_STATE.START);
+  assert.equal(row.context.appointmentId, undefined);
+  assert.equal(row.context.awaitingResetConfirmation, undefined);
+  assert.equal(wa.calls[0].opts.bodyText, RESET_COPY.ACKNOWLEDGED);
+});
+
+test("PAYMENT_PENDING reset confirmation NO keeps PAYMENT_PENDING and clears the awaiting flag", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: {
+      last_wa_message_id: "wamid.0",
+      appointmentId: "appt-1",
+      awaitingResetConfirmation: true,
+    },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "button_reply",
+      replyId: RESET_CONFIRM_INTENT.NO,
+    }),
+  });
+
+  assert.equal(result.action, "RESET_ABORTED");
+  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(row.context.appointmentId, "appt-1");
+  assert.equal(row.context.awaitingResetConfirmation, undefined);
+  assert.match(wa.calls[0].body, /keep this booking open/i);
 });
 
 test("'Talk to clinic' is recognized but unimplemented — stays in START with a coming-soon reply", async () => {

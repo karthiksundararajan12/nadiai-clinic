@@ -50,17 +50,25 @@ export const VALID_CONVERSATION_TRANSITIONS = Object.freeze({
     CONVERSATION_STATE.PAYMENT_PENDING,
     CONVERSATION_STATE.CONFIRMED,
     CONVERSATION_STATE.HUMAN_HANDOFF,
+    // Global reset keywords ("restart" / "cancel" / …) — conversation
+    // flow only; does not cancel a booked appointment.
+    CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.PAYMENT_PENDING]: [
     CONVERSATION_STATE.CONFIRMED,
     CONVERSATION_STATE.HUMAN_HANDOFF,
     // Razorpay "payment.failed" releases the slot hold and resets the
     // contact back to START so they can restart booking — see
-    // PaymentWebhookService.
+    // PaymentWebhookService. Contact-initiated reset keywords also land
+    // here after an explicit confirmation step (dangling Razorpay hold
+    // is left to expire on its own — we do not cancel/refund from chat).
     CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.CONFIRMED]: [
     CONVERSATION_STATE.HUMAN_HANDOFF,
+    // Reset keywords clear conversation_state only — never the confirmed
+    // appointment itself.
+    CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.HUMAN_HANDOFF]: [
     CONVERSATION_STATE.START,
@@ -170,8 +178,52 @@ export const COLLECTING_PATIENT_COPY = Object.freeze({
   CANCEL_ACKNOWLEDGED: "Booking cancelled. Send us any message whenever you'd like to start over.",
 });
 
-/** Free-text keyword that resets the conversation back to START from any state. */
+/**
+ * Free-text keywords that globally reset conversation_state back to START
+ * (case-insensitive, trimmed). Matched as an exact phrase after normalize —
+ * "start over" is one keyword, not two tokens.
+ *
+ * Extend this list when adding synonyms; keep matching logic in
+ * ConversationStateService so every state shares one intercept.
+ */
+export const RESET_KEYWORDS = Object.freeze([
+  "restart",
+  "cancel",
+  "start over",
+  "reset",
+  "menu",
+]);
+
+/**
+ * @deprecated Use RESET_KEYWORDS. Kept so older call sites / docs that
+ * reference the single "cancel" keyword keep resolving.
+ */
 export const CANCEL_KEYWORD = "cancel";
+
+/** Interactive button ids for the PAYMENT_PENDING reset confirmation. */
+export const RESET_CONFIRM_INTENT = Object.freeze({
+  YES: "booking_reset_confirm_yes",
+  NO:  "booking_reset_confirm_no",
+});
+
+/**
+ * Copy for the global conversation reset / cancel intercept
+ * (ConversationStateService — not scoped to one booking sub-state).
+ */
+export const RESET_COPY = Object.freeze({
+  /** Body of the START menu re-sent after a successful reset. */
+  ACKNOWLEDGED: "No problem, let's start over. How can I help you today?",
+  PAYMENT_PENDING_CONFIRM:
+    "You have a payment in progress for this booking. Starting over here " +
+    "won't cancel that payment link — it may still work until it expires. " +
+    "Are you sure you want to start over?",
+  PAYMENT_PENDING_YES_LABEL: "Yes, start over",
+  PAYMENT_PENDING_NO_LABEL: "No, keep waiting",
+  PAYMENT_PENDING_KEEP:
+    "Okay — we'll keep this booking open. Complete the payment using the link we sent earlier, " +
+    "or reply \"restart\" if you still want to start over.",
+  PAYMENT_PENDING_REPROMPT: "Sorry, please choose one of the two options above.",
+});
 
 /**
  * Copy shared across multiple state handlers (not scoped to one
@@ -182,7 +234,7 @@ export const SHARED_BOOKING_COPY = Object.freeze({
    * COLLECTING_PATIENT / SLOT_SELECTION module docs for the edge-case rationale. */
   CONCURRENT_BOOKING_REJECTED:
     "You're already in the middle of booking an appointment{forName}. " +
-    "Please finish this booking first, or reply \"cancel\" to start over.",
+    "Please finish this booking first, or reply \"restart\" to start over.",
 });
 
 // ─────────────────────────────────────────────────────────────

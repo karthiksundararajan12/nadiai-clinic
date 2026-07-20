@@ -273,6 +273,113 @@ test("AWAITING_SELECTION: More times advances to the next page of slots", async 
   );
 });
 
+test("AWAITING_SELECTION: tapping first row of a paginated list is accepted (not SELECTION_REPROMPTED)", async () => {
+  const doctor = {
+    ...DOCTOR_PAID,
+    consultation_duration: 20,
+    working_hours_start: "09:00",
+    working_hours_end: "18:00",
+  };
+  const { service, repo, wa, appointmentRepo } = makeService({
+    doctor,
+    takenIsos: [],
+    row: buildRow({
+      context: {
+        selectedPatientId: "p1",
+        selectedPatientName: "Asha Kapoor",
+      },
+    }),
+  });
+
+  await service.enterState({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.enter" }),
+    row: repo.row,
+  });
+
+  assert.equal(repo.row.context.slotListHasMore, true);
+  assert.equal(wa.calls[0].opts.rows.at(-1).id, SLOT_LIST_MORE_ROW_ID);
+
+  // Simulate the webhook echoing the exact row id WhatsApp was sent.
+  const firstRowId = wa.calls[0].opts.rows[0].id;
+  const expectedSlotStart = repo.row.context.offeredSlots[0].slotStart;
+  assert.ok(firstRowId.startsWith("booking_slot:"));
+  assert.equal(firstRowId, slotRowId(new Date(expectedSlotStart)));
+  assert.notEqual(firstRowId, SLOT_LIST_MORE_ROW_ID);
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      type: "list_reply",
+      replyId: firstRowId,
+      replyTitle: wa.calls[0].opts.rows[0].title,
+      waMessageId: "wamid.pick-first",
+    }),
+    row: repo.row,
+  });
+
+  assert.notEqual(result.action, "SELECTION_REPROMPTED");
+  assert.equal(result.action, "TRANSITIONED_TO_PAYMENT_PENDING");
+  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(appointmentRepo.createCalls.length, 1);
+  assert.equal(appointmentRepo.createCalls[0].slot_start, expectedSlotStart);
+});
+
+test("AWAITING_SELECTION: tapping a prior page slot after More times is still accepted", async () => {
+  const doctor = {
+    ...DOCTOR_PAID,
+    consultation_duration: 20,
+    working_hours_start: "09:00",
+    working_hours_end: "18:00",
+  };
+  const { service, repo, wa, appointmentRepo } = makeService({
+    doctor,
+    takenIsos: [],
+    row: buildRow({
+      context: {
+        selectedPatientId: "p1",
+        selectedPatientName: "Asha Kapoor",
+      },
+    }),
+  });
+
+  await service.enterState({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.enter" }),
+    row: repo.row,
+  });
+  const firstPageFirstRowId = wa.calls[0].opts.rows[0].id;
+  const firstPageFirstSlotStart = repo.row.context.offeredSlots[0].slotStart;
+
+  await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      type: "list_reply",
+      replyId: SLOT_LIST_MORE_ROW_ID,
+      waMessageId: "wamid.more-1",
+    }),
+    row: repo.row,
+  });
+
+  // Context now holds page 2 — page 1's slot is no longer in offeredSlots.
+  assert.notEqual(repo.row.context.offeredSlots[0].slotStart, firstPageFirstSlotStart);
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      type: "list_reply",
+      replyId: firstPageFirstRowId,
+      waMessageId: "wamid.pick-stale-page",
+    }),
+    row: repo.row,
+  });
+
+  assert.notEqual(result.action, "SELECTION_REPROMPTED");
+  assert.equal(result.action, "TRANSITIONED_TO_PAYMENT_PENDING");
+  assert.equal(appointmentRepo.createCalls[0].slot_start, firstPageFirstSlotStart);
+});
+
 // ─────────────────────────────────────────────────────────────
 // AWAITING_SELECTION
 // ─────────────────────────────────────────────────────────────

@@ -144,11 +144,16 @@ export function slotRowId(slotStart) {
 
 /**
  * @param {string} rowId
- * @returns {string|null} The slot's ISO start timestamp, or null if `rowId`
- *   isn't a slot-selection row id (e.g. it's some other menu's row id).
+ * @returns {string|null} The slot's canonical ISO start timestamp
+ *   (`Date#toISOString()`), or null if `rowId` isn't a slot-selection row id
+ *   (e.g. it's some other menu's row id).
  */
 export function parseSlotRowId(rowId) {
   if (typeof rowId !== "string" || !rowId.startsWith(SLOT_ROW_ID_PREFIX)) return null;
-  const iso = rowId.slice(SLOT_ROW_ID_PREFIX.length);
-  return Number.isNaN(new Date(iso).getTime()) ? null : iso;
+  const raw = rowId.slice(SLOT_ROW_ID_PREFIX.length);
+  const ms = new Date(raw).getTime();
+  // Always return the canonical toISOString() form so callers can compare
+  // against offeredSlots (also stored via toISOString) without format drift
+  // like "...00Z" vs "...00.000Z".
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString();
 }

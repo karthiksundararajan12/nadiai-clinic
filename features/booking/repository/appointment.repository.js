@@ -303,6 +303,26 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * Lookup by appointment id alone (admin/cron force-send paths that already
+   * know the appointment UUID). Still excludes soft-deleted rows.
+   *
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async findById(appointmentId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from(this._table)
+          .select("*")
+          .eq("id", appointmentId)
+          .is("deleted_at", null)
+          .single(),
+      "findById",
+    );
+  }
+
+  /**
    * Confirms a PAYMENT_PENDING appointment after a verified Razorpay
    * "payment.captured" event. A single conditional UPDATE — never a
    * read-then-write — so a late/duplicate webhook can't confirm a hold

@@ -62,6 +62,7 @@ function createFakeRepos({
   claimReminderImpl = null,
   completeExpiredConfirmedResult = [],
   findByIdForClinicImpl = null,
+  findByIdImpl = null,
   cancelViaReminderReplyImpl = null,
   requestRescheduleViaReminderReplyImpl = null,
   remindersEnabledByClinic = true,
@@ -71,6 +72,7 @@ function createFakeRepos({
     claimReminder: [],
     completeExpiredConfirmed: [],
     findByIdForClinic: [],
+    findById: [],
     cancelViaReminderReply: [],
     requestRescheduleViaReminderReply: [],
     isRemindersEnabledForClinic: [],
@@ -79,6 +81,9 @@ function createFakeRepos({
   const clinicRepository = {
     async findAllWithWhatsAppConfigured() {
       return clinics;
+    },
+    async findById(clinicId) {
+      return clinics.find((c) => c.id === clinicId) ?? null;
     },
   };
 
@@ -100,6 +105,11 @@ function createFakeRepos({
     async findByIdForClinic(clinicId, appointmentId) {
       calls.findByIdForClinic.push({ clinicId, appointmentId });
       if (findByIdForClinicImpl) return findByIdForClinicImpl(clinicId, appointmentId);
+      return buildAppointment({ id: appointmentId });
+    },
+    async findById(appointmentId) {
+      calls.findById.push({ appointmentId });
+      if (findByIdImpl) return findByIdImpl(appointmentId);
       return buildAppointment({ id: appointmentId });
     },
     async cancelViaReminderReply(clinicId, appointmentId) {
@@ -471,4 +481,67 @@ test("handleQuickReply: a non-reminder replyId is rejected defensively instead o
   assert.equal(result.handled, false);
   assert.equal(result.action, "NOT_A_REMINDER_REPLY");
   assert.equal(wa.sendTextCalls.length, 0);
+});
+
+// ─────────────────────────────────────────────────────────────
+// sendReminderNow — force / on-demand (bypasses time window)
+// ─────────────────────────────────────────────────────────────
+
+test("sendReminderNow: claims and sends a CONFIRMED appointment outside the cron window", async () => {
+  const appointment = buildAppointment({
+    // Far outside any T-2h window — force path must still send.
+    slot_start: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+  });
+  const { calls, clinicRepository, appointmentRepository, patientRepository, doctorProfileRepository } = createFakeRepos({
+    findByIdImpl: () => appointment,
+    claimReminderImpl: () => appointment,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const service = new ReminderService(
+    clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier,
+    { templatesLive: true, doctorProfileRepository },
+  );
+
+  const result = await service.sendReminderNow({ appointmentId: appointment.id, kind: REMINDER_KIND.H2 });
+
+  assert.equal(result.sent, true);
+  assert.equal(result.skippedReason, null);
+  assert.equal(calls.findDueForReminder.length, 0, "force path must not use the due-window query");
+  assert.equal(calls.claimReminder.length, 1);
+  assert.equal(calls.claimReminder[0].column, REMINDER_SENT_AT_COLUMN[REMINDER_KIND.H2]);
+  assert.equal(wa.sendTemplateCalls.length, 1);
+  assert.equal(wa.sendTemplateCalls[0].opts.templateName, REMINDER_TEMPLATE_NAME[REMINDER_KIND.H2]);
+});
+
+test("sendReminderNow: skips non-CONFIRMED appointments without claiming", async () => {
+  const appointment = buildAppointment({ status: APPOINTMENT_STATUS.PAYMENT_PENDING });
+  const { calls, clinicRepository, appointmentRepository, patientRepository, doctorProfileRepository } = createFakeRepos({
+    findByIdImpl: () => appointment,
+  });
+  const wa = createFakeWhatsAppClient();
+  const service = new ReminderService(
+    clinicRepository, appointmentRepository, patientRepository, wa, createFakeDoctorNotifier(),
+    { templatesLive: true, doctorProfileRepository },
+  );
+
+  const result = await service.sendReminderNow({ appointmentId: appointment.id, kind: REMINDER_KIND.H2 });
+
+  assert.equal(result.sent, false);
+  assert.equal(result.skippedReason, "NOT_CONFIRMED");
+  assert.equal(calls.claimReminder.length, 0);
+  assert.equal(wa.sendTemplateCalls.length, 0);
+});
+
+test("sendReminderNow: rejects an unknown kind", async () => {
+  const { clinicRepository, appointmentRepository, patientRepository } = createFakeRepos();
+  const service = new ReminderService(
+    clinicRepository, appointmentRepository, patientRepository,
+    createFakeWhatsAppClient(), createFakeDoctorNotifier(),
+  );
+
+  await assert.rejects(
+    () => service.sendReminderNow({ appointmentId: "appt-1", kind: "1h" }),
+    (err) => err?.code === "INVALID_REMINDER_KIND",
+  );
 });

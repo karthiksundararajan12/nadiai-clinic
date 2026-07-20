@@ -41,6 +41,7 @@ import {
 } from "../constants.js";
 import { reminderReplyId, parseReminderReplyId } from "../lib/reminder-reply.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
+import { BookingError } from "../errors.js";
 import { createLogger } from "../logger.js";
 
 export class ReminderService {
@@ -104,6 +105,80 @@ export class ReminderService {
 
     this._log.info("Reminder sweep finished", summary);
     return summary;
+  }
+
+  /**
+   * On-demand / test trigger: claim + send one reminder for a specific
+   * CONFIRMED appointment, **bypassing the T-24h / T-2h time window**.
+   * Still uses the same atomic claimReminder path (at-most-once) and the
+   * same WHATSAPP_TEMPLATES_LIVE gate as the cron sweep.
+   *
+   * Intended for protected admin/cron callers (CRON_SECRET) only — never
+   * expose without auth.
+   *
+   * @param {{ appointmentId: string; kind: string }} params
+   *   `kind` is one of REMINDER_KIND (`"24h"` | `"2h"`).
+   * @returns {Promise<{ sent: boolean; skippedReason: string|null; appointmentId: string; kind: string }>}
+   */
+  async sendReminderNow({ appointmentId, kind }) {
+    if (!Object.values(REMINDER_KIND).includes(kind)) {
+      throw new BookingError(
+        `Invalid reminder kind "${kind}" — expected one of: ${Object.values(REMINDER_KIND).join(", ")}`,
+        "INVALID_REMINDER_KIND",
+        400,
+        { kind },
+      );
+    }
+    if (!appointmentId) {
+      throw new BookingError("appointmentId is required", "MISSING_APPOINTMENT_ID", 400);
+    }
+
+    const appointment = await this._appointmentRepo.findById(appointmentId);
+    if (!appointment) {
+      throw new BookingError(
+        `Appointment ${appointmentId} not found`,
+        "APPOINTMENT_NOT_FOUND",
+        404,
+        { appointmentId },
+      );
+    }
+
+    const clinic = await this._clinicRepo.findById(appointment.clinic_id);
+    if (!clinic?.whatsapp_phone_number_id) {
+      throw new BookingError(
+        `Clinic ${appointment.clinic_id} has no WhatsApp phone number configured`,
+        "CLINIC_WHATSAPP_NOT_CONFIGURED",
+        400,
+        { clinicId: appointment.clinic_id },
+      );
+    }
+
+    const log = this._log.child({ clinicId: clinic.id, appointmentId, kind, forceSend: true });
+
+    if (appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
+      log.info("Force reminder skipped — appointment is not CONFIRMED", { status: appointment.status });
+      return { sent: false, skippedReason: "NOT_CONFIRMED", appointmentId, kind };
+    }
+
+    const sentAtColumn = REMINDER_SENT_AT_COLUMN[kind];
+    if (appointment[sentAtColumn]) {
+      log.info("Force reminder skipped — already claimed/sent", { sentAtColumn });
+      return { sent: false, skippedReason: "ALREADY_SENT", appointmentId, kind };
+    }
+
+    const remindersEnabled = await this._areRemindersEnabledForClinic(clinic.id, log);
+    if (!remindersEnabled) {
+      log.info("Force reminder skipped — reminders disabled for clinic");
+      return { sent: false, skippedReason: "REMINDERS_DISABLED", appointmentId, kind };
+    }
+
+    const sent = await this._claimAndSend(clinic, appointment, kind, log);
+    return {
+      sent,
+      skippedReason: sent ? null : "CLAIM_OR_SEND_FAILED",
+      appointmentId,
+      kind,
+    };
   }
 
   /**

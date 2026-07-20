@@ -68,17 +68,18 @@ import {
   SLOT_SEARCH_DAYS_AHEAD,
   SLOT_MIN_LEAD_MINUTES,
   SLOT_DEFAULT_CONSULTATION_DURATION_MINUTES,
-  SLOT_LIST_MAX_OPTIONS,
+  SLOT_LIST_MORE_ROW_ID,
   SLOT_HOLD_DURATION_MINUTES,
+  WHATSAPP_CONFIG,
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import {
   normalizeWorkingHours,
   generateCandidateSlots,
   formatSlotLabel,
-  slotRowId,
   parseSlotRowId,
 } from "../lib/slot-engine.js";
+import { buildSlotListPage, buildOfferedSlotRows } from "../lib/slot-list.js";
 import { resolveConsultationFee } from "../lib/consultation-fee.js";
 import { DatabaseError } from "../errors.js";
 import { createLogger } from "../logger.js";
@@ -193,8 +194,24 @@ export class SlotSelectionService {
    * a fresh list after losing a booking race or declining an overlap
    * warning — always re-queries so a stale list is never redisplayed.
    */
-  async _presentAvailableSlots({ clinic, message, row, doctor, log, prefixMessage = null }) {
+  async _presentAvailableSlots({
+    clinic,
+    message,
+    row,
+    doctor,
+    log,
+    prefixMessage = null,
+    offset = 0,
+  }) {
     const candidates = await this._computeAvailableSlots(clinic, doctor);
+
+    log.info("Computed open slots before WhatsApp list paging", {
+      contactPhone: message.contactPhone,
+      doctorId: doctor.id,
+      totalAvailable: candidates.length,
+      offset,
+      whatsappMaxListRows: WHATSAPP_CONFIG.MAX_LIST_ROWS,
+    });
 
     if (candidates.length === 0) {
       log.warn("No open slots in the configured availability window", { doctorId: doctor.id });
@@ -205,7 +222,9 @@ export class SlotSelectionService {
       });
     }
 
-    const offered = candidates.slice(0, SLOT_LIST_MAX_OPTIONS);
+    // If the caller asked for a page past the end (stale More tap), wrap to the start.
+    const pageOffset = offset >= candidates.length ? 0 : offset;
+    const page = buildSlotListPage(candidates, pageOffset);
 
     if (prefixMessage) {
       await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, prefixMessage);
@@ -213,23 +232,31 @@ export class SlotSelectionService {
     await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
       bodyText: SLOT_SELECTION_COPY.LIST_BODY,
       buttonLabel: SLOT_SELECTION_COPY.LIST_BUTTON_LABEL,
-      rows: offered.map((slot) => ({ id: slotRowId(slot.slotStart), title: formatSlotLabel(slot.slotStart) })),
+      rows: page.rows,
     });
 
     await this._repo.update(row.id, {
       context: this._touch(row.context, message.waMessageId, {
         slotSelectionStep: SLOT_SELECTION_STEP.AWAITING_SELECTION,
         doctorId: doctor.id,
-        offeredSlots: offered.map((s) => ({
+        offeredSlots: page.pageSlots.map((s) => ({
           slotStart: s.slotStart.toISOString(),
           slotEnd: s.slotEnd.toISOString(),
         })),
+        slotListNextOffset: page.nextOffset,
+        slotListHasMore: page.hasMore,
         pendingSlot: null,
       }),
       last_message_at: new Date().toISOString(),
     });
 
-    log.info("Presented available slot list", { contactPhone: message.contactPhone, count: offered.length });
+    log.info("Presented available slot list page", {
+      contactPhone: message.contactPhone,
+      pageCount: page.pageSlots.length,
+      totalAvailable: page.totalAvailable,
+      hasMore: page.hasMore,
+      nextOffset: page.nextOffset,
+    });
     return { handled: true, action: "SLOTS_PRESENTED", currentState: CONVERSATION_STATE.SLOT_SELECTION };
   }
 
@@ -239,6 +266,31 @@ export class SlotSelectionService {
 
   async _handleSlotChoice({ clinic, message, row, log }) {
     const replyId = message.type === "list_reply" || message.type === "button_reply" ? message.replyId : null;
+
+    if (replyId === SLOT_LIST_MORE_ROW_ID) {
+      const doctor = await this._doctorRepo.findPrimaryByClinicId(clinic.id);
+      if (!doctor) {
+        return this._handoff({
+          clinic, message, row, log,
+          reason: HANDOFF_REASON.NO_DOCTOR_CONFIGURED,
+          contactMessage: SLOT_SELECTION_COPY.NO_DOCTOR_HANDOFF,
+        });
+      }
+      const nextOffset = row.context?.slotListNextOffset ?? 0;
+      log.info("Advancing slot list to next page", {
+        contactPhone: message.contactPhone,
+        nextOffset,
+      });
+      return this._presentAvailableSlots({
+        clinic,
+        message,
+        row,
+        doctor,
+        log,
+        offset: nextOffset,
+      });
+    }
+
     const chosenIso = replyId ? parseSlotRowId(replyId) : null;
     const offered = row.context?.offeredSlots ?? [];
     const matched = chosenIso ? offered.find((s) => s.slotStart === chosenIso) : null;
@@ -247,10 +299,7 @@ export class SlotSelectionService {
       await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
         bodyText: SLOT_SELECTION_COPY.SELECTION_REPROMPT,
         buttonLabel: SLOT_SELECTION_COPY.LIST_BUTTON_LABEL,
-        rows: offered.map((s) => ({
-          id: slotRowId(new Date(s.slotStart)),
-          title: formatSlotLabel(new Date(s.slotStart)),
-        })),
+        rows: buildOfferedSlotRows(offered, Boolean(row.context?.slotListHasMore)),
       });
       await this._repo.update(row.id, {
         context: this._touch(row.context, message.waMessageId),

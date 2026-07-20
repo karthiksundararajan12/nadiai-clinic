@@ -2,7 +2,7 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ArrowRight, Users } from "lucide-react";
 import Link from "next/link";
@@ -63,12 +63,7 @@ export function RecentPatients({ patients = [], loading = false }) {
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1">
-                  <Badge
-                    variant={patient.status === "active" ? "success" : "warning"}
-                    className="text-[10px]"
-                  >
-                    {patient.status}
-                  </Badge>
+                  <StatusBadge status={patient.status} />
                 </div>
               </div>
             ))}

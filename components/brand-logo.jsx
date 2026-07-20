@@ -2,10 +2,10 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 const SIZE_STYLES = {
-  sm: { image: "h-8 w-8", text: "text-sm" },
-  md: { image: "h-9 w-9", text: "text-[15px]" },
-  lg: { image: "h-10 w-10", text: "text-base" },
-  xl: { image: "h-12 w-12", text: "text-lg" },
+  sm: { image: "h-9 w-9", text: "text-sm" },
+  md: { image: "h-11 w-11", text: "text-base" },
+  lg: { image: "h-12 w-12", text: "text-lg" },
+  xl: { image: "h-14 w-14", text: "text-xl" },
 };
 
 export function BrandLogo({

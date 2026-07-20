@@ -14,7 +14,6 @@ import {
   Users,
   CalendarDays,
   Mic,
-  Sparkles,
   Settings,
   ArrowRight,
 } from "lucide-react";
@@ -113,7 +112,7 @@ export default function DashboardPage() {
               <CardContent className="p-5">
                 <div className="flex items-start gap-3">
                   <div className="rounded-lg border border-primary/15 bg-primary/10 p-2">
-                    <Sparkles className="h-5 w-5 text-primary" />
+                    <Mic className="h-5 w-5 text-primary" />
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-sm font-semibold text-foreground">

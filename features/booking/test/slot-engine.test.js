@@ -107,6 +107,34 @@ test("generateCandidateSlots: no partial slot is generated if duration doesn't e
   assert.equal(slots.length, 2);
 });
 
+test("generateCandidateSlots: 09:00–18:00 / 20min from 12:31 PM includes last slot at 17:40", () => {
+  // 12:31 PM IST = 07:01 UTC. Close-time check is slotEnd <= working_hours_end,
+  // so 17:40–18:00 is valid and must not be dropped by generation itself.
+  const now = new Date("2026-07-06T07:01:00.000Z");
+  const slots = generateCandidateSlots({
+    workingHoursStart: "09:00",
+    workingHoursEnd: "18:00",
+    consultationDurationMinutes: 20,
+    daysAhead: 1,
+    minLeadMinutes: 0,
+    now,
+  });
+
+  const startsIstHhmm = slots.map((s) => {
+    const ist = new Date(s.slotStart.getTime() + 5.5 * 60 * 60 * 1000);
+    return `${String(ist.getUTCHours()).padStart(2, "0")}:${String(ist.getUTCMinutes()).padStart(2, "0")}`;
+  });
+
+  assert.ok(slots.length > 10, `expected more than a WhatsApp page of slots, got ${slots.length}`);
+  assert.ok(startsIstHhmm.includes("17:40"), `missing 17:40; got ${startsIstHhmm.slice(-5).join(", ")}`);
+  assert.equal(startsIstHhmm.at(-1), "17:40");
+  // Last slot must end exactly at close, not past it.
+  const last = slots.at(-1);
+  const lastEndIst = new Date(last.slotEnd.getTime() + 5.5 * 60 * 60 * 1000);
+  assert.equal(lastEndIst.getUTCHours(), 18);
+  assert.equal(lastEndIst.getUTCMinutes(), 0);
+});
+
 // ─────────────────────────────────────────────────────────────
 // formatSlotLabel
 // ─────────────────────────────────────────────────────────────

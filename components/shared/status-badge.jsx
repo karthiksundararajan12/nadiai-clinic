@@ -1,8 +1,12 @@
 import { cn } from "@/lib/utils";
-import { APPOINTMENT_STATUS_CONFIG } from "@/lib/constants";
+import {
+  APPOINTMENT_STATUS_CONFIG,
+  PATIENT_STATUS_CONFIG,
+} from "@/lib/constants";
 
 export function StatusBadge({ status, className }) {
-  const config = APPOINTMENT_STATUS_CONFIG[status];
+  const config =
+    APPOINTMENT_STATUS_CONFIG[status] ?? PATIENT_STATUS_CONFIG[status];
   if (!config) return null;
 
   return (

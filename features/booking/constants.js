@@ -198,6 +198,9 @@ export const SLOT_SELECTION_STEP = Object.freeze({
 /** Prefix for slot row ids in the slot-selection list — `${PREFIX}${slotStart.toISOString()}`. */
 export const SLOT_ROW_ID_PREFIX = "booking_slot:";
 
+/** List-row id for advancing to the next page of open slots. */
+export const SLOT_LIST_MORE_ROW_ID = "booking_slot_more";
+
 export const OVERLAP_CONFIRM_INTENT = Object.freeze({
   YES: "booking_overlap_confirm_yes",
   NO:  "booking_overlap_confirm_no",
@@ -235,16 +238,18 @@ export const SLOT_DEFAULT_WORKING_HOURS_START = "09:00";
 export const SLOT_DEFAULT_WORKING_HOURS_END = "18:00";
 
 /**
- * Max number of open slots shown per list message. Meta caps interactive
- * "list" messages at WHATSAPP_CONFIG.MAX_LIST_ROWS total rows; slots use
- * every row (no "show more" row) — v1 keeps it simple and just shows the
- * earliest N slots, no pagination.
+ * Max number of *slot* rows shown per list message when more slots remain.
+ * Meta caps interactive "list" messages at WHATSAPP_CONFIG.MAX_LIST_ROWS
+ * rows **total across all sections** (Morning/Afternoon/Evening sections
+ * do not raise capacity), so one row is reserved for "More times →"
+ * whenever the remaining open-slot count exceeds MAX_LIST_ROWS.
  */
 export const SLOT_LIST_MAX_OPTIONS = 9;
 
 export const SLOT_SELECTION_COPY = Object.freeze({
   LIST_BODY: "Please choose a slot for your appointment:",
   LIST_BUTTON_LABEL: "Choose a time",
+  MORE_TIMES_TITLE: "More times →",
   SELECTION_REPROMPT: "Sorry, please choose one of the times from the list.",
   SLOT_TAKEN_REPROMPT: "Sorry, that slot was just taken by someone else. Here are the current options:",
   OVERLAP_WARNING:

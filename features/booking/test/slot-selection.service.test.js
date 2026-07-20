@@ -11,7 +11,9 @@ import {
   SLOT_MIN_LEAD_MINUTES,
   SLOT_DEFAULT_CONSULTATION_DURATION_MINUTES,
   SLOT_LIST_MAX_OPTIONS,
+  SLOT_LIST_MORE_ROW_ID,
   SLOT_HOLD_DURATION_MINUTES,
+  WHATSAPP_CONFIG,
 } from "../constants.js";
 import { normalizeWorkingHours, generateCandidateSlots, slotRowId } from "../lib/slot-engine.js";
 
@@ -207,10 +209,68 @@ test("enterState: presents an interactive list of open slots and stores them for
   assert.equal(wa.calls.length, 1);
   assert.equal(wa.calls[0].type, "list");
   assert.ok(wa.calls[0].opts.rows.length > 0);
-  assert.ok(wa.calls[0].opts.rows.length <= SLOT_LIST_MAX_OPTIONS);
+  assert.ok(wa.calls[0].opts.rows.length <= WHATSAPP_CONFIG.MAX_LIST_ROWS);
   assert.equal(repo.row.context.slotSelectionStep, SLOT_SELECTION_STEP.AWAITING_SELECTION);
   assert.equal(repo.row.context.doctorId, DOCTOR_FREE.id);
-  assert.equal(repo.row.context.offeredSlots.length, wa.calls[0].opts.rows.length);
+  const slotRows = wa.calls[0].opts.rows.filter((r) => r.id !== SLOT_LIST_MORE_ROW_ID);
+  assert.equal(repo.row.context.offeredSlots.length, slotRows.length);
+});
+
+test("enterState: pages slots with More times when more than 10 open slots exist", async () => {
+  // 20-min slots over a full day produce far more than Meta's 10-row list cap.
+  const doctor = {
+    ...DOCTOR_FREE,
+    consultation_duration: 20,
+    working_hours_start: "09:00",
+    working_hours_end: "18:00",
+  };
+  const { service, repo, wa } = makeService({ doctor, takenIsos: [] });
+
+  const result = await service.enterState({ clinic: CLINIC, message: buildMessage(), row: repo.row });
+
+  assert.equal(result.action, "SLOTS_PRESENTED");
+  assert.equal(wa.calls[0].opts.rows.length, SLOT_LIST_MAX_OPTIONS + 1);
+  assert.equal(wa.calls[0].opts.rows.at(-1).id, SLOT_LIST_MORE_ROW_ID);
+  assert.equal(repo.row.context.offeredSlots.length, SLOT_LIST_MAX_OPTIONS);
+  assert.equal(repo.row.context.slotListHasMore, true);
+  assert.equal(repo.row.context.slotListNextOffset, SLOT_LIST_MAX_OPTIONS);
+});
+
+test("AWAITING_SELECTION: More times advances to the next page of slots", async () => {
+  const doctor = {
+    ...DOCTOR_FREE,
+    consultation_duration: 20,
+    working_hours_start: "09:00",
+    working_hours_end: "18:00",
+  };
+  const { service, repo, wa } = makeService({ doctor, takenIsos: [] });
+
+  await service.enterState({ clinic: CLINIC, message: buildMessage(), row: repo.row });
+  const firstPageSlots = [...repo.row.context.offeredSlots];
+  const nextOffset = repo.row.context.slotListNextOffset;
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      type: "list_reply",
+      replyId: SLOT_LIST_MORE_ROW_ID,
+      replyTitle: "More times →",
+      waMessageId: "wamid.more-1",
+    }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOTS_PRESENTED");
+  assert.equal(wa.calls.length, 2);
+  assert.ok(repo.row.context.offeredSlots.length > 0);
+  assert.notDeepEqual(repo.row.context.offeredSlots, firstPageSlots);
+  assert.ok(repo.row.context.slotListNextOffset > nextOffset
+    || repo.row.context.slotListHasMore === false);
+  // Second page must not repeat the first page's first slot.
+  assert.notEqual(
+    repo.row.context.offeredSlots[0].slotStart,
+    firstPageSlots[0].slotStart,
+  );
 });
 
 // ─────────────────────────────────────────────────────────────

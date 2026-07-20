@@ -11,6 +11,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import { useTheme } from "@/hooks/use-theme";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
@@ -405,7 +406,7 @@ export default function SettingsPage() {
                       <span className="text-sm text-muted-foreground">
                         Status
                       </span>
-                      <Badge variant="success">Active</Badge>
+                      <StatusBadge status="active" />
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">

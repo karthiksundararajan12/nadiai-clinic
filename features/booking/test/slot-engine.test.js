@@ -4,6 +4,7 @@ import {
   normalizeWorkingHours,
   generateCandidateSlots,
   formatSlotLabel,
+  formatSlotDateTimeParts,
   slotRowId,
   parseSlotRowId,
 } from "../lib/slot-engine.js";
@@ -143,6 +144,11 @@ test("formatSlotLabel: formats an AM slot in IST, under Meta's 24-char row title
   const label = formatSlotLabel(new Date("2026-07-06T03:30:00.000Z")); // Mon 6 Jul, 09:00 AM IST
   assert.equal(label, "Mon 6 Jul, 9:00 AM");
   assert.ok(label.length <= 24);
+});
+
+test("formatSlotDateTimeParts: splits IST date and time for confirmed-fallback copy", () => {
+  const parts = formatSlotDateTimeParts(new Date("2026-07-06T03:30:00.000Z"));
+  assert.deepEqual(parts, { date: "Mon 6 Jul", time: "9:00 AM" });
 });
 
 test("formatSlotLabel: formats a PM slot correctly (noon boundary)", () => {

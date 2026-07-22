@@ -464,6 +464,8 @@ test("AWAITING_SELECTION: choosing a free slot with no doctor fee books directly
   assert.equal(wa.calls[0].type, "text");
   assert.match(wa.calls[0].body, /confirmed/i);
   assert.match(wa.calls[0].body, /Asha Kapoor/);
+  assert.equal(wa.calls[0].body.includes("Buttons:"), false);
+  assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
 });
 
 test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to PAYMENT_PENDING with a real Razorpay link for the doctor's real fee", async () => {

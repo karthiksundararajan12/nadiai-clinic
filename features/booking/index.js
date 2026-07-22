@@ -146,6 +146,15 @@
  *     explicit instruction. No admin UI for this exists (out of scope);
  *     structured logs are the only surface today.
  *
+ * ── Invoice PDF (payment.captured side effect) ─────────────────────────
+ *
+ * 21b. After confirmPayment succeeds, InvoiceService synchronously generates
+ *     a consultation invoice PDF (pdf-lib), stores it under
+ *     `booking-invoices` / invoices/{clinic_id}/{appointment_id}.pdf
+ *     (migration 024), and calls stubbed `sendInvoiceDocument` until Meta
+ *     approves the `appt_invoice` document template. Best-effort only —
+ *     never rolls back confirm or the existing appt_booking_confirmed path.
+ *
  * ── Session 5 (REMINDER_SENT — scheduled reminders + no-response timeout) ──
  *
  * 22. REMINDER_SENT is deliberately NOT a conversation_state.current_state
@@ -230,11 +239,19 @@ export {
   RESET_KEYWORDS,
   RESET_CONFIRM_INTENT,
   RESET_COPY,
+  CONFIRMED_INBOUND_COPY,
+  CONFIRMED_INBOUND_FALLBACK_STATES,
   APPOINTMENT_STATUS,
   PAYMENT_REQUIRED_MIN_FEE,
   SLOT_SELECTION_STEP,
   SLOT_SELECTION_COPY,
   PAYMENT_WEBHOOK_COPY,
+  BOOKING_CONFIRMED_TEMPLATE_NAME,
+  BOOKING_CONFIRMED_TEMPLATE_BODY,
+  BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE,
+  INVOICE_WHATSAPP_TEMPLATE_NAME,
+  INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE,
+  INVOICE_STORAGE,
   SLOT_ROW_ID_PREFIX,
   OVERLAP_CONFIRM_INTENT,
   SLOT_TIMEZONE_OFFSET,
@@ -297,6 +314,7 @@ export {
   normalizeWorkingHours,
   generateCandidateSlots,
   formatSlotLabel,
+  formatSlotDateTimeParts,
   slotRowId,
   parseSlotRowId,
 } from "./lib/slot-engine.js";
@@ -314,6 +332,7 @@ export { DoctorProfileRepository } from "./repository/doctor-profile.repository.
 export { PatientRepository } from "./repository/patient.repository.js";
 export { AppointmentRepository } from "./repository/appointment.repository.js";
 export { RazorpayWebhookEventRepository } from "./repository/razorpay-webhook-event.repository.js";
+export { InvoiceRepository } from "./repository/invoice.repository.js";
 export { WhatsAppClientService } from "./services/whatsapp-client.service.js";
 export { RazorpayClientService } from "./services/razorpay-client.service.js";
 export { DoctorNotificationService } from "./services/doctor-notification.service.js";
@@ -322,6 +341,14 @@ export { PatientCollectionService } from "./services/patient-collection.service.
 export { SlotSelectionService } from "./services/slot-selection.service.js";
 export { PaymentWebhookService } from "./services/payment-webhook.service.js";
 export { ReminderService } from "./services/reminder.service.js";
+export { InvoiceService } from "./services/invoice.service.js";
+export { InvoiceStorageService } from "./services/invoice-storage.service.js";
+export { sendInvoiceDocument } from "./services/invoice-whatsapp.js";
+export {
+  generateInvoicePdf,
+  buildInvoiceDisplayFields,
+  formatInvoiceNumber,
+} from "./lib/invoice-pdf.js";
 
 // ─────────────────────────────────────────────────────────────
 // FACTORY
@@ -334,6 +361,7 @@ import { DoctorProfileRepository as _DoctorRepo } from "./repository/doctor-prof
 import { PatientRepository as _PatientRepo } from "./repository/patient.repository.js";
 import { AppointmentRepository as _AppointmentRepo } from "./repository/appointment.repository.js";
 import { RazorpayWebhookEventRepository as _RazorpayWebhookEventRepo } from "./repository/razorpay-webhook-event.repository.js";
+import { InvoiceRepository as _InvoiceRepo } from "./repository/invoice.repository.js";
 import { WhatsAppClientService as _WAClient } from "./services/whatsapp-client.service.js";
 import { RazorpayClientService as _RazorpayClient } from "./services/razorpay-client.service.js";
 import { DoctorNotificationService as _DoctorNotificationService } from "./services/doctor-notification.service.js";
@@ -342,6 +370,8 @@ import { PatientCollectionService as _PatientCollectionService } from "./service
 import { SlotSelectionService as _SlotSelectionService } from "./services/slot-selection.service.js";
 import { PaymentWebhookService as _PaymentWebhookService } from "./services/payment-webhook.service.js";
 import { ReminderService as _ReminderService } from "./services/reminder.service.js";
+import { InvoiceStorageService as _InvoiceStorageService } from "./services/invoice-storage.service.js";
+import { InvoiceService as _InvoiceService } from "./services/invoice.service.js";
 
 /**
  * Wires together all booking domain services.
@@ -357,6 +387,7 @@ import { ReminderService as _ReminderService } from "./services/reminder.service
  *   patientRepository: import("./repository/patient.repository.js").PatientRepository;
  *   appointmentRepository: import("./repository/appointment.repository.js").AppointmentRepository;
  *   razorpayWebhookEventRepository: import("./repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository;
+ *   invoiceRepository: import("./repository/invoice.repository.js").InvoiceRepository;
  *   whatsappClient: import("./services/whatsapp-client.service.js").WhatsAppClientService;
  *   razorpayClient: import("./services/razorpay-client.service.js").RazorpayClientService;
  *   doctorNotificationService: import("./services/doctor-notification.service.js").DoctorNotificationService;
@@ -365,6 +396,8 @@ import { ReminderService as _ReminderService } from "./services/reminder.service
  *   conversationStateService: import("./services/conversation-state.service.js").ConversationStateService;
  *   paymentWebhookService: import("./services/payment-webhook.service.js").PaymentWebhookService;
  *   reminderService: import("./services/reminder.service.js").ReminderService;
+ *   invoiceService: import("./services/invoice.service.js").InvoiceService;
+ *   invoiceStorageService: import("./services/invoice-storage.service.js").InvoiceStorageService;
  * }}
  */
 export function createBookingServices(supabaseClient) {
@@ -376,6 +409,7 @@ export function createBookingServices(supabaseClient) {
   const patientRepository = new _PatientRepo(supabase);
   const appointmentRepository = new _AppointmentRepo(supabase);
   const razorpayWebhookEventRepository = new _RazorpayWebhookEventRepo(supabase);
+  const invoiceRepository = new _InvoiceRepo(supabase);
   const whatsappClient = new _WAClient({
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     apiVersion:  process.env.WHATSAPP_API_VERSION,
@@ -405,6 +439,15 @@ export function createBookingServices(supabaseClient) {
     doctorNotificationService,
     patientCollectionService,
     slotSelectionService,
+    appointmentRepository,
+  );
+  const invoiceStorageService = new _InvoiceStorageService(supabase);
+  const invoiceService = new _InvoiceService(
+    invoiceRepository,
+    invoiceStorageService,
+    clinicRepository,
+    patientRepository,
+    doctorProfileRepository,
   );
   const paymentWebhookService = new _PaymentWebhookService(
     appointmentRepository,
@@ -414,7 +457,10 @@ export function createBookingServices(supabaseClient) {
     conversationStateRepository,
     whatsappClient,
     razorpayWebhookEventRepository,
-    { templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true" },
+    {
+      templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+      invoiceService,
+    },
   );
   const reminderService = new _ReminderService(
     clinicRepository,
@@ -435,6 +481,7 @@ export function createBookingServices(supabaseClient) {
     patientRepository,
     appointmentRepository,
     razorpayWebhookEventRepository,
+    invoiceRepository,
     whatsappClient,
     razorpayClient,
     doctorNotificationService,
@@ -443,5 +490,7 @@ export function createBookingServices(supabaseClient) {
     conversationStateService,
     paymentWebhookService,
     reminderService,
+    invoiceService,
+    invoiceStorageService,
   };
 }

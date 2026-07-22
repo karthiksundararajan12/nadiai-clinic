@@ -144,6 +144,7 @@ function makeService({
   conversationRow = null,
   isNewEvent = true,
   templatesLive = false,
+  invoiceService = null,
 } = {}) {
   const appointmentRepo = createFakeAppointmentRepo({ confirmResult, releaseResult, findResult });
   const clinicRepo = createFakeClinicRepo(clinic);
@@ -152,7 +153,7 @@ function makeService({
   const conversationRepo = createFakeConversationRepo(conversationRow);
   const wa = createFakeWhatsAppClient();
   const eventRepo = createFakeWebhookEventRepo(isNewEvent);
-  const service = new PaymentWebhookService(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo, { templatesLive });
+  const service = new PaymentWebhookService(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo, { templatesLive, invoiceService });
   return { service, appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo };
 }
 
@@ -238,6 +239,11 @@ test("payment.captured: WHATSAPP_TEMPLATES_LIVE=true confirms the appointment, s
     "500",         // payment_amount
     "Test Clinic", // clinic name
   ]);
+  assert.equal(templateCall.opts.buttonPayloads, undefined, "confirmation template must not attach quick-reply button payloads");
+  for (const param of templateCall.opts.bodyParams) {
+    assert.equal(String(param).includes("Buttons:"), false);
+    assert.equal(String(param).toLowerCase().includes("quick-reply"), false);
+  }
   assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
 });
 
@@ -265,6 +271,8 @@ test("payment.captured: WHATSAPP_TEMPLATES_LIVE=false (default) falls back to th
   // Stub path never needs patient/doctor names — confirms no wasted lookups.
   assert.equal(patientRepo.calls.length, 0);
   assert.equal(doctorProfileRepo.calls.length, 0);
+  assert.equal(wa.calls[0].body.includes("Buttons:"), false);
+  assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
   assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
 });
 
@@ -399,4 +407,113 @@ test("payment.captured: no conversation_state row found doesn't fail the whole h
   });
 
   assert.equal(result.action, "PAYMENT_CONFIRMED");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Invoice delivery (best-effort; must not change confirm / template path)
+// ─────────────────────────────────────────────────────────────
+
+test("payment.captured: delivers invoice after confirm without changing appt_booking_confirmed behaviour", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed" };
+  const invoiceCalls = [];
+  const invoiceService = {
+    async deliverForConfirmedAppointment(args) {
+      invoiceCalls.push(args);
+      return { invoiceNumber: "INV-000001", storagePath: "invoices/clinic-1/appt-1.pdf", pdfUrl: "https://x", reused: false };
+    },
+  };
+  const row = paymentPendingConversationRow();
+  const { service, wa, conversationRepo } = makeService({
+    confirmResult: confirmed,
+    conversationRow: row,
+    templatesLive: true,
+    invoiceService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload({ paymentId: "pay_1" }),
+  });
+
+  assert.equal(result.action, "PAYMENT_CONFIRMED");
+  assert.equal(wa.templateCalls.length, 1);
+  assert.equal(wa.templateCalls[0].opts.templateName, BOOKING_CONFIRMED_TEMPLATE_NAME);
+  assert.equal(invoiceCalls.length, 1);
+  assert.equal(invoiceCalls[0].clinicId, "clinic-1");
+  assert.equal(invoiceCalls[0].razorpayPaymentId, "pay_1");
+  assert.equal(invoiceCalls[0].appointment.id, "appt-1");
+  assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+});
+
+test("payment.captured: invoice delivery failure does not roll back confirm or block conversation advance", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed" };
+  const invoiceService = {
+    async deliverForConfirmedAppointment() {
+      throw new Error("storage down");
+    },
+  };
+  const row = paymentPendingConversationRow();
+  const { service, wa, conversationRepo } = makeService({
+    confirmResult: confirmed,
+    conversationRow: row,
+    templatesLive: false,
+    invoiceService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload({ paymentId: "pay_1" }),
+  });
+
+  assert.equal(result.action, "PAYMENT_CONFIRMED");
+  assert.equal(wa.calls.length, 1);
+  assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+});
+
+test("payment.captured: late payment does not attempt invoice delivery", async () => {
+  const invoiceCalls = [];
+  const invoiceService = {
+    async deliverForConfirmedAppointment(args) {
+      invoiceCalls.push(args);
+    },
+  };
+  const { service } = makeService({
+    confirmResult: null,
+    findResult: { ...APPOINTMENT, status: "cancelled" },
+    invoiceService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload(),
+  });
+
+  assert.equal(result.action, "LATE_PAYMENT_NOT_CONFIRMED");
+  assert.equal(invoiceCalls.length, 0);
+});
+
+test("handleEvent: duplicate event skips invoice delivery entirely", async () => {
+  const invoiceCalls = [];
+  const invoiceService = {
+    async deliverForConfirmedAppointment(args) {
+      invoiceCalls.push(args);
+    },
+  };
+  const { service } = makeService({
+    isNewEvent: false,
+    confirmResult: { ...APPOINTMENT, status: "confirmed" },
+    invoiceService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload(),
+  });
+
+  assert.equal(result.action, "DUPLICATE_EVENT_SKIPPED");
+  assert.equal(invoiceCalls.length, 0);
 });

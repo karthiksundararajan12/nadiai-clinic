@@ -226,6 +226,35 @@ export const RESET_COPY = Object.freeze({
 });
 
 /**
+ * Plain-text fallback when a contact messages while already booked
+ * (conversation_state CONFIRMED). Free-form session message — not a Meta
+ * template. Placeholders: {date}, {time} from the appointment's slot_start.
+ *
+ * Note: "cancel" / "menu" here refer to the global RESET_KEYWORDS intercept
+ * (conversation reset / re-show menu), not appointment cancellation APIs.
+ */
+export const CONFIRMED_INBOUND_COPY = Object.freeze({
+  WITH_SLOT:
+    "Your appointment on {date} at {time} is confirmed. " +
+    "Reply 'cancel' to cancel or 'menu' to see options.",
+  WITHOUT_SLOT:
+    "Your appointment is confirmed. " +
+    "Reply 'cancel' to cancel or 'menu' to see options.",
+});
+
+/**
+ * States that share the post-booking inbound fallback reply.
+ * `REMINDER_SENT` is deliberately NOT a conversation_state FSM value
+ * (reminders live on appointments.reminder_*_sent_at — see REMINDER_SENT
+ * section below); it is listed only so a stray/legacy current_state string
+ * gets the same patient-facing reply as CONFIRMED.
+ */
+export const CONFIRMED_INBOUND_FALLBACK_STATES = Object.freeze([
+  CONVERSATION_STATE.CONFIRMED,
+  "REMINDER_SENT",
+]);
+
+/**
  * Copy shared across multiple state handlers (not scoped to one
  * conversation state).
  */
@@ -334,12 +363,15 @@ export const SLOT_SELECTION_COPY = Object.freeze({
  * an inbound WhatsApp message — these fire asynchronously off a Razorpay
  * webhook).
  *
- * PAYMENT_CONFIRMED is no longer sent as of the appt_booking_confirmed
- * template migration below — kept here in case of rollback, but
- * _handleCaptured now sends BOOKING_CONFIRMED_TEMPLATE_NAME instead.
+ * PAYMENT_CONFIRMED is the plain-text fallback when WHATSAPP_TEMPLATES_LIVE
+ * is false; when live, _handleCaptured sends BOOKING_CONFIRMED_TEMPLATE_NAME
+ * instead. Keep this copy free of any button / formatting meta-commentary —
+ * it is patient-facing.
  */
 export const PAYMENT_WEBHOOK_COPY = Object.freeze({
-  PAYMENT_CONFIRMED: "Payment received! Your appointment on {slotLabel} is confirmed. See you then!",
+  PAYMENT_CONFIRMED:
+    "Payment received! Your appointment on {slotLabel} is confirmed. " +
+    "Please arrive 10 minutes early. See you then!",
   PAYMENT_FAILED:
     "Your payment couldn't be completed, so this slot has been released. " +
     "Send us any message whenever you'd like to try booking again.",
@@ -348,21 +380,66 @@ export const PAYMENT_WEBHOOK_COPY = Object.freeze({
 /**
  * Approved Meta WhatsApp template sent by PaymentWebhookService._handleCaptured
  * on "payment.captured" (replaces the PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED
- * free-text send). Body: "Hi {{1}}, your appointment with {{2}} is confirmed
- * for {{3}}. Consultation fee: ₹{{4}}. Clinic: {{5}}. Please arrive 10
- * minutes early." — params in order: patient full_name, doctor full_name,
- * formatted slot label, payment_amount, clinic name.
+ * free-text send when WHATSAPP_TEMPLATES_LIVE=true).
  *
- * Gated behind WHATSAPP_TEMPLATES_LIVE, same as ReminderService's templates
- * — while false, PaymentWebhookService falls back to
- * PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED (plain text) instead, so
- * confirmations don't silently stop sending while this template is pending
- * Meta approval.
+ * Canonical patient-facing body (static text + {{n}} placeholders only —
+ * NO button notes, developer commentary, or "Buttons:" lines belong here;
+ * those must live in Meta's button UI / our code comments, never in the
+ * template body patients see):
+ *
+ *   "Hi {{1}}, your appointment with {{2}} is confirmed for {{3}}.
+ *    Consultation fee: ₹{{4}}. Clinic: {{5}}. Please arrive 10 minutes early."
+ *
+ * Params in order: patient full_name, doctor full_name, formatted slot
+ * label, payment_amount, clinic name. No quick-reply button components —
+ * confirmation is informational only.
+ *
+ * If patients see leaked text like "Buttons: None…", edit the template
+ * body in Meta WhatsApp Manager for `appt_booking_confirmed` — our code
+ * only supplies the five {{n}} values and never appends button commentary.
  */
 export const BOOKING_CONFIRMED_TEMPLATE_NAME = "appt_booking_confirmed";
 
+/**
+ * Exact static body the Meta template `appt_booking_confirmed` must use
+ * (for docs + regression tests). Placeholders {{1}}…{{5}} are filled by
+ * PaymentWebhookService bodyParams — not by an LLM.
+ */
+export const BOOKING_CONFIRMED_TEMPLATE_BODY =
+  "Hi {{1}}, your appointment with {{2}} is confirmed for {{3}}. " +
+  "Consultation fee: ₹{{4}}. Clinic: {{5}}. Please arrive 10 minutes early.";
+
 /** Meta template language code for BOOKING_CONFIRMED_TEMPLATE_NAME. */
 export const BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE = "en";
+
+/**
+ * Meta WhatsApp document template for consultation invoices (DOCUMENT
+ * header). Pending Meta review — PaymentWebhookService / InvoiceService
+ * call `sendInvoiceDocument`, which stubs until this is approved. Do not
+ * wire a real Meta send against this name until review clears.
+ */
+export const INVOICE_WHATSAPP_TEMPLATE_NAME = "appt_invoice";
+
+/** Meta template language code for INVOICE_WHATSAPP_TEMPLATE_NAME. */
+export const INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE = "en";
+
+/**
+ * Private Supabase Storage bucket + path helpers for invoice PDFs
+ * (migration 024). Objects are never public; WhatsApp fetches via
+ * short-lived signed URLs from InvoiceStorageService.
+ */
+export const INVOICE_STORAGE = Object.freeze({
+  BUCKET: "booking-invoices",
+  /** Signed download TTL — long enough for Meta to fetch the document header. */
+  SIGNED_URL_TTL_SECONDS: 60 * 60,
+  /**
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {string}
+   */
+  buildPath: (clinicId, appointmentId) =>
+    `invoices/${clinicId}/${appointmentId}.pdf`,
+});
 
 // ─────────────────────────────────────────────────────────────
 // HUMAN_HANDOFF DOCTOR NOTIFICATION

@@ -13,7 +13,10 @@
  *     START. PAYMENT_PENDING gets an explicit confirmation step first so we
  *     don't silently abandon a mid-flight Razorpay hold from chat alone
  *     (the hold is left to expire; we never cancel/refund appointments here).
- *
+ *   - Post-booking fallback for CONFIRMED (and legacy/stray REMINDER_SENT
+ *     current_state strings): unrecognized inbound gets a plain-text
+ *     confirmation reminder with the appointment date/time — not a silent
+ *     no-op.
  * Doctor HUMAN_HANDOFF notifications are shared across every state via
  * DoctorNotificationService (see that file) rather than owned here, since
  * SLOT_SELECTION can also trigger a handoff (no doctor configured / no open
@@ -43,9 +46,12 @@ import {
   RESET_KEYWORDS,
   RESET_CONFIRM_INTENT,
   RESET_COPY,
+  CONFIRMED_INBOUND_COPY,
+  CONFIRMED_INBOUND_FALLBACK_STATES,
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { isConversationExpired } from "../lib/conversation-expiry.js";
+import { formatSlotDateTimeParts } from "../lib/slot-engine.js";
 import { createLogger } from "../logger.js";
 
 export class ConversationStateService {
@@ -55,13 +61,15 @@ export class ConversationStateService {
    * @param {import("./doctor-notification.service.js").DoctorNotificationService} doctorNotificationService
    * @param {import("./patient-collection.service.js").PatientCollectionService} patientCollectionService
    * @param {import("./slot-selection.service.js").SlotSelectionService} slotSelectionService
+   * @param {import("../repository/appointment.repository.js").AppointmentRepository|null} [appointmentRepo]
    */
-  constructor(conversationRepo, whatsappClient, doctorNotificationService, patientCollectionService, slotSelectionService) {
+  constructor(conversationRepo, whatsappClient, doctorNotificationService, patientCollectionService, slotSelectionService, appointmentRepo = null) {
     this._repo         = conversationRepo;
     this._wa           = whatsappClient;
     this._doctorNotifier = doctorNotificationService;
     this._patientSvc   = patientCollectionService;
     this._slotSvc      = slotSelectionService;
+    this._appointmentRepo = appointmentRepo;
     this._log          = createLogger({ component: "ConversationStateService" });
   }
 
@@ -110,6 +118,10 @@ export class ConversationStateService {
 
     if (row.current_state === CONVERSATION_STATE.SLOT_SELECTION) {
       return this._slotSvc.handleReply({ clinic, message, row, log });
+    }
+
+    if (CONFIRMED_INBOUND_FALLBACK_STATES.includes(row.current_state)) {
+      return this._handleConfirmedInbound({ clinic, message, row, log });
     }
 
     log.info("Inbound message for a state with no handler yet — no-op", {
@@ -248,6 +260,51 @@ export class ConversationStateService {
       fromState: row.current_state,
     });
     return { handled: true, action: "RESET_TO_START", currentState: CONVERSATION_STATE.START };
+  }
+
+  /**
+   * Unrecognized inbound while the contact already has a confirmed booking.
+   * Plain-text session reply (24h customer-service window) — does not change
+   * conversation_state or touch the appointment row. Global RESET_KEYWORDS
+   * are intercepted before this runs.
+   */
+  async _handleConfirmedInbound({ clinic, message, row, log }) {
+    const appointmentId = row.context?.appointmentId ?? null;
+    let body = CONFIRMED_INBOUND_COPY.WITHOUT_SLOT;
+
+    if (appointmentId && this._appointmentRepo) {
+      try {
+        const appointment = await this._appointmentRepo.findByIdForClinic(clinic.id, appointmentId);
+        if (appointment?.slot_start) {
+          const { date, time } = formatSlotDateTimeParts(new Date(appointment.slot_start));
+          body = CONFIRMED_INBOUND_COPY.WITH_SLOT
+            .replace("{date}", date)
+            .replace("{time}", time);
+        }
+      } catch (err) {
+        log.warn("Failed to load appointment for CONFIRMED inbound fallback — sending generic copy", {
+          appointmentId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
+    await this._repo.update(row.id, {
+      context: { ...row.context, last_wa_message_id: message.waMessageId },
+      last_message_at: new Date().toISOString(),
+    });
+
+    log.info("Sent CONFIRMED inbound fallback reply", {
+      contactPhone: message.contactPhone,
+      currentState: row.current_state,
+      appointmentId,
+    });
+    return {
+      handled: true,
+      action: "CONFIRMED_FALLBACK_SENT",
+      currentState: row.current_state,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────

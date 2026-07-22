@@ -118,14 +118,13 @@ export function generateCandidateSlots({
 }
 
 /**
- * Formats a slot's start time for a WhatsApp list row title in IST,
- * e.g. "Mon 6 Jul, 10:00 AM" — kept to ~21 chars max, under Meta's 24-char
- * row title limit.
+ * Formats a slot's start into separate IST date + time strings for
+ * patient-facing copy (e.g. confirmed-appointment fallback).
  *
  * @param {Date} date
- * @returns {string}
+ * @returns {{ date: string; time: string }} e.g. `{ date: "Mon 6 Jul", time: "9:00 AM" }`
  */
-export function formatSlotLabel(date) {
+export function formatSlotDateTimeParts(date) {
   const ist = new Date(date.getTime() + IST_OFFSET_MS);
   const weekday = WEEKDAY_LABELS[ist.getUTCDay()];
   const day = ist.getUTCDate();
@@ -134,7 +133,23 @@ export function formatSlotLabel(date) {
   const minutes = String(ist.getUTCMinutes()).padStart(2, "0");
   const meridiem = hours >= 12 ? "PM" : "AM";
   hours = hours % 12 || 12;
-  return `${weekday} ${day} ${month}, ${hours}:${minutes} ${meridiem}`;
+  return {
+    date: `${weekday} ${day} ${month}`,
+    time: `${hours}:${minutes} ${meridiem}`,
+  };
+}
+
+/**
+ * Formats a slot's start time for a WhatsApp list row title in IST,
+ * e.g. "Mon 6 Jul, 10:00 AM" — kept to ~21 chars max, under Meta's 24-char
+ * row title limit.
+ *
+ * @param {Date} date
+ * @returns {string}
+ */
+export function formatSlotLabel(date) {
+  const { date: slotDate, time: slotTime } = formatSlotDateTimeParts(date);
+  return `${slotDate}, ${slotTime}`;
 }
 
 /** @param {Date} slotStart @returns {string} */

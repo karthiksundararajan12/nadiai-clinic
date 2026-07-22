@@ -229,6 +229,8 @@ export class ReminderService {
    * this file's header comment on the claim-before-send trade-off (favors
    * never double-sending over guaranteed delivery); the failure is logged
    * loudly so it's visible rather than silently lost.
+   *
+   * @returns {Promise<boolean>}
    */
   async _claimAndSend(clinic, appointment, kind, log) {
     const sentAtColumn = REMINDER_SENT_AT_COLUMN[kind];
@@ -239,12 +241,20 @@ export class ReminderService {
       log.error("Failed to claim reminder", {
         appointmentId: appointment.id,
         kind,
+        sentAtColumn,
         error: err instanceof Error ? err.message : String(err),
+        errorName: err instanceof Error ? err.name : undefined,
+        errorCode: err?.code ?? null,
+        errorDetails: err?.details ?? (err?.cause ?? null),
       });
       return false;
     }
     if (!claimed) {
-      log.info("Reminder already claimed elsewhere — skipping", { appointmentId: appointment.id, kind });
+      log.info("Reminder already claimed elsewhere — skipping", {
+        appointmentId: appointment.id,
+        kind,
+        sentAtColumn,
+      });
       return false;
     }
 
@@ -252,10 +262,23 @@ export class ReminderService {
       await this._sendReminder(clinic, claimed, kind, log);
       return true;
     } catch (err) {
+      // Claim already stamped sent_at — we will NOT clear it (avoids double-send
+      // on retry). Log everything actionable from the WhatsApp/Meta error so
+      // this doesn't look like a silent success in the DB.
       log.error("Failed to send reminder after claiming it — will not retry this run", {
         appointmentId: appointment.id,
         kind,
+        sentAtColumn,
+        templateName: REMINDER_TEMPLATE_NAME[kind],
+        languageCode: REMINDER_TEMPLATE_LANGUAGE_CODE,
+        recipient: appointment.contact_phone,
+        phoneNumberId: clinic.whatsapp_phone_number_id,
+        claimLeftSentAtSet: true,
         error: err instanceof Error ? err.message : String(err),
+        errorName: err instanceof Error ? err.name : undefined,
+        errorCode: err?.code ?? null,
+        errorDetails: err?.details ?? (err?.cause ?? null),
+        errorStack: err instanceof Error ? err.stack : undefined,
       });
       return false;
     }

@@ -562,7 +562,7 @@ test("a stray 'Book' tap while already mid-flow is rejected without disturbing p
   assert.equal(repo.row.context.collectingPatientStep, COLLECTING_PATIENT_STEP.AWAITING_AGE_OR_DOB); // untouched
   assert.match(wa.calls[0].body, /already in the middle of booking/);
   assert.match(wa.calls[0].body, /Rohan Sharma/);
-  assert.match(wa.calls[0].body, /cancel/);
+  assert.match(wa.calls[0].body, /restart/);
 });
 
 // ─────────────────────────────────────────────────────────────

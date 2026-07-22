@@ -697,3 +697,137 @@ test("a message for a state with no handler yet is safely no-op'd", async () => 
   assert.equal(result.reason, "NO_HANDLER_FOR_STATE");
   assert.equal(wa.calls.length, 0);
 });
+
+// ─────────────────────────────────────────────────────────────
+// CONFIRMED / REMINDER_SENT inbound fallback
+// ─────────────────────────────────────────────────────────────
+
+function createFakeAppointmentRepo(appointment = null) {
+  const findCalls = [];
+  return {
+    findCalls,
+    async findByIdForClinic(clinicId, appointmentId) {
+      findCalls.push({ clinicId, appointmentId });
+      if (!appointment) return null;
+      if (appointment.id && appointment.id !== appointmentId) return null;
+      return appointment;
+    },
+  };
+}
+
+test("CONFIRMED: unrecognized message gets a plain-text fallback with appointment date/time", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({
+    id: "appt-1",
+    slot_start: "2026-07-06T03:30:00.000Z", // Mon 6 Jul, 9:00 AM IST
+    status: "confirmed",
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.CONFIRMED,
+    context: { last_wa_message_id: "wamid.0", appointmentId: "appt-1" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "what time is my appointment?" }),
+  });
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, "CONFIRMED_FALLBACK_SENT");
+  assert.equal(result.currentState, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /Mon 6 Jul/);
+  assert.match(wa.calls[0].body, /9:00 AM/);
+  assert.match(wa.calls[0].body, /confirmed/i);
+  assert.match(wa.calls[0].body, /cancel/i);
+  assert.match(wa.calls[0].body, /menu/i);
+  assert.deepEqual(appointmentRepo.findCalls[0], { clinicId: "clinic-1", appointmentId: "appt-1" });
+  assert.equal(repo.rows.get("clinic-1:919876543210").current_state, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(repo.rows.get("clinic-1:919876543210").context.appointmentId, "appt-1");
+});
+
+test("CONFIRMED: reset keywords still short-circuit to START unchanged", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({
+    id: "appt-1",
+    slot_start: "2026-07-06T03:30:00.000Z",
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.CONFIRMED,
+    context: { last_wa_message_id: "wamid.0", appointmentId: "appt-1" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "menu" }),
+  });
+
+  assert.equal(result.action, "RESET_TO_START");
+  assert.equal(result.currentState, CONVERSATION_STATE.START);
+  assert.equal(appointmentRepo.findCalls.length, 0, "reset must not look up the appointment for fallback copy");
+  assert.equal(repo.rows.get("clinic-1:919876543210").current_state, CONVERSATION_STATE.START);
+  assert.equal(wa.calls.some((c) => c.type === "list"), true);
+});
+
+test("REMINDER_SENT: unrecognized message gets the same confirmed fallback treatment", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({
+    id: "appt-1",
+    slot_start: "2026-07-06T03:30:00.000Z",
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: "REMINDER_SENT",
+    context: { last_wa_message_id: "wamid.0", appointmentId: "appt-1" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "text", text: "hello?" }),
+  });
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, "CONFIRMED_FALLBACK_SENT");
+  assert.equal(result.currentState, "REMINDER_SENT");
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /Mon 6 Jul/);
+  assert.match(wa.calls[0].body, /9:00 AM/);
+  assert.equal(repo.rows.get("clinic-1:919876543210").current_state, "REMINDER_SENT");
+});

@@ -51,9 +51,9 @@ export class PaymentWebhookService {
    * @param {import("../repository/conversation-state.repository.js").ConversationStateRepository} conversationRepo
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("../repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository} webhookEventRepo
-   * @param {{ templatesLive?: boolean }} [opts]
+   * @param {{ templatesLive?: boolean; invoiceService?: import("./invoice.service.js").InvoiceService|null }} [opts]
    */
-  constructor(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, whatsappClient, webhookEventRepo, { templatesLive = false } = {}) {
+  constructor(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, whatsappClient, webhookEventRepo, { templatesLive = false, invoiceService = null } = {}) {
     this._appointmentRepo = appointmentRepo;
     this._clinicRepo      = clinicRepo;
     this._patientRepo     = patientRepo;
@@ -62,6 +62,7 @@ export class PaymentWebhookService {
     this._wa               = whatsappClient;
     this._eventRepo        = webhookEventRepo;
     this._templatesLive    = templatesLive;
+    this._invoiceService   = invoiceService;
     this._log = createLogger({ component: "PaymentWebhookService" });
   }
 
@@ -138,6 +139,15 @@ export class PaymentWebhookService {
       appointment: confirmed,
       log,
     });
+    // Invoice PDF + storage + stub WhatsApp document send — best-effort,
+    // parallel to confirmation messaging. Must not touch / roll back the
+    // appt_booking_confirmed path above.
+    await this._deliverInvoice({
+      clinicId,
+      appointment: confirmed,
+      razorpayPaymentId: payment.id,
+      log,
+    });
     await this._advanceConversationState({
       clinicId,
       contactPhone: confirmed.contact_phone,
@@ -146,6 +156,27 @@ export class PaymentWebhookService {
     });
 
     return { handled: true, action: "PAYMENT_CONFIRMED", appointmentId };
+  }
+
+  /**
+   * Best-effort invoice generation after payment confirm. Failures are
+   * logged only — never rethrow, never alter appointment status.
+   */
+  async _deliverInvoice({ clinicId, appointment, razorpayPaymentId, log }) {
+    if (!this._invoiceService) return;
+    try {
+      await this._invoiceService.deliverForConfirmedAppointment({
+        clinicId,
+        appointment,
+        razorpayPaymentId,
+      });
+    } catch (err) {
+      log.error("Failed to generate/send invoice after payment webhook", {
+        clinicId,
+        appointmentId: appointment.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   async _handleFailed({ payload, log }) {

@@ -164,8 +164,12 @@ export class InvoiceService {
     return generateInvoicePdf({
       clinicName: clinic.name,
       clinicAddress: clinic.address,
+      clinicPhone: clinic.phone ?? null,
+      clinicLogoUrl: clinic.logo_url ?? clinic.logoUrl ?? null,
       doctorName: doctor?.full_name ?? "NA",
       patientName: patient?.full_name ?? "NA",
+      patientPhone: appointment.contact_phone ?? null,
+      appointmentId: appointment.id ?? null,
       slotStart: appointment.slot_start,
       consultationAmount: appointment.payment_amount,
       razorpayPaymentId,

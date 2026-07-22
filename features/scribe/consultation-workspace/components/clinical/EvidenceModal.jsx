@@ -39,7 +39,7 @@ export function EvidenceModal({
               <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">
                 Source Transcript
               </p>
-              <div className="mt-2 rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="mt-2 rounded-lg border border-gray-200 bg-white p-3">
                 <p className="text-xs font-semibold text-gray-700">
                   Speaker: <span className="font-medium text-gray-900">{evidence.speaker ?? "Unknown"}</span>
                 </p>

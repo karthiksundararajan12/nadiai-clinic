@@ -49,7 +49,7 @@ export function CollapsibleTranscriptPanel({
         <div className="border-t border-gray-200 px-4 py-3">
           <textarea
             className={cn(
-              "min-h-[160px] w-full resize-y rounded-lg bg-gray-50 border border-gray-200 p-3 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30",
+              "min-h-[160px] w-full resize-y rounded-lg bg-white border border-gray-200 p-3 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30",
               readOnly && "cursor-default opacity-80",
             )}
             value={editedText}

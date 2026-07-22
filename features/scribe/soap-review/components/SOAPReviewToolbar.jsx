@@ -16,7 +16,7 @@ export function SOAPReviewToolbar({
   const approved = status === "SOAP_APPROVED" || status === "READY_FOR_PRESCRIPTION";
 
   return (
-    <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-background/95 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-gray-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={approved ? "success" : hasChanges ? "warning" : "secondary"}>{status}</Badge>
         <Badge variant={hasChanges ? "warning" : "success"}>

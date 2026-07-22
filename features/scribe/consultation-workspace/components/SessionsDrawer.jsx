@@ -168,7 +168,7 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
 
   return (
     <li
-      className="rounded-xl border border-slate-200/80 bg-slate-50/40 p-3"
+      className="rounded-xl border border-gray-200 bg-white p-3"
       data-testid="consultation-row"
       data-session-id={session.id}
     >
@@ -191,7 +191,7 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
           {canOpen && (
             <Button
               size="sm"
-              className="h-7 text-[11px] bg-slate-900 hover:bg-slate-800"
+              className="h-7 text-[11px] bg-primary text-primary-foreground hover:bg-primary-hover"
               data-testid="review-transcript"
               onClick={onOpen}
             >

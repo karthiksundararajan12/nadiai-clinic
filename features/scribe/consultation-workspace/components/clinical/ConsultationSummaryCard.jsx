@@ -20,7 +20,7 @@ export function ConsultationSummaryCard({ summary, className }) {
 
       <div className="grid gap-3 sm:grid-cols-2">
         {summary.chiefComplaint && (
-          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
             <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               Chief Complaint
             </p>
@@ -28,7 +28,7 @@ export function ConsultationSummaryCard({ summary, className }) {
           </div>
         )}
         {summary.duration && (
-          <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+          <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
             <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
               <Clock className="h-3 w-3" />
               Duration
@@ -39,7 +39,7 @@ export function ConsultationSummaryCard({ summary, className }) {
       </div>
 
       {summary.symptoms?.length > 0 && (
-        <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
+        <div className="mt-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
           <p className="flex items-center gap-1 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
             <Activity className="h-3 w-3" />
             Symptoms

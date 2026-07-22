@@ -273,7 +273,7 @@ export function SOAPEditorPanel({
                   Reject
                 </Button>
                 <Button
-                  className="flex-1 gap-2 bg-slate-900 hover:bg-slate-800"
+                  className="flex-1 gap-2 bg-primary text-primary-foreground hover:bg-primary-hover"
                   size="sm"
                   data-testid="soap-approve"
                   onClick={handleApprove}

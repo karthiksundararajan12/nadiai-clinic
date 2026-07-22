@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 
 function Metric({ icon: Icon, label, value }) {
   return (
-    <div className="rounded-xl bg-slate-50 px-3 py-2.5">
+    <div className="rounded-xl border border-gray-200 bg-white px-3 py-2.5">
       <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         <Icon className="h-3 w-3" />
         {label}

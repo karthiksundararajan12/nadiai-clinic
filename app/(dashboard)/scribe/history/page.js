@@ -63,7 +63,7 @@ export default function ConsultationHistoryPage() {
       <>
         <Header title="Consultation" subtitle="Conversation and SOAP note" />
         <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-background px-6 py-3">
+          <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
             <BackButton onClick={goList} />
           </div>
           <div className="min-h-0 flex-1 overflow-hidden">

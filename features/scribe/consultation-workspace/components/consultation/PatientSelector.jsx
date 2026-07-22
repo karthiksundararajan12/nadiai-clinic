@@ -57,7 +57,7 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
   if (patient) {
     const days = daysSince(patient.last_visit);
     return (
-      <div className={cn("flex w-full flex-col gap-3 border-b border-primary/20 bg-primary/[0.03] px-6 py-3 ring-1 ring-inset ring-primary/10", className)}>
+      <div className={cn("flex w-full flex-col gap-3 border-b border-gray-200 bg-white px-6 py-3", className)}>
         <PatientStepLabel />
         <div className="flex w-full items-center justify-between gap-4">
           <div className="flex items-center gap-3">
@@ -77,7 +77,7 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
             )}
           </div>
           <div className="flex items-center gap-2">
-            <button type="button" className="cursor-pointer rounded-lg border border-gray-200 p-2 transition-all duration-200 hover:bg-white" onClick={onClear} aria-label="Clear patient">
+            <button type="button" className="cursor-pointer rounded-lg border border-gray-200 p-2 transition-all duration-200 hover:bg-gray-50" onClick={onClear} aria-label="Clear patient">
               <X className="h-4 w-4 text-gray-500" />
             </button>
             <button type="button" className="cursor-pointer flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-2 text-xs transition-all duration-200 hover:bg-white" onClick={() => setShowCreate(true)}>
@@ -92,7 +92,7 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
   }
 
   return (
-    <div className={cn("relative w-full border-b border-primary/25 bg-primary/[0.03] px-6 py-4 ring-1 ring-inset ring-primary/15", className)}>
+    <div className={cn("relative w-full border-b border-gray-200 bg-white px-6 py-4", className)}>
       <PatientStepLabel />
       <div className="relative mt-3 max-w-xl">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />

@@ -10,7 +10,7 @@ function EditableField({ label, value, onSave, readOnly, icon: Icon }) {
 
   if (readOnly) {
     return value ? (
-      <div className="rounded-lg bg-gray-50 px-3 py-2.5">
+      <div className="rounded-lg border border-gray-200 bg-white px-3 py-2.5">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
         <p className="mt-1 text-sm font-medium text-gray-900">{value}</p>
       </div>
@@ -18,7 +18,7 @@ function EditableField({ label, value, onSave, readOnly, icon: Icon }) {
   }
 
   return (
-    <div className="group rounded-lg bg-gray-50 px-3 py-2.5 transition-all duration-200">
+    <div className="group rounded-lg border border-gray-200 bg-white px-3 py-2.5 transition-all duration-200">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
           {Icon && <Icon className="h-3 w-3" />}
@@ -130,7 +130,7 @@ export function ConsultationSummary({
         />
       </div>
 
-      <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2.5">
+      <div className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
         <p className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
           <Activity className="h-3 w-3" />
           Symptoms
@@ -155,7 +155,7 @@ export function ConsultationSummary({
         )}
       </div>
 
-      <div className="mt-3 rounded-lg bg-gray-50 px-3 py-2.5">
+      <div className="mt-3 rounded-lg border border-gray-200 bg-white px-3 py-2.5">
         <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-500">Key Findings</p>
         {keyFindings.length > 0 ? (
           <p className="mt-1 text-sm text-gray-800">{keyFindings.join(" · ")}</p>

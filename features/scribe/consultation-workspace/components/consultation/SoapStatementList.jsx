@@ -55,7 +55,7 @@ export function SoapStatementList({
                 "w-full cursor-pointer rounded-lg border px-3 py-2 text-left transition-all duration-300",
                 isActive
                   ? "border-primary bg-primary/5 ring-2 ring-primary/30 animate-evidence-pulse"
-                  : "border-transparent bg-gray-50/80 hover:border-gray-200 hover:bg-gray-50",
+                  : "border-transparent bg-white hover:border-gray-200 hover:bg-gray-50",
               )}
             >
               <p className="text-sm leading-relaxed text-gray-800">{statement.text}</p>

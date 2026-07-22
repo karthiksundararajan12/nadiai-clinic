@@ -327,7 +327,7 @@ function EmptyRecording({
           </Button>
           <Button
             size="icon"
-            className="h-14 w-14 rounded-full bg-slate-900 hover:bg-slate-800"
+            className="h-14 w-14 rounded-full bg-primary text-primary-foreground hover:bg-primary-hover"
             onClick={recordingControls.onStop}
             disabled={recordingControls.disabled}
           >
@@ -344,7 +344,7 @@ function EmptyRecording({
         <button
           type="button"
           onClick={onStartRecording}
-          className="flex h-16 w-16 items-center justify-center rounded-full bg-slate-900 text-white shadow-md hover:bg-slate-800"
+          className="flex h-16 w-16 items-center justify-center rounded-full bg-primary text-white shadow-md hover:bg-primary-hover"
         >
           <Mic className="h-7 w-7" />
         </button>

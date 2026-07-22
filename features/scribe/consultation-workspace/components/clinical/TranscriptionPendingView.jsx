@@ -18,7 +18,7 @@ export function TranscriptionPendingView({
         onOpenSessions={onOpenSessions}
       />
       <div
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 px-6 py-12"
+        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-white px-6 py-12"
         data-testid="transcript-review-workspace"
       >
         <Loader2 className="h-10 w-10 animate-spin text-primary" aria-hidden />

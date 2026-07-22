@@ -33,7 +33,7 @@ export function SOAPComparePanel({ comparison }) {
           <div key={key} className="rounded-lg border p-3">
             <h4 className="text-sm font-medium">{SECTION_LABELS[key] ?? key}</h4>
             <div className="mt-2 grid gap-3 md:grid-cols-2">
-              <div className="rounded-md bg-muted/40 p-3 text-sm whitespace-pre-wrap">
+              <div className="rounded-md border border-gray-200 bg-white p-3 text-sm whitespace-pre-wrap">
                 <p className="mb-1 text-xs font-medium text-muted-foreground">From</p>
                 {comparison.from?.note?.[key] || "Empty"}
               </div>

@@ -149,7 +149,7 @@ export function ConsultationClinicalLayout({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace">
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
             <h2 className="text-sm font-semibold text-gray-900">SOAP Note</h2>
@@ -248,7 +248,7 @@ export function ConsultationClinicalLayout({
         </div>
       </div>
 
-      <div className="relative min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+      <div className="relative min-h-0 flex-1 overflow-y-auto bg-white p-4 md:p-6">
         <SoapRegeneratingOverlay visible={soapProps.panel?.regenerating} />
         <div className="mx-auto max-w-3xl">
           {manualEditMode && (

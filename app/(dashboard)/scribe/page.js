@@ -21,7 +21,7 @@ export default function ScribePage() {
       <>
         <Header title="Prescription review" subtitle="Review and approve generated prescription" />
         <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden">
-          <div className="flex shrink-0 items-center gap-3 border-b border-border bg-background px-6 py-3">
+          <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-6 py-3">
             <Button
               variant="ghost"
               size="sm"

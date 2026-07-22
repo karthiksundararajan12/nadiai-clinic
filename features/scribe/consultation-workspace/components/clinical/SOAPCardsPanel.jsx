@@ -11,7 +11,7 @@ import { SOAPQualityIndicator } from "./SOAPQualityIndicator.jsx";
 function EvidenceList({ items, onJump }) {
   if (!items?.length) return null;
   return (
-    <div className="mt-3 rounded-xl bg-slate-50 px-3 py-2.5">
+    <div className="mt-3 rounded-xl border border-gray-200 bg-white px-3 py-2.5">
       <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">
         Evidence from transcript
       </p>

@@ -3,7 +3,7 @@
 export function ScribeShell({ header, children, className }) {
   return (
     <div
-      className={`flex h-full min-h-0 flex-col overflow-hidden bg-slate-100/80 ${className ?? ""}`}
+      className={`flex h-full min-h-0 flex-col overflow-hidden bg-white ${className ?? ""}`}
       data-testid="scribe-shell"
     >
       {header}

@@ -94,7 +94,7 @@ export function AudioPlaybackBar({ sessionId, onTimeUpdate, onSeekReady }) {
   if (error || !ready) return null;
 
   return (
-    <div className="flex items-center gap-3 border-b border-slate-100 bg-slate-50/80 px-4 py-2">
+    <div className="flex items-center gap-3 border-b border-gray-200 bg-white px-4 py-2">
       <audio
         ref={audioRef}
         onTimeUpdate={(e) => {

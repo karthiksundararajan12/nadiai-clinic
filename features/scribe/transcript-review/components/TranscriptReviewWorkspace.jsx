@@ -31,7 +31,7 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
   return (
     <section className={className} aria-label="Transcript review workspace" data-testid="transcript-review-workspace">
       {readOnly && (
-        <p className="mb-3 text-sm text-muted-foreground rounded-lg border bg-muted/30 px-3 py-2">
+        <p className="mb-3 text-sm text-muted-foreground rounded-lg border border-gray-200 bg-white px-3 py-2">
           Archived consultation — transcript is read-only.
         </p>
       )}
@@ -85,7 +85,7 @@ export function TranscriptReviewWorkspace({ sessionId, className }) {
             </TabsContent>
 
             <TabsContent value="plain">
-              <div className="rounded-xl border bg-muted/20 p-4 text-sm leading-7 whitespace-pre-wrap">
+              <div className="rounded-xl border border-gray-200 bg-white p-4 text-sm leading-7 whitespace-pre-wrap">
                 {review.segments.map((segment) => `${segment.speaker_label}: ${segment.text}`).join("\n\n")}
               </div>
             </TabsContent>

@@ -185,7 +185,7 @@ export default function PatientsPage() {
           </Card>
           <Card className="p-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-muted p-2">
+              <div className="rounded-lg border border-gray-200 bg-white p-2">
                 <Calendar className="h-4 w-4 text-muted-foreground" />
               </div>
               <div>

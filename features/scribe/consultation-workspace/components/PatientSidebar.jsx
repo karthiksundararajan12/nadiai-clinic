@@ -51,7 +51,7 @@ export function PatientSidebar({ patient, sessionDate, className }) {
       </div>
 
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5">
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 p-4 space-y-0.5">
+        <div className="rounded-xl border border-gray-200 bg-white p-4 space-y-0.5">
           <InfoRow label="Age" value={patient?.age ? `${patient.age} years` : null} />
           <InfoRow label="Gender" value={patient?.gender} />
           <InfoRow label="Visit type" value={patient?.visit_type ?? "Consultation"} />

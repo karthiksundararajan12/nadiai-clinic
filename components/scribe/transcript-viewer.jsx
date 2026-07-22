@@ -31,8 +31,8 @@ export function TranscriptViewer({ transcription, language, isRecording, error }
         <ScrollArea ref={scrollRef} className="h-[400px] px-6 pb-4">
           {transcription.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full py-16 text-center">
-              <div className="rounded-full bg-muted p-3 mb-3">
-                <FileText className="h-6 w-6 text-muted-foreground" />
+              <div className="rounded-full bg-gray-100 p-3 mb-3">
+                <FileText className="h-6 w-6 text-gray-400" />
               </div>
               <p className="text-sm text-muted-foreground">
                 {error || "Transcript not available."}

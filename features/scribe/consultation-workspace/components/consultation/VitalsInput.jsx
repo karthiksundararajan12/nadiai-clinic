@@ -24,7 +24,7 @@ function Field({ label, children }) {
 }
 
 const inputCls =
-  "w-full bg-gray-50 border border-gray-200 rounded px-2 py-1 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30";
+  "w-full bg-white border border-gray-200 rounded px-2 py-1 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30";
 
 const VITALS_COMMIT_DELAY_MS = 2000;
 

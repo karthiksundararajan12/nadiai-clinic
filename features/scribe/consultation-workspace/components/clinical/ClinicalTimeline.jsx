@@ -23,7 +23,7 @@ export function ClinicalTimeline({ status, className }) {
     <nav
       aria-label="Consultation progress"
       className={cn(
-        "flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-slate-100 bg-slate-50/50 px-5 py-3 lg:px-6",
+        "flex flex-wrap items-center gap-x-1 gap-y-2 border-b border-gray-200 bg-white px-5 py-3 lg:px-6",
         className,
       )}
     >

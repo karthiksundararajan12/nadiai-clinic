@@ -561,7 +561,7 @@ export function ScribeWorkflow() {
         sessionContext={recordPanelSessionContext}
       />
 
-      <main className="min-h-0 min-w-0 w-full md:w-[60%]">
+      <main className="min-h-0 min-w-0 w-full bg-white md:w-[60%]">
         {rightPanel}
       </main>
 

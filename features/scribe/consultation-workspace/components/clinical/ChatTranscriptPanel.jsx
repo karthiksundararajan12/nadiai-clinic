@@ -88,7 +88,7 @@ export function ChatTranscriptPanel({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search conversation…"
-            className="h-9 w-full rounded-xl border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm outline-none focus:border-primary focus:bg-white"
+            className="h-9 w-full rounded-xl border border-gray-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary/30"
           />
         </div>
       </div>

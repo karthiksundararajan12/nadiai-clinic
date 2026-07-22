@@ -40,10 +40,10 @@ export function ScribeConversationChat({
   if (!segments.length) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-8 text-center">
-        <div className="rounded-full bg-muted p-3">
-          <AudioLines className="h-6 w-6 text-muted-foreground" />
+        <div className="rounded-full bg-gray-100 p-3">
+          <AudioLines className="h-6 w-6 text-gray-400" />
         </div>
-        <p className="max-w-xs text-xs text-muted-foreground">
+        <p className="max-w-xs text-xs text-gray-500">
           Conversation will appear here after transcription.
         </p>
       </div>
@@ -81,7 +81,7 @@ export function ScribeConversationChat({
                     "relative rounded-lg px-3 py-2 text-xs leading-relaxed shadow-sm",
                     doctor
                       ? "rounded-tr-none bg-primary/5 text-gray-900"
-                      : "rounded-tl-none border border-gray-200 bg-gray-50 text-gray-900",
+                      : "rounded-tl-none border border-gray-200 bg-white text-gray-900",
                   )}
                 >
                   <p className="whitespace-pre-wrap">{segment.text}</p>

@@ -16,7 +16,7 @@ export function ReviewToolbar({
   onGenerateSOAP,
 }) {
   return (
-    <div className="sticky top-0 z-10 flex flex-col gap-3 border-b bg-background/95 p-3 backdrop-blur md:flex-row md:items-center md:justify-between">
+    <div className="sticky top-0 z-10 flex flex-col gap-3 border-b border-gray-200 bg-white p-3 md:flex-row md:items-center md:justify-between">
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={hasChanges ? "warning" : "success"}>
           {hasChanges ? "Unsaved changes" : "All changes saved"}

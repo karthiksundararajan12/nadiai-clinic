@@ -76,7 +76,7 @@ export function ScribeRecordPanel({
   };
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-gray-50 md:w-[40%]">
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col border-r border-gray-200 bg-white md:w-[40%]">
       {isLive && (
         <div
           className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900"

@@ -18,7 +18,7 @@ export function useNotifications() {
     try {
       const response = await fetch("/api/notifications?limit=20", {
         cache: "no-store",
-        signal,
+        signal: signal instanceof AbortSignal ? signal : undefined,
       });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -28,7 +28,7 @@ export function useNotifications() {
       setUnreadCount(Number(payload.unreadCount) || 0);
       setError(null);
     } catch (loadError) {
-      if (loadError.name !== "AbortError") {
+      if (loadError?.name !== "AbortError") {
         setError(loadError);
       }
     } finally {

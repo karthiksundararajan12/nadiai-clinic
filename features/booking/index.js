@@ -351,6 +351,16 @@ export {
   formatNotificationAmount,
 } from "./services/in-app-notification.service.js";
 export { NotificationRepository } from "./repository/notification.repository.js";
+export { PaymentRepository } from "./repository/payment.repository.js";
+export { PaymentsService } from "./services/payments.service.js";
+export {
+  PAYMENT_STATUS_FILTER,
+  PAYMENT_STATUS_LABEL,
+  formatPaymentStatusLabel,
+  paymentStatusFilterToDb,
+  resolvePaymentDateRange,
+  escapeIlikePattern,
+} from "./lib/payment-list.js";
 export {
   generateInvoicePdf,
   buildInvoiceDisplayFields,

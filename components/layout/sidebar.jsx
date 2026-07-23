@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   Mic,
   CalendarDays,
+  CreditCard,
   Users,
   Settings,
   LogOut,
@@ -29,6 +30,7 @@ const ICON_MAP = {
   LayoutDashboard,
   Mic,
   CalendarDays,
+  CreditCard,
   Users,
   Settings,
 };

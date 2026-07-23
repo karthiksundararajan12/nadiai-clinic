@@ -145,6 +145,7 @@ function makeService({
   isNewEvent = true,
   templatesLive = false,
   invoiceService = null,
+  inAppNotificationService = null,
 } = {}) {
   const appointmentRepo = createFakeAppointmentRepo({ confirmResult, releaseResult, findResult });
   const clinicRepo = createFakeClinicRepo(clinic);
@@ -153,7 +154,11 @@ function makeService({
   const conversationRepo = createFakeConversationRepo(conversationRow);
   const wa = createFakeWhatsAppClient();
   const eventRepo = createFakeWebhookEventRepo(isNewEvent);
-  const service = new PaymentWebhookService(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo, { templatesLive, invoiceService });
+  const service = new PaymentWebhookService(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo, {
+    templatesLive,
+    invoiceService,
+    inAppNotificationService,
+  });
   return { service, appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, wa, eventRepo };
 }
 
@@ -516,4 +521,84 @@ test("handleEvent: duplicate event skips invoice delivery entirely", async () =>
 
   assert.equal(result.action, "DUPLICATE_EVENT_SKIPPED");
   assert.equal(invoiceCalls.length, 0);
+});
+
+// ─────────────────────────────────────────────────────────────
+// In-app doctor notification (best-effort; same as invoice)
+// ─────────────────────────────────────────────────────────────
+
+test("payment.captured: creates in-app payment_received notification scoped to clinic", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed" };
+  const notifyCalls = [];
+  const inAppNotificationService = {
+    async createPaymentReceived(args) {
+      notifyCalls.push(args);
+      return { id: "notif-1", clinic_id: args.clinicId, type: "payment_received" };
+    },
+  };
+  const { service } = makeService({
+    confirmResult: confirmed,
+    conversationRow: paymentPendingConversationRow(),
+    inAppNotificationService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload({ paymentId: "pay_1" }),
+  });
+
+  assert.equal(result.action, "PAYMENT_CONFIRMED");
+  assert.equal(notifyCalls.length, 1);
+  assert.equal(notifyCalls[0].clinicId, "clinic-1");
+  assert.equal(notifyCalls[0].appointment.id, "appt-1");
+  assert.equal(notifyCalls[0].appointment.clinic_id, "clinic-1");
+});
+
+test("payment.captured: in-app notification failure does not roll back confirm", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed" };
+  const inAppNotificationService = {
+    async createPaymentReceived() {
+      throw new Error("notifications table down");
+    },
+  };
+  const row = paymentPendingConversationRow();
+  const { service, conversationRepo } = makeService({
+    confirmResult: confirmed,
+    conversationRow: row,
+    templatesLive: false,
+    inAppNotificationService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload({ paymentId: "pay_1" }),
+  });
+
+  assert.equal(result.action, "PAYMENT_CONFIRMED");
+  assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+});
+
+test("payment.captured: late payment does not create in-app notification", async () => {
+  const notifyCalls = [];
+  const inAppNotificationService = {
+    async createPaymentReceived(args) {
+      notifyCalls.push(args);
+    },
+  };
+  const { service } = makeService({
+    confirmResult: null,
+    findResult: { ...APPOINTMENT, status: "cancelled" },
+    inAppNotificationService,
+  });
+
+  const result = await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload(),
+  });
+
+  assert.equal(result.action, "LATE_PAYMENT_NOT_CONFIRMED");
+  assert.equal(notifyCalls.length, 0);
 });

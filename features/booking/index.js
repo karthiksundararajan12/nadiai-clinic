@@ -345,6 +345,13 @@ export { InvoiceService } from "./services/invoice.service.js";
 export { InvoiceStorageService } from "./services/invoice-storage.service.js";
 export { sendInvoiceDocument } from "./services/invoice-whatsapp.js";
 export {
+  InAppNotificationService,
+  NOTIFICATION_TYPE,
+  formatPaymentReceivedMessage,
+  formatNotificationAmount,
+} from "./services/in-app-notification.service.js";
+export { NotificationRepository } from "./repository/notification.repository.js";
+export {
   generateInvoicePdf,
   buildInvoiceDisplayFields,
   formatInvoiceNumber,
@@ -372,6 +379,8 @@ import { PaymentWebhookService as _PaymentWebhookService } from "./services/paym
 import { ReminderService as _ReminderService } from "./services/reminder.service.js";
 import { InvoiceStorageService as _InvoiceStorageService } from "./services/invoice-storage.service.js";
 import { InvoiceService as _InvoiceService } from "./services/invoice.service.js";
+import { NotificationRepository as _NotificationRepo } from "./repository/notification.repository.js";
+import { InAppNotificationService as _InAppNotificationService } from "./services/in-app-notification.service.js";
 
 /**
  * Wires together all booking domain services.
@@ -388,6 +397,7 @@ import { InvoiceService as _InvoiceService } from "./services/invoice.service.js
  *   appointmentRepository: import("./repository/appointment.repository.js").AppointmentRepository;
  *   razorpayWebhookEventRepository: import("./repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository;
  *   invoiceRepository: import("./repository/invoice.repository.js").InvoiceRepository;
+ *   notificationRepository: import("./repository/notification.repository.js").NotificationRepository;
  *   whatsappClient: import("./services/whatsapp-client.service.js").WhatsAppClientService;
  *   razorpayClient: import("./services/razorpay-client.service.js").RazorpayClientService;
  *   doctorNotificationService: import("./services/doctor-notification.service.js").DoctorNotificationService;
@@ -398,6 +408,7 @@ import { InvoiceService as _InvoiceService } from "./services/invoice.service.js
  *   reminderService: import("./services/reminder.service.js").ReminderService;
  *   invoiceService: import("./services/invoice.service.js").InvoiceService;
  *   invoiceStorageService: import("./services/invoice-storage.service.js").InvoiceStorageService;
+ *   inAppNotificationService: import("./services/in-app-notification.service.js").InAppNotificationService;
  * }}
  */
 export function createBookingServices(supabaseClient) {
@@ -410,6 +421,7 @@ export function createBookingServices(supabaseClient) {
   const appointmentRepository = new _AppointmentRepo(supabase);
   const razorpayWebhookEventRepository = new _RazorpayWebhookEventRepo(supabase);
   const invoiceRepository = new _InvoiceRepo(supabase);
+  const notificationRepository = new _NotificationRepo(supabase);
   const whatsappClient = new _WAClient({
     accessToken: process.env.WHATSAPP_ACCESS_TOKEN,
     apiVersion:  process.env.WHATSAPP_API_VERSION,
@@ -449,6 +461,10 @@ export function createBookingServices(supabaseClient) {
     patientRepository,
     doctorProfileRepository,
   );
+  const inAppNotificationService = new _InAppNotificationService(
+    notificationRepository,
+    patientRepository,
+  );
   const paymentWebhookService = new _PaymentWebhookService(
     appointmentRepository,
     clinicRepository,
@@ -460,6 +476,7 @@ export function createBookingServices(supabaseClient) {
     {
       templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
       invoiceService,
+      inAppNotificationService,
     },
   );
   const reminderService = new _ReminderService(
@@ -482,6 +499,7 @@ export function createBookingServices(supabaseClient) {
     appointmentRepository,
     razorpayWebhookEventRepository,
     invoiceRepository,
+    notificationRepository,
     whatsappClient,
     razorpayClient,
     doctorNotificationService,
@@ -492,5 +510,6 @@ export function createBookingServices(supabaseClient) {
     reminderService,
     invoiceService,
     invoiceStorageService,
+    inAppNotificationService,
   };
 }

@@ -291,23 +291,30 @@ CREATE POLICY "Doctors can manage their own invoices"
   ON public.invoices FOR ALL
   USING (auth.uid() = doctor_id);
 
--- Doctor Notifications
+-- Doctor Notifications (clinic-scoped; see migration 025_notifications.sql)
 CREATE TABLE IF NOT EXISTS public.notifications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  clinic_id UUID NOT NULL REFERENCES public.clinics(id) ON DELETE CASCADE,
+  doctor_id UUID REFERENCES public.doctor_profiles(id) ON DELETE SET NULL,
   type TEXT NOT NULL,
   title TEXT NOT NULL,
-  message TEXT,
-  metadata JSONB DEFAULT '{}',
-  read BOOLEAN DEFAULT FALSE,
+  message TEXT NOT NULL,
+  related_appointment_id UUID REFERENCES public.appointments(id) ON DELETE SET NULL,
+  is_read BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Doctors can manage their own notifications"
+CREATE POLICY "Doctors can manage their clinic notifications"
   ON public.notifications FOR ALL
-  USING (auth.uid() = doctor_id);
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.doctor_profiles dp
+      WHERE dp.user_id = auth.uid()
+        AND dp.clinic_id = notifications.clinic_id
+    )
+  );
 
 -- Appointment Slots Configuration
 CREATE TABLE IF NOT EXISTS public.appointment_slots (

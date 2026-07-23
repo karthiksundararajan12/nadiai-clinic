@@ -51,9 +51,9 @@ export class PaymentWebhookService {
    * @param {import("../repository/conversation-state.repository.js").ConversationStateRepository} conversationRepo
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("../repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository} webhookEventRepo
-   * @param {{ templatesLive?: boolean; invoiceService?: import("./invoice.service.js").InvoiceService|null }} [opts]
+   * @param {{ templatesLive?: boolean; invoiceService?: import("./invoice.service.js").InvoiceService|null; inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null }} [opts]
    */
-  constructor(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, whatsappClient, webhookEventRepo, { templatesLive = false, invoiceService = null } = {}) {
+  constructor(appointmentRepo, clinicRepo, patientRepo, doctorProfileRepo, conversationRepo, whatsappClient, webhookEventRepo, { templatesLive = false, invoiceService = null, inAppNotificationService = null } = {}) {
     this._appointmentRepo = appointmentRepo;
     this._clinicRepo      = clinicRepo;
     this._patientRepo     = patientRepo;
@@ -63,6 +63,7 @@ export class PaymentWebhookService {
     this._eventRepo        = webhookEventRepo;
     this._templatesLive    = templatesLive;
     this._invoiceService   = invoiceService;
+    this._inAppNotificationService = inAppNotificationService;
     this._log = createLogger({ component: "PaymentWebhookService" });
   }
 
@@ -148,6 +149,12 @@ export class PaymentWebhookService {
       razorpayPaymentId: payment.id,
       log,
     });
+    // In-app doctor bell notification — best-effort, same as invoice.
+    await this._notifyDoctorPaymentReceived({
+      clinicId,
+      appointment: confirmed,
+      log,
+    });
     await this._advanceConversationState({
       clinicId,
       contactPhone: confirmed.contact_phone,
@@ -172,6 +179,26 @@ export class PaymentWebhookService {
       });
     } catch (err) {
       log.error("Failed to generate/send invoice after payment webhook", {
+        clinicId,
+        appointmentId: appointment.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  /**
+   * Best-effort in-app "Payment received" notification for the clinic
+   * dashboard. Failures are logged only — never rethrow.
+   */
+  async _notifyDoctorPaymentReceived({ clinicId, appointment, log }) {
+    if (!this._inAppNotificationService) return;
+    try {
+      await this._inAppNotificationService.createPaymentReceived({
+        clinicId,
+        appointment,
+      });
+    } catch (err) {
+      log.error("Failed to create in-app payment notification after payment webhook", {
         clinicId,
         appointmentId: appointment.id,
         error: err instanceof Error ? err.message : String(err),

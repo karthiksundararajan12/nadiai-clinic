@@ -1,8 +1,9 @@
 "use client";
 
-import { Bell, Menu, Sun, Moon } from "lucide-react";
+import { Menu, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/shared/search-input";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
 
@@ -69,10 +70,7 @@ export function Header({ title, subtitle, onMenuClick }) {
             <Moon className="h-[18px] w-[18px]" />
           )}
         </Button>
-        <Button variant="ghost" size="icon" className="relative">
-          <Bell className="h-[18px] w-[18px]" />
-          <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
-        </Button>
+        <NotificationBell />
       </div>
     </header>
   );

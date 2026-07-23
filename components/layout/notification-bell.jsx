@@ -96,7 +96,7 @@ export function NotificationBell() {
       }
     }
     setOpen(false);
-    router.push("/appointments");
+    router.push(`/notifications/${notification.id}`);
   }
 
   async function handleMarkAll() {
@@ -121,15 +121,27 @@ export function NotificationBell() {
       >
         <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
           <p className="text-sm font-semibold text-foreground">Notifications</p>
-          {unreadCount > 0 && (
+          <div className="flex items-center gap-2">
+            {unreadCount > 0 && (
+              <button
+                type="button"
+                onClick={handleMarkAll}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Mark all read
+              </button>
+            )}
             <button
               type="button"
-              onClick={handleMarkAll}
-              className="text-xs font-medium text-primary hover:underline"
+              onClick={() => {
+                setOpen(false);
+                router.push("/notifications");
+              }}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
             >
-              Mark all read
+              View all
             </button>
-          )}
+          </div>
         </div>
 
         <ul className="max-h-80 overflow-y-auto">

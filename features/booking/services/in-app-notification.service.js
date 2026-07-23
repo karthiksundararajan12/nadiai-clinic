@@ -81,14 +81,36 @@ export class InAppNotificationService {
 
   /**
    * @param {string} clinicId
-   * @param {{ limit?: number }} [opts]
+   * @param {{ limit?: number; offset?: number }} [opts]
    */
-  async listForClinic(clinicId, { limit = 20 } = {}) {
-    const [notifications, unreadCount] = await Promise.all([
-      this._notificationRepo.listRecentForClinic(clinicId, { limit }),
+  async listForClinic(clinicId, { limit = 20, offset = 0 } = {}) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+    const [notifications, unreadCount, total] = await Promise.all([
+      this._notificationRepo.listRecentForClinic(clinicId, {
+        limit: safeLimit,
+        offset: safeOffset,
+      }),
       this._notificationRepo.countUnreadForClinic(clinicId),
+      this._notificationRepo.countForClinic(clinicId),
     ]);
-    return { notifications, unreadCount };
+    return {
+      notifications,
+      unreadCount,
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
+      hasMore: safeOffset + notifications.length < total,
+    };
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} notificationId
+   * @returns {Promise<import("../repository/notification.repository.js").ClinicNotification|null>}
+   */
+  async getById(clinicId, notificationId) {
+    return this._notificationRepo.findByIdForClinic(clinicId, notificationId);
   }
 
   /**

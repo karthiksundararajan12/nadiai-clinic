@@ -50,8 +50,17 @@ function createFakeNotificationRepo(seed = []) {
       rows = [row, ...rows];
       return row;
     },
-    async listRecentForClinic(clinicId, { limit = 20 } = {}) {
-      return rows.filter((r) => r.clinic_id === clinicId).slice(0, limit);
+    async listRecentForClinic(clinicId, { limit = 20, offset = 0 } = {}) {
+      return rows
+        .filter((r) => r.clinic_id === clinicId)
+        .slice(offset, offset + limit);
+    },
+    async findByIdForClinic(clinicId, notificationId) {
+      const row = rows.find((r) => r.id === notificationId && r.clinic_id === clinicId);
+      return row ? { ...row } : null;
+    },
+    async countForClinic(clinicId) {
+      return rows.filter((r) => r.clinic_id === clinicId).length;
     },
     async countUnreadForClinic(clinicId) {
       return rows.filter((r) => r.clinic_id === clinicId && !r.is_read).length;
@@ -164,6 +173,59 @@ test("listForClinic unreadCount is scoped to the requesting clinic only", async 
 
   const forB = await service.getUnreadCount(CLINIC_B);
   assert.equal(forB, 1);
+});
+
+test("listForClinic supports offset pagination and hasMore", async () => {
+  const seed = Array.from({ length: 5 }, (_, i) => ({
+    id: `n${i}`,
+    clinic_id: CLINIC_A,
+    doctor_id: null,
+    type: "payment_received",
+    title: "Payment received",
+    message: `msg-${i}`,
+    related_appointment_id: null,
+    is_read: false,
+    created_at: `2026-07-0${i + 1}T10:00:00.000Z`,
+  }));
+  const repo = createFakeNotificationRepo(seed);
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  const page1 = await service.listForClinic(CLINIC_A, { limit: 2, offset: 0 });
+  assert.equal(page1.notifications.length, 2);
+  assert.equal(page1.total, 5);
+  assert.equal(page1.hasMore, true);
+
+  const page2 = await service.listForClinic(CLINIC_A, { limit: 2, offset: 2 });
+  assert.equal(page2.notifications.length, 2);
+  assert.equal(page2.hasMore, true);
+
+  const page3 = await service.listForClinic(CLINIC_A, { limit: 2, offset: 4 });
+  assert.equal(page3.notifications.length, 1);
+  assert.equal(page3.hasMore, false);
+});
+
+test("getById returns clinic-scoped notification or null", async () => {
+  const repo = createFakeNotificationRepo([
+    {
+      id: "n-mine",
+      clinic_id: CLINIC_A,
+      doctor_id: null,
+      type: "payment_received",
+      title: "Payment received",
+      message: "Karthik paid ₹799 for appointment on Thu 23 Jul, 10:00 AM",
+      related_appointment_id: "appt-1",
+      is_read: false,
+      created_at: "2026-07-01T10:00:00.000Z",
+    },
+  ]);
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  const found = await service.getById(CLINIC_A, "n-mine");
+  assert.equal(found?.id, "n-mine");
+  assert.match(found.message, /Karthik paid ₹799/);
+
+  const crossClinic = await service.getById(CLINIC_B, "n-mine");
+  assert.equal(crossClinic, null);
 });
 
 test("markRead only updates a notification belonging to that clinic", async () => {

@@ -115,9 +115,10 @@ export class WhatsAppClientService {
 
   /**
    * Sends an approved WhatsApp message template. Used by ReminderService
-   * for `appt_reminder_24h`/`appt_reminder_2h` — always gated behind
-   * WHATSAPP_TEMPLATES_LIVE at the call site (this method itself has no
-   * flag/stub logic; it's a real Meta API call whenever it's invoked).
+   * for `appt_reminder_24h`/`appt_reminder_2h` and by payment confirmation /
+   * invoice paths — always gated behind WHATSAPP_TEMPLATES_LIVE at the call
+   * site (this method itself has no flag/stub logic; it's a real Meta API
+   * call whenever it's invoked).
    *
    * @param {string} phoneNumberId
    * @param {string} toPhone
@@ -126,10 +127,37 @@ export class WhatsAppClientService {
    *   languageCode: string;
    *   bodyParams?: string[];
    *   buttonPayloads?: Array<{ index: number; payload: string }>;
+   *   headerDocument?: { link: string; filename?: string } | null;
    * }} opts
    */
-  async sendTemplate(phoneNumberId, toPhone, { templateName, languageCode, bodyParams = [], buttonPayloads = [] }) {
+  async sendTemplate(
+    phoneNumberId,
+    toPhone,
+    {
+      templateName,
+      languageCode,
+      bodyParams = [],
+      buttonPayloads = [],
+      headerDocument = null,
+    },
+  ) {
     const components = [];
+    if (headerDocument?.link) {
+      components.push({
+        type: "header",
+        parameters: [
+          {
+            type: "document",
+            document: {
+              link: headerDocument.link,
+              ...(headerDocument.filename
+                ? { filename: headerDocument.filename }
+                : {}),
+            },
+          },
+        ],
+      });
+    }
     if (bodyParams.length > 0) {
       components.push({
         type: "body",
@@ -152,6 +180,31 @@ export class WhatsAppClientService {
         name: templateName,
         language: { code: languageCode },
         ...(components.length > 0 && { components }),
+      },
+    });
+  }
+
+  /**
+   * Sends a free-form document message (link Meta can fetch). Requires an
+   * open customer-care window — prefer a DOCUMENT-header template when one
+   * is approved. Used as the invoice PDF attachment path when `appt_invoice`
+   * is body-only (no media header on the approved template).
+   *
+   * @param {string} phoneNumberId
+   * @param {string} toPhone
+   * @param {{ link: string; filename?: string; caption?: string }} opts
+   */
+  async sendDocument(phoneNumberId, toPhone, { link, filename, caption }) {
+    if (!link) {
+      throw new WhatsAppSendError("sendDocument requires a document link");
+    }
+    return this._post(phoneNumberId, {
+      to: toPhone,
+      type: "document",
+      document: {
+        link,
+        ...(filename ? { filename } : {}),
+        ...(caption ? { caption } : {}),
       },
     });
   }

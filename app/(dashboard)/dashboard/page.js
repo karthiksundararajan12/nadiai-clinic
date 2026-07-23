@@ -14,9 +14,12 @@ import {
   Users,
   CalendarDays,
   Mic,
-  Settings,
   ArrowRight,
+  Activity,
+  Stethoscope,
+  CreditCard,
 } from "lucide-react";
+import { ICON_SIZE_LG, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import Link from "next/link";
 
 export default function DashboardPage() {
@@ -81,12 +84,12 @@ export default function DashboardPage() {
           <StatsCard
             title="Scribe Sessions This Week"
             value={metricValue(dashboard?.stats.completedScribeSessionsThisWeek)}
-            icon={Mic}
+            icon={Stethoscope}
           />
           <StatsCard
             title="Active Patients"
             value={metricValue(dashboard?.stats.activePatients)}
-            icon={Users}
+            icon={Activity}
           />
         </div>
 
@@ -111,8 +114,8 @@ export default function DashboardPage() {
             <Card className="border border-primary/15 bg-gradient-to-br from-primary/5 via-card to-card">
               <CardContent className="p-5">
                 <div className="flex items-start gap-3">
-                  <div className="rounded-lg border border-primary/15 bg-primary/10 p-2">
-                    <Mic className="h-5 w-5 text-primary" />
+                  <div className="rounded-lg border border-primary/15 bg-primary/10 p-2 text-primary">
+                    <Mic className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
                   </div>
                   <div className="flex-1">
                     <h3 className="font-display text-sm font-semibold text-foreground">
@@ -124,9 +127,9 @@ export default function DashboardPage() {
                     </p>
                     <Link href="/scribe">
                       <Button size="sm" className="mt-3 gap-1.5">
-                        <Mic className="h-3.5 w-3.5" />
+                        <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                         Start Scribe
-                        <ArrowRight className="h-3 w-3" />
+                        <ArrowRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                       </Button>
                     </Link>
                   </div>
@@ -140,27 +143,27 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="grid grid-cols-2 gap-2">
                 <Link href="/scribe">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
-                    <Mic className="h-5 w-5 text-primary" />
-                    <span className="text-xs font-medium">New Scribe</span>
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
+                    <Mic className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
+                    <span className="text-xs font-medium text-foreground">New Scribe</span>
                   </button>
                 </Link>
                 <Link href="/appointments">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
-                    <CalendarDays className="h-5 w-5 text-primary" />
-                    <span className="text-xs font-medium">Book Slot</span>
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
+                    <CalendarDays className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
+                    <span className="text-xs font-medium text-foreground">Book Slot</span>
                   </button>
                 </Link>
                 <Link href="/patients">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
-                    <Users className="h-5 w-5 text-primary" />
-                    <span className="text-xs font-medium">Add Patient</span>
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
+                    <Users className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
+                    <span className="text-xs font-medium text-foreground">Add Patient</span>
                   </button>
                 </Link>
-                <Link href="/settings">
-                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
-                    <Settings className="h-5 w-5 text-primary" />
-                    <span className="text-xs font-medium">Settings</span>
+                <Link href="/payments">
+                  <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
+                    <CreditCard className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
+                    <span className="text-xs font-medium text-foreground">Payments</span>
                   </button>
                 </Link>
               </CardContent>

@@ -1,5 +1,5 @@
 /**
- * @fileoverview InvoiceService — generate + store + (stub) WhatsApp-send a
+ * @fileoverview InvoiceService — generate + store + WhatsApp-send a
  * consultation invoice PDF after Razorpay payment.captured confirms an
  * appointment.
  *
@@ -12,11 +12,12 @@
  *      appointment, reuse its storage object and re-issue a signed URL.
  *   2. Else allocate the next sequential invoice number for clinic_id,
  *      generate the PDF (pdf-lib), upload to Supabase Storage, insert ledger.
- *   3. sendInvoiceDocument(...) — currently a no-op stub until Meta
- *      approves the appt_invoice document template.
+ *   3. sendInvoiceDocument(...) — appt_invoice template + document PDF
+ *      (gated by WHATSAPP_TEMPLATES_LIVE inside the send helper).
  */
 
 import { createLogger } from "../logger.js";
+import { formatSlotLabel } from "../lib/slot-engine.js";
 import { sendInvoiceDocument } from "./invoice-whatsapp.js";
 import { generateInvoicePdf } from "../lib/invoice-pdf.js";
 
@@ -27,7 +28,11 @@ export class InvoiceService {
    * @param {import("../repository/clinic.repository.js").ClinicRepository} clinicRepo
    * @param {import("../repository/patient.repository.js").PatientRepository} patientRepo
    * @param {import("../repository/doctor-profile.repository.js").DoctorProfileRepository} doctorProfileRepo
-   * @param {{ sendInvoiceDocument?: typeof sendInvoiceDocument }} [opts]
+   * @param {{
+   *   sendInvoiceDocument?: typeof sendInvoiceDocument;
+   *   whatsappClient?: import("./whatsapp-client.service.js").WhatsAppClientService;
+   *   templatesLive?: boolean;
+   * }} [opts]
    */
   constructor(
     invoiceRepo,
@@ -35,7 +40,11 @@ export class InvoiceService {
     clinicRepo,
     patientRepo,
     doctorProfileRepo,
-    { sendInvoiceDocument: sendFn = sendInvoiceDocument } = {},
+    {
+      sendInvoiceDocument: sendFn = sendInvoiceDocument,
+      whatsappClient = null,
+      templatesLive = process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+    } = {},
   ) {
     this._invoiceRepo = invoiceRepo;
     this._storage = invoiceStorage;
@@ -43,12 +52,14 @@ export class InvoiceService {
     this._patientRepo = patientRepo;
     this._doctorRepo = doctorProfileRepo;
     this._sendInvoiceDocument = sendFn;
+    this._wa = whatsappClient;
+    this._templatesLive = templatesLive;
     this._log = createLogger({ component: "InvoiceService" });
   }
 
   /**
    * Generate (or reuse) the invoice PDF for a confirmed paid appointment,
-   * upload to storage, and stub-send via WhatsApp document template.
+   * upload to storage, and send via WhatsApp (`appt_invoice` + document).
    *
    * @param {{
    *   clinicId: string;
@@ -138,10 +149,17 @@ export class InvoiceService {
     }
 
     if (clinic.whatsapp_phone_number_id && appointment.contact_phone) {
+      const bodyParams = [formatSlotLabel(new Date(appointment.slot_start))];
       await this._sendInvoiceDocument(
         clinic.whatsapp_phone_number_id,
         appointment.contact_phone,
         pdfUrl,
+        {
+          whatsappClient: this._wa,
+          bodyParams,
+          filename: `${invoiceNumber}.pdf`,
+          templatesLive: this._templatesLive,
+        },
       );
     } else {
       log.warn("Skipping invoice WhatsApp send — missing phone_number_id or contact phone", {

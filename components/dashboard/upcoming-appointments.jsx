@@ -5,6 +5,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Clock, ArrowRight, CalendarDays } from "lucide-react";
 import Link from "next/link";
+import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 
 export function UpcomingAppointments({ appointments = [], loading = false }) {
   return (
@@ -15,7 +16,7 @@ export function UpcomingAppointments({ appointments = [], loading = false }) {
           href="/appointments"
           className="flex items-center gap-1 text-xs font-medium text-primary transition-colors duration-150 hover:text-primary/80"
         >
-          View all <ArrowRight className="h-3 w-3" />
+          View all <ArrowRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
         </Link>
       </CardHeader>
       <CardContent className="p-0">
@@ -38,7 +39,7 @@ export function UpcomingAppointments({ appointments = [], loading = false }) {
                 className="flex items-center gap-3 px-6 py-3 transition-colors duration-150 hover:bg-muted/60"
               >
                 <div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg border border-primary/15 bg-primary/10 text-primary">
-                  <Clock className="h-4 w-4" />
+                  <Clock className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">

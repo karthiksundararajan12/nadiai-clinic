@@ -6,6 +6,7 @@ import { SearchInput } from "@/components/shared/search-input";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
+import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 
 export function Header({ title, subtitle, onMenuClick }) {
   const [search, setSearch] = useState("");
@@ -34,7 +35,7 @@ export function Header({ title, subtitle, onMenuClick }) {
           onClick={onMenuClick}
           className="rounded-lg p-2 text-muted-foreground transition-colors duration-150 hover:bg-gray-100 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
         >
-          <Menu className="h-5 w-5" />
+          <Menu className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
         </button>
         <div>
           <h1 className="font-display text-lg font-semibold text-foreground">{title}</h1>
@@ -65,9 +66,9 @@ export function Header({ title, subtitle, onMenuClick }) {
           className="text-muted-foreground"
         >
           {theme === "dark" ? (
-            <Sun className="h-[18px] w-[18px]" />
+            <Sun className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
           ) : (
-            <Moon className="h-[18px] w-[18px]" />
+            <Moon className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
           )}
         </Button>
         <NotificationBell />

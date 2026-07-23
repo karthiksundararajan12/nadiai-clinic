@@ -1,5 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Card } from "@/components/ui/card";
+import { ICON_SIZE_LG, ICON_STROKE } from "@/lib/icons";
 
 export function StatsCard({ title, value, change, changeType, icon: Icon, className }) {
   return (
@@ -32,8 +33,8 @@ export function StatsCard({ title, value, change, changeType, icon: Icon, classN
           )}
         </div>
         {Icon && (
-          <div className="rounded-lg border border-primary/15 bg-primary/10 p-2.5">
-            <Icon className="h-5 w-5 text-primary" />
+          <div className="rounded-lg border border-primary/15 bg-primary/10 p-2.5 text-primary">
+            <Icon className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
           </div>
         )}
       </div>

@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
 import { Bell } from "lucide-react";
+import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 import { useNotifications } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 
@@ -220,7 +221,7 @@ export function NotificationBell() {
         aria-haspopup="dialog"
         onClick={toggleOpen}
       >
-        <Bell className="h-[18px] w-[18px]" aria-hidden="true" />
+        <Bell className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} aria-hidden="true" />
         {unreadCount > 0 && (
           <span
             className={cn(

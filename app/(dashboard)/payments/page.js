@@ -9,6 +9,7 @@ import {
   ExternalLink,
   FileText,
 } from "lucide-react";
+import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
@@ -326,9 +327,9 @@ export default function PaymentsPage() {
                               disabled={openingInvoice === payment.appointmentId}
                               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline disabled:opacity-60"
                             >
-                              <FileText className="h-3.5 w-3.5" />
+                              <FileText className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                               {payment.invoiceNumber}
-                              <ExternalLink className="h-3 w-3 opacity-70" />
+                              <ExternalLink className={`${ICON_SIZE_SM} opacity-70`} strokeWidth={ICON_STROKE} />
                             </button>
                           ) : (
                             <span className="text-sm text-muted-foreground">
@@ -363,7 +364,7 @@ export default function PaymentsPage() {
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
                   className="gap-1"
                 >
-                  <ChevronLeft className="h-4 w-4" />
+                  <ChevronLeft className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
                   Prev
                 </Button>
                 <Button
@@ -375,7 +376,7 @@ export default function PaymentsPage() {
                   className="gap-1"
                 >
                   Next
-                  <ChevronRight className="h-4 w-4" />
+                  <ChevronRight className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
                 </Button>
               </div>
             </div>

@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
-import { ArrowLeft, CalendarDays, IndianRupee } from "lucide-react";
+import { ArrowLeft, CalendarDays, CreditCard } from "lucide-react";
+import { ICON_SIZE_MD, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -74,7 +75,7 @@ export default function NotificationDetailPage() {
             className="gap-1.5 text-muted-foreground"
             onClick={() => router.push("/notifications")}
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
             All notifications
           </Button>
         </div>
@@ -147,7 +148,7 @@ export default function NotificationDetailPage() {
               {isPayment ? (
                 <div className="flex gap-3">
                   <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
-                    <IndianRupee className="h-4 w-4" />
+                    <CreditCard className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
                   </div>
                   <p className="whitespace-pre-wrap text-base leading-relaxed text-foreground">
                     {notification.message}
@@ -166,7 +167,7 @@ export default function NotificationDetailPage() {
                   href={`/appointments?appointmentId=${notification.related_appointment_id}`}
                   className={cn(buttonVariants({ variant: "default", size: "sm" }), "gap-1.5")}
                 >
-                  <CalendarDays className="h-4 w-4" />
+                  <CalendarDays className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
                   View related appointment
                 </Link>
                 <Link

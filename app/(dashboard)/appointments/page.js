@@ -30,9 +30,10 @@ import {
   Plus,
   CalendarDays,
   Clock,
-  User,
+  History,
   Mic,
 } from "lucide-react";
+import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 
 const CONSULTATION_STATUSES = new Set([
   "pending",
@@ -94,7 +95,7 @@ function AppointmentList({ items, loading, onCancel, onReschedule }) {
               </p>
               <div className="flex items-center gap-3 mt-0.5 text-xs text-muted-foreground">
                 <span className="flex items-center gap-1">
-                  <Clock className="h-3 w-3" />
+                  <Clock className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                   {appointment.time}
                 </span>
                 {appointment.type && <span>{appointment.type}</span>}
@@ -115,7 +116,7 @@ function AppointmentList({ items, loading, onCancel, onReschedule }) {
               {CONSULTATION_STATUSES.has(appointment.status) && (
                 <Link href={`/scribe?appointment_id=${appointment.id}`}>
                   <Button variant="outline" size="xs" className="gap-1">
-                    <Mic className="h-3 w-3" />
+                    <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                     Start consultation
                   </Button>
                 </Link>
@@ -286,7 +287,7 @@ export default function AppointmentsPage() {
             className="gap-1.5"
             onClick={() => setDialogOpen(true)}
           >
-            <Plus className="h-3.5 w-3.5" />
+            <Plus className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
             New Appointment
           </Button>
         </div>
@@ -295,7 +296,7 @@ export default function AppointmentsPage() {
           <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
               <div className="rounded-lg border border-primary/15 bg-primary/10 p-2">
-                <CalendarDays className="h-4 w-4 text-primary" />
+                <CalendarDays className={`${ICON_SIZE_MD} text-primary`} strokeWidth={ICON_STROKE} />
               </div>
               <div>
                 <p className="font-display text-2xl font-bold">{countLabel(todayApts.length)}</p>
@@ -306,7 +307,7 @@ export default function AppointmentsPage() {
           <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
               <div className="rounded-lg border border-warning/25 bg-warning/10 p-2">
-                <Clock className="h-4 w-4 text-warning" />
+                <Clock className={`${ICON_SIZE_MD} text-warning`} strokeWidth={ICON_STROKE} />
               </div>
               <div>
                 <p className="font-display text-2xl font-bold">{countLabel(upcomingApts.length)}</p>
@@ -317,7 +318,7 @@ export default function AppointmentsPage() {
           <Card className="p-4 transition-shadow duration-150 hover:shadow-clinical">
             <div className="flex items-center gap-3">
               <div className="rounded-lg border border-success/25 bg-success/10 p-2">
-                <User className="h-4 w-4 text-success" />
+                <History className={`${ICON_SIZE_MD} text-success`} strokeWidth={ICON_STROKE} />
               </div>
               <div>
                 <p className="font-display text-2xl font-bold">{countLabel(pastApts.length)}</p>

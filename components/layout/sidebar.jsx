@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
+import { ICON_SIZE_NAV, ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
@@ -103,11 +104,12 @@ export function Sidebar({ collapsed, onToggle }) {
                 {Icon && (
                   <Icon
                     className={cn(
-                      "h-[18px] w-[18px] shrink-0",
+                      ICON_SIZE_NAV,
                       isActive
                         ? "text-primary"
                         : "text-gray-400 group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-gray-100"
                     )}
+                    strokeWidth={ICON_STROKE}
                   />
                 )}
                 {!collapsed && (
@@ -170,7 +172,7 @@ export function Sidebar({ collapsed, onToggle }) {
                 onClick={handleSignOut}
                 className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors dark:text-gray-500 dark:hover:bg-red-950 dark:hover:text-red-400"
               >
-                <LogOut className="h-4 w-4" />
+                <LogOut className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
               </button>
             </Tooltip>
           )}
@@ -182,9 +184,9 @@ export function Sidebar({ collapsed, onToggle }) {
         className="absolute -right-3 top-14 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-100"
       >
         {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
+          <ChevronRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
         ) : (
-          <ChevronLeft className="h-3 w-3" />
+          <ChevronLeft className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
         )}
       </button>
     </aside>

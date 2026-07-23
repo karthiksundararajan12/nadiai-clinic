@@ -413,12 +413,25 @@ export const BOOKING_CONFIRMED_TEMPLATE_BODY =
 export const BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE = "en";
 
 /**
- * Meta WhatsApp document template for consultation invoices (DOCUMENT
- * header). Pending Meta review — PaymentWebhookService / InvoiceService
- * call `sendInvoiceDocument`, which stubs until this is approved. Do not
- * wire a real Meta send against this name until review clears.
+ * Meta WhatsApp UTILITY template for consultation invoices.
+ *
+ * Exact approved body from Meta Graph API (WABA `message_templates`,
+ * 2026-07-23) — do not reorder {{n}} without re-checking Business Manager:
+ *
+ *   "Your invoice for the appointment on {{1}} is attached."
+ *
+ * {{1}} = appointment date/time (formatSlotLabel). No HEADER / BUTTONS on
+ * the approved template — PDF is sent as a follow-up free-form document
+ * (see sendInvoiceDocument). Language: en. Status: APPROVED.
  */
 export const INVOICE_WHATSAPP_TEMPLATE_NAME = "appt_invoice";
+
+/**
+ * Exact static body the Meta template `appt_invoice` must use
+ * (docs + regression tests). Placeholder {{1}} is filled by InvoiceService.
+ */
+export const INVOICE_WHATSAPP_TEMPLATE_BODY =
+  "Your invoice for the appointment on {{1}} is attached.";
 
 /** Meta template language code for INVOICE_WHATSAPP_TEMPLATE_NAME. */
 export const INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE = "en";

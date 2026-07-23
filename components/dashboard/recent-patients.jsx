@@ -6,6 +6,7 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ArrowRight, Users } from "lucide-react";
 import Link from "next/link";
+import { ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 
 function formatActivityDate(value) {
   if (!value) return "Activity unavailable";
@@ -24,7 +25,7 @@ export function RecentPatients({ patients = [], loading = false }) {
           href="/patients"
           className="flex items-center gap-1 text-xs font-medium text-primary transition-colors duration-150 hover:text-primary/80"
         >
-          View all <ArrowRight className="h-3 w-3" />
+          View all <ArrowRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
         </Link>
       </CardHeader>
       <CardContent className="p-0">

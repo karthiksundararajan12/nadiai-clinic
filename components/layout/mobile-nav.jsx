@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
+import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 
 const ICON_MAP = {
@@ -40,7 +41,7 @@ export function MobileNav({ open, onClose }) {
             onClick={onClose}
             className="rounded-md p-1 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-100"
           >
-            <X className="h-5 w-5" />
+            <X className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
           </button>
         </div>
 
@@ -67,11 +68,12 @@ export function MobileNav({ open, onClose }) {
                     {Icon && (
                       <Icon
                         className={cn(
-                          "h-[18px] w-[18px]",
+                          ICON_SIZE_NAV,
                           isActive
                             ? "text-primary"
                             : "text-gray-400 dark:text-gray-500"
                         )}
+                        strokeWidth={ICON_STROKE}
                       />
                     )}
                     <span className="flex-1">{item.title}</span>

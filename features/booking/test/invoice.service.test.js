@@ -3,7 +3,12 @@ import assert from "node:assert/strict";
 import { PDFDocument } from "pdf-lib";
 import { InvoiceService } from "../services/invoice.service.js";
 import { sendInvoiceDocument } from "../services/invoice-whatsapp.js";
-import { INVOICE_WHATSAPP_TEMPLATE_NAME } from "../constants.js";
+import {
+  INVOICE_WHATSAPP_TEMPLATE_NAME,
+  INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE,
+  INVOICE_WHATSAPP_TEMPLATE_BODY,
+} from "../constants.js";
+import { formatSlotLabel } from "../lib/slot-engine.js";
 
 const CLINIC = {
   id: "clinic-1",
@@ -21,7 +26,10 @@ const APPOINTMENT = {
   payment_amount: 500,
 };
 
-function makeDeps({ existingInvoice = null } = {}) {
+const EXPECTED_SLOT_LABEL = formatSlotLabel(new Date(APPOINTMENT.slot_start));
+const PDF_URL = "https://storage.example/invoices/clinic-1/appt-1.pdf?sig=1";
+
+function makeDeps({ existingInvoice = null, templatesLive = true } = {}) {
   const allocateCalls = [];
   const insertCalls = [];
   const uploadCalls = [];
@@ -44,12 +52,11 @@ function makeDeps({ existingInvoice = null } = {}) {
   const invoiceStorage = {
     async uploadInvoicePdf(params) {
       uploadCalls.push(params);
-      // Validate PDF bytes are real
       const loaded = await PDFDocument.load(params.pdfBytes);
       assert.equal(loaded.getPageCount(), 1);
       return {
         storagePath: `invoices/${params.clinicId}/${params.appointmentId}.pdf`,
-        pdfUrl: `https://storage.example/invoices/${params.clinicId}/${params.appointmentId}.pdf?sig=1`,
+        pdfUrl: PDF_URL,
       };
     },
     async createSignedUrl(storagePath) {
@@ -72,9 +79,9 @@ function makeDeps({ existingInvoice = null } = {}) {
     },
   };
 
-  async function sendFn(phoneNumberId, patientPhone, pdfUrl) {
-    sendCalls.push({ phoneNumberId, patientPhone, pdfUrl });
-    return { stubbed: true, templateName: INVOICE_WHATSAPP_TEMPLATE_NAME };
+  async function sendFn(phoneNumberId, patientPhone, pdfUrl, opts) {
+    sendCalls.push({ phoneNumberId, patientPhone, pdfUrl, opts });
+    return { templateName: INVOICE_WHATSAPP_TEMPLATE_NAME, templateSent: true, documentSent: true };
   }
 
   const service = new InvoiceService(
@@ -83,13 +90,24 @@ function makeDeps({ existingInvoice = null } = {}) {
     clinicRepo,
     patientRepo,
     doctorRepo,
-    { sendInvoiceDocument: sendFn },
+    { sendInvoiceDocument: sendFn, templatesLive },
   );
 
   return { service, allocateCalls, insertCalls, uploadCalls, sendCalls };
 }
 
-test("InvoiceService.deliverForConfirmedAppointment: generates PDF, uploads, records ledger, stubs WhatsApp send", async () => {
+test("INVOICE_WHATSAPP_TEMPLATE_BODY matches Meta-approved appt_invoice body", () => {
+  assert.equal(INVOICE_WHATSAPP_TEMPLATE_NAME, "appt_invoice");
+  assert.equal(INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE, "en");
+  assert.equal(
+    INVOICE_WHATSAPP_TEMPLATE_BODY,
+    "Your invoice for the appointment on {{1}} is attached.",
+  );
+  assert.match(INVOICE_WHATSAPP_TEMPLATE_BODY, /\{\{1\}\}/);
+  assert.equal((INVOICE_WHATSAPP_TEMPLATE_BODY.match(/\{\{\d+\}\}/g) || []).length, 1);
+});
+
+test("InvoiceService.deliverForConfirmedAppointment: generates PDF, uploads, records ledger, sends WhatsApp with slot label + pdf URL", async () => {
   const { service, allocateCalls, insertCalls, uploadCalls, sendCalls } = makeDeps();
 
   const result = await service.deliverForConfirmedAppointment({
@@ -107,11 +125,13 @@ test("InvoiceService.deliverForConfirmedAppointment: generates PDF, uploads, rec
   assert.equal(insertCalls[0].invoiceNumber, "INV-000007");
   assert.equal(insertCalls[0].razorpayPaymentId, "pay_1");
   assert.equal(insertCalls[0].amount, 500);
-  assert.deepEqual(sendCalls[0], {
-    phoneNumberId: "PNID_1",
-    patientPhone: "919876543210",
-    pdfUrl: "https://storage.example/invoices/clinic-1/appt-1.pdf?sig=1",
-  });
+  assert.equal(sendCalls.length, 1);
+  assert.equal(sendCalls[0].phoneNumberId, "PNID_1");
+  assert.equal(sendCalls[0].patientPhone, "919876543210");
+  assert.equal(sendCalls[0].pdfUrl, PDF_URL);
+  assert.deepEqual(sendCalls[0].opts.bodyParams, [EXPECTED_SLOT_LABEL]);
+  assert.equal(sendCalls[0].opts.filename, "INV-000007.pdf");
+  assert.equal(sendCalls[0].opts.templatesLive, true);
 });
 
 test("InvoiceService.deliverForConfirmedAppointment: reuses existing invoice without allocating a new number", async () => {
@@ -134,10 +154,65 @@ test("InvoiceService.deliverForConfirmedAppointment: reuses existing invoice wit
   assert.equal(allocateCalls.length, 0);
   assert.equal(insertCalls.length, 0);
   assert.equal(sendCalls[0].pdfUrl, "https://storage.example/invoices/clinic-1/appt-1.pdf?sig=reuse");
+  assert.equal(sendCalls[0].opts.filename, "INV-000003.pdf");
+  assert.deepEqual(sendCalls[0].opts.bodyParams, [EXPECTED_SLOT_LABEL]);
 });
 
-test("sendInvoiceDocument: stub returns stubbed:true and does not throw", async () => {
-  const result = await sendInvoiceDocument("PNID", "9198", "https://example.com/a.pdf");
+test("sendInvoiceDocument: WHATSAPP_TEMPLATES_LIVE=false stubs and does not call Meta", async () => {
+  const templateCalls = [];
+  const documentCalls = [];
+  const wa = {
+    async sendTemplate(...args) { templateCalls.push(args); },
+    async sendDocument(...args) { documentCalls.push(args); },
+  };
+
+  const result = await sendInvoiceDocument("PNID", "919876543210", PDF_URL, {
+    whatsappClient: wa,
+    bodyParams: [EXPECTED_SLOT_LABEL],
+    filename: "INV-000001.pdf",
+    templatesLive: false,
+  });
+
   assert.equal(result.stubbed, true);
   assert.equal(result.templateName, INVOICE_WHATSAPP_TEMPLATE_NAME);
+  assert.equal(templateCalls.length, 0);
+  assert.equal(documentCalls.length, 0);
+});
+
+test("sendInvoiceDocument: live send calls sendTemplate then sendDocument with phone, URL, and {{1}} slot label", async () => {
+  const templateCalls = [];
+  const documentCalls = [];
+  const wa = {
+    async sendTemplate(phoneNumberId, toPhone, opts) {
+      templateCalls.push({ phoneNumberId, toPhone, opts });
+      return { messages: [{ id: "wamid.tpl" }] };
+    },
+    async sendDocument(phoneNumberId, toPhone, opts) {
+      documentCalls.push({ phoneNumberId, toPhone, opts });
+      return { messages: [{ id: "wamid.doc" }] };
+    },
+  };
+
+  const result = await sendInvoiceDocument("PNID_1", "919876543210", PDF_URL, {
+    whatsappClient: wa,
+    bodyParams: [EXPECTED_SLOT_LABEL],
+    filename: "INV-000007.pdf",
+    templatesLive: true,
+  });
+
+  assert.equal(result.templateSent, true);
+  assert.equal(result.documentSent, true);
+  assert.equal(templateCalls.length, 1);
+  assert.equal(templateCalls[0].phoneNumberId, "PNID_1");
+  assert.equal(templateCalls[0].toPhone, "919876543210");
+  assert.equal(templateCalls[0].opts.templateName, INVOICE_WHATSAPP_TEMPLATE_NAME);
+  assert.equal(templateCalls[0].opts.languageCode, INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE);
+  assert.deepEqual(templateCalls[0].opts.bodyParams, [EXPECTED_SLOT_LABEL]);
+  assert.equal(templateCalls[0].opts.headerDocument, undefined);
+
+  assert.equal(documentCalls.length, 1);
+  assert.equal(documentCalls[0].phoneNumberId, "PNID_1");
+  assert.equal(documentCalls[0].toPhone, "919876543210");
+  assert.equal(documentCalls[0].opts.link, PDF_URL);
+  assert.equal(documentCalls[0].opts.filename, "INV-000007.pdf");
 });

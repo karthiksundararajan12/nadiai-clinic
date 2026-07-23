@@ -140,7 +140,7 @@ export class PaymentWebhookService {
       appointment: confirmed,
       log,
     });
-    // Invoice PDF + storage + stub WhatsApp document send — best-effort,
+    // Invoice PDF + storage + appt_invoice WhatsApp send — best-effort,
     // parallel to confirmation messaging. Must not touch / roll back the
     // appt_booking_confirmed path above.
     await this._deliverInvoice({

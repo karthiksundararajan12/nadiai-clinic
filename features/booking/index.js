@@ -151,9 +151,10 @@
  * 21b. After confirmPayment succeeds, InvoiceService synchronously generates
  *     a consultation invoice PDF (pdf-lib), stores it under
  *     `booking-invoices` / invoices/{clinic_id}/{appointment_id}.pdf
- *     (migration 024), and calls stubbed `sendInvoiceDocument` until Meta
- *     approves the `appt_invoice` document template. Best-effort only —
- *     never rolls back confirm or the existing appt_booking_confirmed path.
+ *     (migration 024), and sends Meta template `appt_invoice` plus a
+ *     free-form document attachment (approved template is body-only — no
+ *     DOCUMENT header). Best-effort only — never rolls back confirm or the
+ *     existing appt_booking_confirmed path. Gated by WHATSAPP_TEMPLATES_LIVE.
  *
  * ── Session 5 (REMINDER_SENT — scheduled reminders + no-response timeout) ──
  *
@@ -250,6 +251,7 @@ export {
   BOOKING_CONFIRMED_TEMPLATE_BODY,
   BOOKING_CONFIRMED_TEMPLATE_LANGUAGE_CODE,
   INVOICE_WHATSAPP_TEMPLATE_NAME,
+  INVOICE_WHATSAPP_TEMPLATE_BODY,
   INVOICE_WHATSAPP_TEMPLATE_LANGUAGE_CODE,
   INVOICE_STORAGE,
   SLOT_ROW_ID_PREFIX,
@@ -470,6 +472,10 @@ export function createBookingServices(supabaseClient) {
     clinicRepository,
     patientRepository,
     doctorProfileRepository,
+    {
+      whatsappClient,
+      templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+    },
   );
   const inAppNotificationService = new _InAppNotificationService(
     notificationRepository,

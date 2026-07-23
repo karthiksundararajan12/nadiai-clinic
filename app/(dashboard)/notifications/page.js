@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { formatDistanceToNow, format } from "date-fns";
 import { Bell, CalendarDays, ChevronRight } from "lucide-react";
+import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
@@ -171,12 +172,12 @@ function NotificationsPageContent() {
                       </p>
                       {notification.related_appointment_id ? (
                         <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
-                          <CalendarDays className="h-3.5 w-3.5" />
+                          <CalendarDays className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                           Related appointment on file
                         </p>
                       ) : null}
                     </div>
-                    <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                    <ChevronRight className={`mt-1 ${ICON_SIZE_MD} text-muted-foreground`} strokeWidth={ICON_STROKE} />
                   </Link>
                 </li>
               );

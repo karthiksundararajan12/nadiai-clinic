@@ -2,7 +2,7 @@
 
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { EmptyState } from "@/components/shared/empty-state";
-import { CalendarDays } from "lucide-react";
+import { Activity } from "lucide-react";
 
 export function ActivityChart({ activity = [], loading = false }) {
   const total = activity.reduce((sum, day) => sum + day.count, 0);
@@ -20,7 +20,7 @@ export function ActivityChart({ activity = [], loading = false }) {
           </p>
         ) : total === 0 ? (
           <EmptyState
-            icon={CalendarDays}
+            icon={Activity}
             title="No appointment activity"
             description="No appointments were recorded in the past seven days"
             className="py-8"

@@ -3,6 +3,13 @@ import {
   SLOT_DEFAULT_CONSULTATION_DURATION_MINUTES,
   SLOT_TIMEZONE_OFFSET,
 } from "../booking/constants.js";
+import {
+  formatAppointmentStatusLabel,
+  formatRefundStatusLabel,
+  resolveAppointmentSlotDateRange,
+} from "../booking/lib/appointment-list.js";
+import { formatPaymentStatusLabel } from "../booking/lib/payment-list.js";
+import { formatSlotLabel } from "../booking/lib/slot-engine.js";
 import { PatientsService } from "../patients/patients.service.js";
 
 const CLINIC_TIME_ZONE = "Asia/Kolkata";
@@ -76,6 +83,10 @@ function formatAppointment(appointment) {
     status: appointment.status,
     payment_status: appointment.payment_status,
     payment_amount: appointment.payment_amount ?? null,
+    refund_status: appointment.refund_status ?? null,
+    refund_id: appointment.refund_id ?? null,
+    refunded_at: appointment.refunded_at ?? null,
+    created_at: appointment.created_at ?? null,
   };
 }
 
@@ -116,6 +127,79 @@ export class AppointmentsService {
 
     const rows = await this._appointments.findForClinic(clinicId, filters);
     return rows.map(formatAppointment);
+  }
+
+  /**
+   * Paginated dashboard list (payments-page pattern). Filters on slot_start.
+   *
+   * @param {string} clinicId
+   * @param {{
+   *   search?: string|null;
+   *   status?: string|null;
+   *   range?: string|null;
+   *   from?: string|null;
+   *   to?: string|null;
+   *   limit?: number;
+   *   offset?: number;
+   * }} [filters]
+   */
+  async listPaginated(clinicId, {
+    search = null,
+    status = null,
+    range = "all",
+    from = null,
+    to = null,
+    limit = 20,
+    offset = 0,
+  } = {}) {
+    const { fromIso, toIso } = resolveAppointmentSlotDateRange(range, { from, to });
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+
+    const { rows, total } = await this._appointments.listForClinicDashboard(clinicId, {
+      search,
+      status,
+      fromIso,
+      toIso,
+      limit: safeLimit,
+      offset: safeOffset,
+    });
+
+    const appointments = rows.map((row) => {
+      const slotStart = row.slot_start ? new Date(row.slot_start) : null;
+      return {
+        id: row.id,
+        patientId: row.patient_id,
+        patientName: row.patient_name,
+        contactPhone: row.contact_phone,
+        slotStart: row.slot_start,
+        slotEnd: row.slot_end,
+        slotLabel: slotStart && !Number.isNaN(slotStart.getTime())
+          ? formatSlotLabel(slotStart)
+          : null,
+        status: row.status,
+        statusLabel: formatAppointmentStatusLabel(row.status),
+        paymentStatus: row.payment_status,
+        paymentStatusLabel:
+          !row.payment_status || row.payment_status === "not_required"
+            ? "—"
+            : formatPaymentStatusLabel(row.payment_status),
+        amount: row.payment_amount,
+        refundStatus: row.refund_status,
+        refundStatusLabel: formatRefundStatusLabel(row.refund_status),
+        refundId: row.refund_id,
+        refundedAt: row.refunded_at,
+        createdAt: row.created_at,
+      };
+    });
+
+    return {
+      appointments,
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
+      hasMore: safeOffset + appointments.length < total,
+    };
   }
 
   async listPatientOptions(clinicId) {

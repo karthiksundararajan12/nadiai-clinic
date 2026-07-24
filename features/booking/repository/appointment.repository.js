@@ -51,6 +51,10 @@
 import { DatabaseError } from "../errors.js";
 import { BaseRepository } from "./base.repository.js";
 import { isBlockingAppointmentRow } from "../lib/appointment-availability.js";
+import {
+  appointmentStatusFilterToDb,
+  escapeIlikePattern,
+} from "../lib/appointment-list.js";
 import { APPOINTMENT_STATUS, CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES } from "../constants.js";
 
 const NO_DOUBLE_BOOKING_CONSTRAINT = "appointments_no_double_booking";
@@ -183,6 +187,139 @@ export class AppointmentRepository extends BaseRepository {
 
   async findDashboardActivity(clinicId, fromIso, toIso) {
     return this.findForClinic(clinicId, { fromIso, toIso, ascending: true });
+  }
+
+  /**
+   * Paginated clinic appointment list for the dashboard table
+   * (search / status / slot date range / limit / offset).
+   *
+   * @param {string} clinicId
+   * @param {{
+   *   search?: string|null;
+   *   status?: string|null;
+   *   fromIso?: string|null;
+   *   toIso?: string|null;
+   *   limit?: number;
+   *   offset?: number;
+   * }} [filters]
+   * @returns {Promise<{ rows: object[]; total: number }>}
+   */
+  async listForClinicDashboard(clinicId, {
+    search = null,
+    status = null,
+    fromIso = null,
+    toIso = null,
+    limit = 20,
+    offset = 0,
+  } = {}) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+    const dbStatus = appointmentStatusFilterToDb(status);
+    const q = typeof search === "string" ? search.trim() : "";
+
+    /** @type {string[]|null} */
+    let matchingPatientIds = null;
+    if (q) {
+      matchingPatientIds = await this._findPatientIdsByNameOrPhone(clinicId, q);
+    }
+
+    let query = this._db
+      .from(this._table)
+      .select(
+        [
+          "id",
+          "patient_id",
+          "contact_phone",
+          "slot_start",
+          "slot_end",
+          "status",
+          "payment_status",
+          "payment_amount",
+          "refund_status",
+          "refund_id",
+          "refunded_at",
+          "created_at",
+          "patients(full_name)",
+        ].join(", "),
+        { count: "exact" },
+      )
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .order("slot_start", { ascending: false })
+      .range(safeOffset, safeOffset + safeLimit - 1);
+
+    if (dbStatus) {
+      query = query.eq("status", dbStatus);
+    }
+
+    // Filter on appointment slot date (not created_at).
+    if (fromIso) {
+      query = query.gte("slot_start", fromIso);
+    }
+    if (toIso) {
+      query = query.lte("slot_start", toIso);
+    }
+
+    if (q) {
+      const pattern = `%${escapeIlikePattern(q)}%`;
+      const digits = q.replace(/\D/g, "");
+      const phonePattern = digits.length >= 3
+        ? `%${escapeIlikePattern(digits)}%`
+        : pattern;
+
+      if (matchingPatientIds && matchingPatientIds.length > 0) {
+        query = query.or(
+          `contact_phone.ilike.${phonePattern},patient_id.in.(${matchingPatientIds.join(",")})`,
+        );
+      } else {
+        query = query.ilike("contact_phone", phonePattern);
+      }
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      this._log.error("DB error during listForClinicDashboard", {
+        operation: "listForClinicDashboard",
+        table: this._table,
+        code: error.code,
+        details: error.details,
+      });
+      throw new DatabaseError("listForClinicDashboard", error);
+    }
+
+    const rows = (data ?? []).map((row) => mapDashboardAppointmentRow(row));
+    return { rows, total: count ?? rows.length };
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} search
+   * @returns {Promise<string[]>}
+   */
+  async _findPatientIdsByNameOrPhone(clinicId, search) {
+    const pattern = `%${escapeIlikePattern(search)}%`;
+    const digits = search.replace(/\D/g, "");
+    const phonePattern = digits.length >= 3
+      ? `%${escapeIlikePattern(digits)}%`
+      : pattern;
+
+    const { data, error } = await this._db
+      .from("patients")
+      .select("id")
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .or(`full_name.ilike.${pattern},contact_phone.ilike.${phonePattern}`)
+      .limit(200);
+
+    if (error) {
+      this._log.error("DB error during appointment patient search", {
+        operation: "findPatientIdsByNameOrPhone",
+        code: error.code,
+      });
+      throw new DatabaseError("listForClinicDashboard", error);
+    }
+    return (data ?? []).map((row) => row.id);
   }
 
   /**
@@ -760,4 +897,27 @@ export class AppointmentRepository extends BaseRepository {
     this._log.error("DB error during requestRescheduleViaReminderReply", { appointmentId, code: error.code });
     throw new DatabaseError("requestRescheduleViaReminderReply", error);
   }
+}
+
+/**
+ * @param {object} row
+ * @returns {object}
+ */
+function mapDashboardAppointmentRow(row) {
+  const patient = Array.isArray(row.patients) ? row.patients[0] : row.patients;
+  return {
+    id: row.id,
+    patient_id: row.patient_id,
+    patient_name: patient?.full_name ?? "Unknown patient",
+    contact_phone: row.contact_phone ?? null,
+    slot_start: row.slot_start,
+    slot_end: row.slot_end ?? null,
+    status: row.status,
+    payment_status: row.payment_status ?? null,
+    payment_amount: row.payment_amount != null ? Number(row.payment_amount) : null,
+    refund_status: row.refund_status ?? null,
+    refund_id: row.refund_id ?? null,
+    refunded_at: row.refunded_at ?? null,
+    created_at: row.created_at,
+  };
 }

@@ -33,11 +33,23 @@ function createService({
   rescheduleResult,
   findByIdResult,
 } = {}) {
-  const calls = { list: [], create: [], cancel: [], reschedule: [], findById: [], findAllForClinic: [] };
+  const calls = {
+    list: [],
+    listPaginated: [],
+    create: [],
+    cancel: [],
+    reschedule: [],
+    findById: [],
+    findAllForClinic: [],
+  };
   const appointmentRepository = {
     async findForClinic(clinicId, filters) {
       calls.list.push({ clinicId, filters });
       return appointments;
+    },
+    async listForClinicDashboard(clinicId, filters) {
+      calls.listPaginated.push({ clinicId, filters });
+      return { rows: [], total: 0 };
     },
     async createIfAvailable(data) {
       calls.create.push(data);

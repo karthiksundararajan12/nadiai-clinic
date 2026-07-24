@@ -372,6 +372,15 @@ export {
   escapeIlikePattern,
 } from "./lib/payment-list.js";
 export {
+  APPOINTMENT_STATUS_FILTER,
+  APPOINTMENT_STATUS_LABEL,
+  REFUND_STATUS_LABEL,
+  formatAppointmentStatusLabel,
+  appointmentStatusFilterToDb,
+  formatRefundStatusLabel,
+  resolveAppointmentSlotDateRange,
+} from "./lib/appointment-list.js";
+export {
   generateInvoicePdf,
   buildInvoiceDisplayFields,
   formatInvoiceNumber,

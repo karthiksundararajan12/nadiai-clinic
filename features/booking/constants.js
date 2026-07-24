@@ -38,6 +38,7 @@ export const VALID_CONVERSATION_TRANSITIONS = Object.freeze({
   [CONVERSATION_STATE.START]: [
     CONVERSATION_STATE.START, // re-prompt (retry) — stays in START
     CONVERSATION_STATE.COLLECTING_PATIENT,
+    CONVERSATION_STATE.SLOT_SELECTION, // reminder Reschedule self-serve
     CONVERSATION_STATE.HUMAN_HANDOFF,
   ],
   [CONVERSATION_STATE.COLLECTING_PATIENT]: [
@@ -50,28 +51,31 @@ export const VALID_CONVERSATION_TRANSITIONS = Object.freeze({
     CONVERSATION_STATE.PAYMENT_PENDING,
     CONVERSATION_STATE.CONFIRMED,
     CONVERSATION_STATE.HUMAN_HANDOFF,
-    // Global reset keywords ("restart" / "cancel" / …) — conversation
-    // flow only; does not cancel a booked appointment.
+    // Global reset keywords ("restart" / "start over" / …) — conversation
+    // flow only. Patient "cancel" cancels PAYMENT_PENDING/CONFIRMED rows
+    // via cancelViaPatientKeyword, then also lands here.
     CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.PAYMENT_PENDING]: [
     CONVERSATION_STATE.CONFIRMED,
     CONVERSATION_STATE.HUMAN_HANDOFF,
+    CONVERSATION_STATE.SLOT_SELECTION, // reminder Reschedule while payment pending (rare)
     // Razorpay "payment.failed" releases the slot hold and resets the
     // contact back to START so they can restart booking — see
-    // PaymentWebhookService. Contact-initiated reset keywords also land
-    // here after an explicit confirmation step (dangling Razorpay hold
-    // is left to expire on its own — we do not cancel/refund from chat).
+    // PaymentWebhookService. Contact-initiated "restart" leaves the
+    // dangling Razorpay hold to expire; "cancel" cancels the appointment.
     CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.CONFIRMED]: [
     CONVERSATION_STATE.HUMAN_HANDOFF,
-    // Reset keywords clear conversation_state only — never the confirmed
-    // appointment itself.
+    CONVERSATION_STATE.SLOT_SELECTION, // reminder Reschedule self-serve
+    // "menu"/restart clear conversation_state only; "cancel" cancels the
+    // appointment then resets conversation_state.
     CONVERSATION_STATE.START,
   ],
   [CONVERSATION_STATE.HUMAN_HANDOFF]: [
     CONVERSATION_STATE.START,
+    CONVERSATION_STATE.SLOT_SELECTION, // reminder Reschedule after handoff
   ],
 });
 
@@ -188,15 +192,21 @@ export const COLLECTING_PATIENT_COPY = Object.freeze({
  */
 export const RESET_KEYWORDS = Object.freeze([
   "restart",
-  "cancel",
   "start over",
   "reset",
   "menu",
 ]);
 
 /**
- * @deprecated Use RESET_KEYWORDS. Kept so older call sites / docs that
- * reference the single "cancel" keyword keep resolving.
+ * Free-text keywords that cancel an in-progress / confirmed appointment
+ * (case-insensitive, trimmed). Distinct from RESET_KEYWORDS — "cancel"
+ * updates the appointments row when context.appointmentId is cancellable;
+ * otherwise it falls back to the same "let's start over" reset path.
+ */
+export const CANCEL_KEYWORDS = Object.freeze(["cancel"]);
+
+/**
+ * @deprecated Prefer CANCEL_KEYWORDS. Kept for older call sites / docs.
  */
 export const CANCEL_KEYWORD = "cancel";
 
@@ -206,9 +216,15 @@ export const RESET_CONFIRM_INTENT = Object.freeze({
   NO:  "booking_reset_confirm_no",
 });
 
+/** Interactive button ids for the PAYMENT_PENDING appointment-cancel confirmation. */
+export const CANCEL_CONFIRM_INTENT = Object.freeze({
+  YES: "booking_cancel_confirm_yes",
+  NO:  "booking_cancel_confirm_no",
+});
+
 /**
- * Copy for the global conversation reset / cancel intercept
- * (ConversationStateService — not scoped to one booking sub-state).
+ * Copy for the global conversation reset intercept
+ * (ConversationStateService — restart / start over / reset / menu).
  */
 export const RESET_COPY = Object.freeze({
   /** Body of the START menu re-sent after a successful reset. */
@@ -226,12 +242,37 @@ export const RESET_COPY = Object.freeze({
 });
 
 /**
+ * Copy for patient-initiated appointment cancellation via WhatsApp "cancel".
+ * Placeholders: {slotLabel} from formatSlotLabel(slot_start).
+ */
+export const CANCEL_COPY = Object.freeze({
+  CONFIRMED:
+    "Your appointment on {slotLabel} has been cancelled. How can I help you today?",
+  WITHOUT_SLOT:
+    "Your appointment has been cancelled. How can I help you today?",
+  PAYMENT_PENDING_CONFIRM:
+    "You have a payment in progress for this booking. Cancelling will free the slot " +
+    "(the payment link may still appear to work until it expires). " +
+    "Do you want to cancel this appointment?",
+  PAYMENT_PENDING_YES_LABEL: "Yes, cancel",
+  PAYMENT_PENDING_NO_LABEL: "No, keep it",
+  PAYMENT_PENDING_KEEP:
+    "Okay — we'll keep this booking open. Complete the payment using the link we sent earlier, " +
+    "or reply \"cancel\" if you still want to cancel.",
+  PAYMENT_PENDING_REPROMPT: "Sorry, please choose one of the two options above.",
+  MENU_AFTER_CANCEL: "How can I help you today?",
+});
+
+/** appointments.cancellation_reason for patient WhatsApp "cancel" keyword. */
+export const PATIENT_REQUESTED_CANCELLATION_REASON = "patient_requested";
+
+/**
  * Plain-text fallback when a contact messages while already booked
  * (conversation_state CONFIRMED). Free-form session message — not a Meta
  * template. Placeholders: {date}, {time} from the appointment's slot_start.
  *
- * Note: "cancel" / "menu" here refer to the global RESET_KEYWORDS intercept
- * (conversation reset / re-show menu), not appointment cancellation APIs.
+ * "cancel" cancels the appointment (ConversationStateService cancel path);
+ * "menu" is a RESET_KEYWORDS conversation reset.
  */
 export const CONFIRMED_INBOUND_COPY = Object.freeze({
   WITH_SLOT:
@@ -646,6 +687,15 @@ export const REMINDER_COPY = Object.freeze({
   RESCHEDULE_BUTTON_LABEL: "Reschedule",
   CONFIRM_ACK: "Great, see you then!",
   CANCEL_ACK: "Your appointment on {slotLabel} has been cancelled. Send us any message whenever you'd like to book again.",
+  /** Shown before the slot list when patient taps Reschedule on a reminder. */
+  RESCHEDULE_PICK_SLOT:
+    "Sure — please pick a new time from the list below. Your current booking stays held until you choose.",
+  /** After a successful self-serve reschedule onto a new slot. */
+  RESCHEDULE_CONFIRMED: "Done — your appointment is now on {slotLabel}.",
+  /**
+   * @deprecated Prefer RESCHEDULE_PICK_SLOT / RESCHEDULE_CONFIRMED (self-serve).
+   * Kept for older tests that still assert the manual-handoff copy.
+   */
   RESCHEDULE_ACK:
     "Got it — we've flagged this for our clinic staff to help you find a new time. They'll be in touch shortly.",
   /** Reply doesn't match a known reminder action, or references an appointment no longer in a reminder-able state. */

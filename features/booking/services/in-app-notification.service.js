@@ -10,6 +10,8 @@ import { createLogger } from "../logger.js";
 
 export const NOTIFICATION_TYPE = Object.freeze({
   PAYMENT_RECEIVED: "payment_received",
+  APPOINTMENT_CANCELLED: "appointment_cancelled",
+  APPOINTMENT_RESCHEDULED: "appointment_rescheduled",
 });
 
 /**
@@ -32,6 +34,30 @@ export function formatPaymentReceivedMessage({ patientName, amount, slotStart })
       ? formatSlotLabel(slotStart)
       : formatSlotLabel(new Date(slotStart));
   return `${patientName} paid ₹${formatNotificationAmount(amount)} for appointment on ${slot}`;
+}
+
+/**
+ * @param {{ patientName: string; slotStart: string|Date }} params
+ * @returns {string}
+ */
+export function formatAppointmentCancelledMessage({ patientName, slotStart }) {
+  const slot =
+    slotStart instanceof Date
+      ? formatSlotLabel(slotStart)
+      : formatSlotLabel(new Date(slotStart));
+  return `${patientName} cancelled their appointment on ${slot}`;
+}
+
+/**
+ * @param {{ patientName: string; slotStart: string|Date }} params
+ * @returns {string}
+ */
+export function formatAppointmentRescheduledMessage({ patientName, slotStart }) {
+  const slot =
+    slotStart instanceof Date
+      ? formatSlotLabel(slotStart)
+      : formatSlotLabel(new Date(slotStart));
+  return `${patientName} rescheduled their appointment to ${slot}`;
 }
 
 export class InAppNotificationService {
@@ -73,6 +99,70 @@ export class InAppNotificationService {
       message: formatPaymentReceivedMessage({
         patientName,
         amount: appointment.payment_amount,
+        slotStart: appointment.slot_start,
+      }),
+      relatedAppointmentId: appointment.id,
+    });
+  }
+
+  /**
+   * Inserts an appointment_cancelled notification after a patient WhatsApp
+   * "cancel". Caller wraps in try/catch for best-effort use.
+   *
+   * @param {{ clinicId: string; appointment: {
+   *   id: string;
+   *   doctor_id?: string|null;
+   *   patient_id?: string|null;
+   *   slot_start: string;
+   * } }} params
+   * @returns {Promise<import("../repository/notification.repository.js").ClinicNotification>}
+   */
+  async createAppointmentCancelled({ clinicId, appointment }) {
+    let patientName = "A patient";
+    if (appointment.patient_id) {
+      const patient = await this._patientRepo.findById(clinicId, appointment.patient_id);
+      if (patient?.full_name) patientName = patient.full_name;
+    }
+
+    return this._notificationRepo.insert({
+      clinicId,
+      doctorId: appointment.doctor_id ?? null,
+      type: NOTIFICATION_TYPE.APPOINTMENT_CANCELLED,
+      title: "Appointment cancelled",
+      message: formatAppointmentCancelledMessage({
+        patientName,
+        slotStart: appointment.slot_start,
+      }),
+      relatedAppointmentId: appointment.id,
+    });
+  }
+
+  /**
+   * Inserts an appointment_rescheduled notification after a patient
+   * self-serve reminder Reschedule + new slot pick.
+   *
+   * @param {{ clinicId: string; appointment: {
+   *   id: string;
+   *   doctor_id?: string|null;
+   *   patient_id?: string|null;
+   *   slot_start: string;
+   * } }} params
+   * @returns {Promise<import("../repository/notification.repository.js").ClinicNotification>}
+   */
+  async createAppointmentRescheduled({ clinicId, appointment }) {
+    let patientName = "A patient";
+    if (appointment.patient_id) {
+      const patient = await this._patientRepo.findById(clinicId, appointment.patient_id);
+      if (patient?.full_name) patientName = patient.full_name;
+    }
+
+    return this._notificationRepo.insert({
+      clinicId,
+      doctorId: appointment.doctor_id ?? null,
+      type: NOTIFICATION_TYPE.APPOINTMENT_RESCHEDULED,
+      title: "Appointment rescheduled",
+      message: formatAppointmentRescheduledMessage({
+        patientName,
         slotStart: appointment.slot_start,
       }),
       relatedAppointmentId: appointment.id,

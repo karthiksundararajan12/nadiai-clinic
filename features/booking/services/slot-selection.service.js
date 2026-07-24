@@ -71,6 +71,7 @@ import {
   SLOT_LIST_MORE_ROW_ID,
   SLOT_HOLD_DURATION_MINUTES,
   WHATSAPP_CONFIG,
+  REMINDER_COPY,
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import {
@@ -96,14 +97,24 @@ export class SlotSelectionService {
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("./doctor-notification.service.js").DoctorNotificationService} doctorNotificationService
    * @param {import("./razorpay-client.service.js").RazorpayClientService} razorpayClient
+   * @param {{ inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null }} [opts]
    */
-  constructor(conversationRepo, appointmentRepo, doctorProfileRepo, whatsappClient, doctorNotificationService, razorpayClient) {
+  constructor(
+    conversationRepo,
+    appointmentRepo,
+    doctorProfileRepo,
+    whatsappClient,
+    doctorNotificationService,
+    razorpayClient,
+    { inAppNotificationService = null } = {},
+  ) {
     this._repo            = conversationRepo;
     this._appointmentRepo = appointmentRepo;
     this._doctorRepo      = doctorProfileRepo;
     this._wa              = whatsappClient;
     this._doctorNotifier  = doctorNotificationService;
     this._razorpay        = razorpayClient;
+    this._inAppNotificationService = inAppNotificationService;
     this._log             = createLogger({ component: "SlotSelectionService" });
   }
 
@@ -122,6 +133,54 @@ export class SlotSelectionService {
       });
     }
     return this._presentAvailableSlots({ clinic, message, row, doctor, log });
+  }
+
+  /**
+   * Reminder "Reschedule" self-serve entry: put conversation into
+   * SLOT_SELECTION with `rescheduleAppointmentId` set so the next slot
+   * pick updates that same appointments row (no new insert / no re-pay).
+   *
+   * @param {{
+   *   clinic: import("../repository/clinic.repository.js").BookingClinic;
+   *   message: import("../lib/webhook-parser.js").NormalizedInboundMessage;
+   *   appointment: object;
+   *   patientName?: string|null;
+   *   log?: import("../logger.js").Logger;
+   * }} params
+   */
+  async enterRescheduleFlow({ clinic, message, appointment, patientName = null, log = this._log }) {
+    const context = {
+      last_wa_message_id: message.waMessageId,
+      appointmentId: appointment.id,
+      rescheduleAppointmentId: appointment.id,
+      selectedPatientId: appointment.patient_id ?? null,
+      selectedPatientName: patientName,
+      doctorId: appointment.doctor_id ?? null,
+    };
+
+    const row = await this._repo.upsertToState(clinic.id, message.contactPhone, {
+      currentState: CONVERSATION_STATE.SLOT_SELECTION,
+      context,
+    });
+
+    const doctor = await this._doctorRepo.findPrimaryByClinicId(clinic.id);
+    if (!doctor) {
+      log.error("No doctor configured for clinic — cannot reschedule", { clinicId: clinic.id });
+      return this._handoff({
+        clinic, message, row, log,
+        reason: HANDOFF_REASON.NO_DOCTOR_CONFIGURED,
+        contactMessage: SLOT_SELECTION_COPY.NO_DOCTOR_HANDOFF,
+      });
+    }
+
+    return this._presentAvailableSlots({
+      clinic,
+      message,
+      row,
+      doctor,
+      log,
+      prefixMessage: REMINDER_COPY.RESCHEDULE_PICK_SLOT,
+    });
   }
 
   /** Called for every subsequent inbound message while current_state === SLOT_SELECTION. */
@@ -464,6 +523,10 @@ export class SlotSelectionService {
   // ─────────────────────────────────────────────────────────────
 
   async _attemptBooking({ clinic, message, row, doctor, slot, log }) {
+    if (row.context?.rescheduleAppointmentId) {
+      return this._attemptReschedule({ clinic, message, row, doctor, slot, log });
+    }
+
     const fee = resolveConsultationFee(doctor);
     if (!fee.configured) {
       log.error("Doctor has no consultation_fee configured — refusing to book without a real amount to charge (if payment turns out to be required)", {
@@ -515,6 +578,96 @@ export class SlotSelectionService {
     return requiresPrepayment
       ? this._transitionToPaymentPending({ clinic, message, row, doctor, appointment, feeRupees: fee.feeRupees, log })
       : this._transitionToConfirmed({ clinic, message, row, doctor, appointment, log });
+  }
+
+  /**
+   * Self-serve reschedule: update the SAME confirmed appointment's slot.
+   * Does not create a new row and does not re-charge.
+   */
+  async _attemptReschedule({ clinic, message, row, doctor, slot, log }) {
+    const appointmentId = row.context.rescheduleAppointmentId;
+    const slotStart =
+      typeof slot.slotStart === "string" ? slot.slotStart : slot.slotStart.toISOString();
+    const slotEnd =
+      typeof slot.slotEnd === "string" ? slot.slotEnd : slot.slotEnd.toISOString();
+
+    const { row: updated, conflict } = await this._appointmentRepo.rescheduleConfirmedSlot(
+      clinic.id,
+      appointmentId,
+      slotStart,
+      slotEnd,
+    );
+
+    if (conflict === "SLOT_TAKEN") {
+      return this._presentAvailableSlots({
+        clinic, message, row, doctor, log,
+        prefixMessage: SLOT_SELECTION_COPY.SLOT_TAKEN_REPROMPT,
+      });
+    }
+    if (!updated) {
+      log.warn("Reschedule target appointment no longer CONFIRMED — aborting self-serve", {
+        appointmentId,
+      });
+      await this._wa.sendText(
+        clinic.whatsapp_phone_number_id,
+        message.contactPhone,
+        REMINDER_COPY.STALE_OR_UNKNOWN_REPLY,
+      );
+      await this._repo.update(row.id, {
+        current_state: CONVERSATION_STATE.START,
+        retry_count: 0,
+        context: { last_wa_message_id: message.waMessageId },
+        last_message_at: new Date().toISOString(),
+      });
+      return { handled: true, action: "RESCHEDULE_STALE", currentState: CONVERSATION_STATE.START };
+    }
+
+    assertValidConversationTransition(row.current_state, CONVERSATION_STATE.CONFIRMED);
+    const slotLabel = formatSlotLabel(new Date(updated.slot_start));
+    await this._repo.update(row.id, {
+      current_state: CONVERSATION_STATE.CONFIRMED,
+      retry_count: 0,
+      context: this._touch(row.context, message.waMessageId, {
+        appointmentId: updated.id,
+        rescheduleAppointmentId: null,
+        pendingSlot: null,
+        offeredSlots: null,
+        slotSelectionStep: null,
+      }),
+      last_message_at: new Date().toISOString(),
+    });
+
+    await this._wa.sendText(
+      clinic.whatsapp_phone_number_id,
+      message.contactPhone,
+      REMINDER_COPY.RESCHEDULE_CONFIRMED.replace("{slotLabel}", slotLabel),
+    );
+
+    if (this._inAppNotificationService) {
+      try {
+        await this._inAppNotificationService.createAppointmentRescheduled({
+          clinicId: clinic.id,
+          appointment: updated,
+        });
+      } catch (err) {
+        log.error("Failed to create in-app reschedule notification", {
+          clinicId: clinic.id,
+          appointmentId: updated.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
+    log.info("Self-serve reschedule completed — same appointment row updated", {
+      appointmentId: updated.id,
+      slotStart: updated.slot_start,
+    });
+    return {
+      handled: true,
+      action: "RESCHEDULED",
+      currentState: CONVERSATION_STATE.CONFIRMED,
+      appointmentId: updated.id,
+    };
   }
 
   async _transitionToPaymentPending({ clinic, message, row, appointment, feeRupees, log }) {

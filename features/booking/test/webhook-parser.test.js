@@ -69,6 +69,34 @@ test("parses an interactive button_reply", () => {
   assert.equal(message.replyId, "confirm");
 });
 
+test("parses a template quick-reply tap (type=button) as button_reply using button.payload", () => {
+  // Meta Cloud API: template quick-reply buttons arrive as messages.type=button
+  // with button.payload / button.text — NOT interactive.button_reply.
+  // https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/button
+  const payload = buildPayload({
+    metadata: { phone_number_id: "PNID_1" },
+    contacts: [{ profile: { name: "Asha" }, wa_id: "919876543210" }],
+    messages: [
+      {
+        from: "919876543210",
+        id: "wamid.REMINDER_CONFIRM",
+        timestamp: "1710000004",
+        type: "button",
+        button: {
+          payload: "booking_reminder_confirm:appt-1",
+          text: "Confirm",
+        },
+      },
+    ],
+  });
+
+  const [message] = parseInboundWhatsAppWebhook(payload);
+  assert.equal(message.type, "button_reply");
+  assert.equal(message.replyId, "booking_reminder_confirm:appt-1");
+  assert.equal(message.replyTitle, "Confirm");
+  assert.equal(message.text, null);
+});
+
 test("status-only callbacks (no messages array) produce no normalized messages", () => {
   const payload = buildPayload({
     metadata: { phone_number_id: "PNID_1" },

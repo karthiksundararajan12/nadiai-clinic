@@ -16,14 +16,16 @@
  *      Routed here directly from the WhatsApp webhook route BEFORE
  *      conversationStateService (see that route's header note) — reminder
  *      replies self-identify their target appointment via the button id
- *      (lib/reminder-reply.js) and deliberately never touch
- *      conversation_state (see constants.js's REMINDER_SENT section for why).
+ *      (lib/reminder-reply.js). Confirm/Cancel stay appointment-scoped
+ *      (no conversation_state). Reschedule hands off into
+ *      SlotSelectionService.enterRescheduleFlow so the patient can pick a
+ *      new slot on the SAME appointments row.
  *
  * Every mutation goes through AppointmentRepository's atomic
  * conditional-UPDATE methods (claimReminder, cancelViaReminderReply,
- * requestRescheduleViaReminderReply) — never read-then-write — so a
- * redelivered WhatsApp webhook or an overlapping cron tick can't
- * double-send a reminder or double-apply a quick-reply.
+ * rescheduleConfirmedSlot) — never read-then-write — so a redelivered
+ * WhatsApp webhook or an overlapping cron tick can't double-send a
+ * reminder or double-apply a quick-reply.
  */
 
 import {
@@ -36,7 +38,6 @@ import {
   REMINDER_TEMPLATE_LANGUAGE_CODE,
   REMINDER_REPLY_ACTION,
   REMINDER_COPY,
-  HANDOFF_REASON,
   APPOINTMENT_STATUS,
 } from "../constants.js";
 import { reminderReplyId, parseReminderReplyId } from "../lib/reminder-reply.js";
@@ -51,15 +52,27 @@ export class ReminderService {
    * @param {import("../repository/patient.repository.js").PatientRepository} patientRepository
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("./doctor-notification.service.js").DoctorNotificationService} doctorNotificationService
-   * @param {{ templatesLive?: boolean; doctorProfileRepository?: import("../repository/doctor-profile.repository.js").DoctorProfileRepository|null }} [opts]
+   * @param {{
+   *   templatesLive?: boolean;
+   *   doctorProfileRepository?: import("../repository/doctor-profile.repository.js").DoctorProfileRepository|null;
+   *   slotSelectionService?: import("./slot-selection.service.js").SlotSelectionService|null;
+   *   inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null;
+   * }} [opts]
    */
-  constructor(clinicRepository, appointmentRepository, patientRepository, whatsappClient, doctorNotificationService, { templatesLive = false, doctorProfileRepository = null } = {}) {
+  constructor(clinicRepository, appointmentRepository, patientRepository, whatsappClient, doctorNotificationService, {
+    templatesLive = false,
+    doctorProfileRepository = null,
+    slotSelectionService = null,
+    inAppNotificationService = null,
+  } = {}) {
     this._clinicRepo      = clinicRepository;
     this._appointmentRepo = appointmentRepository;
     this._patientRepo     = patientRepository;
     this._wa              = whatsappClient;
     this._doctorNotifier  = doctorNotificationService;
     this._doctorProfileRepo = doctorProfileRepository;
+    this._slotSelection   = slotSelectionService;
+    this._inAppNotificationService = inAppNotificationService;
     this._templatesLive   = templatesLive;
     this._log             = createLogger({ component: "ReminderService" });
   }
@@ -375,8 +388,11 @@ export class ReminderService {
       });
       return { handled: true, action: "STALE_APPOINTMENT" };
     }
+    // No patient_confirmed / reminder_confirmed column exists — ack only.
     await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, REMINDER_COPY.CONFIRM_ACK);
-    log.info("Reminder Confirm acknowledged — no state change", { appointmentId: appointment.id });
+    log.info("Reminder Confirm acknowledged — no state change (no patient_confirmed column)", {
+      appointmentId: appointment.id,
+    });
     return { handled: true, action: "REMINDER_CONFIRMED" };
   }
 
@@ -393,25 +409,66 @@ export class ReminderService {
       message.contactPhone,
       REMINDER_COPY.CANCEL_ACK.replace("{slotLabel}", slotLabel),
     );
+
+    if (this._inAppNotificationService) {
+      try {
+        await this._inAppNotificationService.createAppointmentCancelled({
+          clinicId: clinic.id,
+          appointment: cancelled,
+        });
+      } catch (err) {
+        log.error("Failed to create in-app cancel notification after reminder Cancel", {
+          clinicId: clinic.id,
+          appointmentId: cancelled.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     log.info("Appointment cancelled via reminder reply", { appointmentId: appointment.id });
     return { handled: true, action: "CANCELLED" };
   }
 
   async _handleReschedule({ clinic, message, appointment, log }) {
-    const updated = await this._appointmentRepo.requestRescheduleViaReminderReply(clinic.id, appointment.id);
-    if (!updated) {
+    if (appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
       await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, REMINDER_COPY.STALE_OR_UNKNOWN_REPLY);
-      log.info("Reschedule reply for an appointment no longer CONFIRMED — no-op", { appointmentId: appointment.id });
+      log.info("Reschedule reply for an appointment no longer CONFIRMED — no-op", {
+        appointmentId: appointment.id,
+        status: appointment.status,
+      });
       return { handled: true, action: "STALE_APPOINTMENT" };
     }
-    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, REMINDER_COPY.RESCHEDULE_ACK);
-    await this._doctorNotifier.notifyHandoff({
+
+    if (!this._slotSelection?.enterRescheduleFlow) {
+      log.error("SlotSelectionService not wired — cannot self-serve reschedule", {
+        appointmentId: appointment.id,
+      });
+      await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, REMINDER_COPY.STALE_OR_UNKNOWN_REPLY);
+      return { handled: true, action: "RESCHEDULE_UNAVAILABLE" };
+    }
+
+    let patientName = null;
+    if (appointment.patient_id) {
+      const patient = await this._patientRepo.findById(clinic.id, appointment.patient_id);
+      patientName = patient?.full_name ?? null;
+    }
+
+    const result = await this._slotSelection.enterRescheduleFlow({
       clinic,
       message,
-      reason: HANDOFF_REASON.RESCHEDULE_REQUESTED_VIA_REMINDER,
+      appointment,
+      patientName,
       log,
     });
-    log.info("Reschedule requested via reminder reply — flagged for manual follow-up", { appointmentId: appointment.id });
-    return { handled: true, action: "RESCHEDULE_REQUESTED" };
+    log.info("Reschedule via reminder — entered SLOT_SELECTION self-serve flow", {
+      appointmentId: appointment.id,
+      action: result?.action,
+    });
+    return {
+      handled: true,
+      action: result?.action === "HUMAN_HANDOFF" ? "RESCHEDULE_HANDOFF" : "RESCHEDULE_SLOT_SELECTION",
+      currentState: result?.currentState,
+      appointmentId: appointment.id,
+    };
   }
 }

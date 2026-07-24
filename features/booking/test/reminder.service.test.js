@@ -8,7 +8,6 @@ import {
   REMINDER_TEMPLATE_NAME,
   REMINDER_REPLY_ACTION,
   REMINDER_COPY,
-  HANDOFF_REASON,
   APPOINTMENT_STATUS,
 } from "../constants.js";
 import { reminderReplyId } from "../lib/reminder-reply.js";
@@ -164,6 +163,38 @@ function createFakeDoctorNotifier() {
     calls,
     async notifyHandoff(params) {
       calls.push(params);
+    },
+  };
+}
+
+function createFakeInAppNotificationService() {
+  const createAppointmentCancelledCalls = [];
+  const createAppointmentRescheduledCalls = [];
+  return {
+    createAppointmentCancelledCalls,
+    createAppointmentRescheduledCalls,
+    async createAppointmentCancelled(args) {
+      createAppointmentCancelledCalls.push(args);
+      return { id: "notif-1", ...args };
+    },
+    async createAppointmentRescheduled(args) {
+      createAppointmentRescheduledCalls.push(args);
+      return { id: "notif-2", ...args };
+    },
+  };
+}
+
+function createFakeSlotSelectionService() {
+  const enterRescheduleFlowCalls = [];
+  return {
+    enterRescheduleFlowCalls,
+    async enterRescheduleFlow(params) {
+      enterRescheduleFlowCalls.push(params);
+      return {
+        handled: true,
+        action: "SLOTS_PRESENTED",
+        currentState: "SLOT_SELECTION",
+      };
     },
   };
 }
@@ -391,15 +422,25 @@ test("handleQuickReply Confirm: an appointment no longer CONFIRMED gets the stal
 // handleQuickReply — Cancel
 // ─────────────────────────────────────────────────────────────
 
-test("handleQuickReply Cancel: cancels the appointment and acknowledges with the slot label", async () => {
+test("handleQuickReply Cancel: cancels the appointment, acknowledges, and notifies the doctor in-app", async () => {
   const appointment = buildAppointment();
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
   const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
     findByIdForClinicImpl: () => appointment,
-    cancelViaReminderReplyImpl: (clinicId, appointmentId) => ({ ...appointment, id: appointmentId, status: APPOINTMENT_STATUS.CANCELLED }),
+    cancelViaReminderReplyImpl: () => cancelled,
   });
   const wa = createFakeWhatsAppClient();
   const doctorNotifier = createFakeDoctorNotifier();
-  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier);
+  const inApp = createFakeInAppNotificationService();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    inAppNotificationService: inApp,
+  });
 
   const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
   const result = await service.handleQuickReply({ clinic: CLINIC, message });
@@ -408,6 +449,8 @@ test("handleQuickReply Cancel: cancels the appointment and acknowledges with the
   assert.equal(calls.cancelViaReminderReply.length, 1);
   assert.equal(calls.cancelViaReminderReply[0].appointmentId, appointment.id);
   assert.ok(wa.sendTextCalls[0].body.startsWith("Your appointment on"));
+  assert.equal(inApp.createAppointmentCancelledCalls.length, 1);
+  assert.equal(inApp.createAppointmentCancelledCalls[0].appointment.id, appointment.id);
 });
 
 test("handleQuickReply Cancel: replaying against an already-resolved appointment is a no-op with a stale-reply message", async () => {
@@ -431,23 +474,47 @@ test("handleQuickReply Cancel: replaying against an already-resolved appointment
 // handleQuickReply — Reschedule
 // ─────────────────────────────────────────────────────────────
 
-test("handleQuickReply Reschedule: marks RESCHEDULE_REQUESTED, acknowledges, and notifies the doctor for manual follow-up", async () => {
-  const appointment = buildAppointment();
+test("handleQuickReply Reschedule: enters SLOT_SELECTION self-serve flow without marking RESCHEDULE_REQUESTED", async () => {
+  const appointment = buildAppointment({ doctor_id: "doc-1" });
   const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
     findByIdForClinicImpl: () => appointment,
   });
   const wa = createFakeWhatsAppClient();
   const doctorNotifier = createFakeDoctorNotifier();
-  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier);
+  const slotSelection = createFakeSlotSelectionService();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    slotSelectionService: slotSelection,
+  });
 
   const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.RESCHEDULE, appointment.id) });
   const result = await service.handleQuickReply({ clinic: CLINIC, message });
 
-  assert.equal(result.action, "RESCHEDULE_REQUESTED");
-  assert.equal(calls.requestRescheduleViaReminderReply.length, 1);
-  assert.equal(wa.sendTextCalls[0].body, REMINDER_COPY.RESCHEDULE_ACK);
-  assert.equal(doctorNotifier.calls.length, 1);
-  assert.equal(doctorNotifier.calls[0].reason, HANDOFF_REASON.RESCHEDULE_REQUESTED_VIA_REMINDER);
+  assert.equal(result.action, "RESCHEDULE_SLOT_SELECTION");
+  assert.equal(calls.requestRescheduleViaReminderReply.length, 0);
+  assert.equal(slotSelection.enterRescheduleFlowCalls.length, 1);
+  assert.equal(slotSelection.enterRescheduleFlowCalls[0].appointment.id, appointment.id);
+  assert.equal(slotSelection.enterRescheduleFlowCalls[0].patientName, "Asha Kumar");
+  assert.equal(doctorNotifier.calls.length, 0);
+});
+
+test("handleQuickReply Reschedule: stale (non-CONFIRMED) appointment gets the stale-reply message", async () => {
+  const appointment = buildAppointment({ status: APPOINTMENT_STATUS.CANCELLED });
+  const { clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const slotSelection = createFakeSlotSelectionService();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    slotSelectionService: slotSelection,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.RESCHEDULE, appointment.id) });
+  const result = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(result.action, "STALE_APPOINTMENT");
+  assert.equal(slotSelection.enterRescheduleFlowCalls.length, 0);
+  assert.equal(wa.sendTextCalls[0].body, REMINDER_COPY.STALE_OR_UNKNOWN_REPLY);
 });
 
 // ─────────────────────────────────────────────────────────────

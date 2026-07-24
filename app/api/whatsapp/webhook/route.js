@@ -94,14 +94,11 @@ export async function POST(request) {
         continue;
       }
 
-      // Reminder quick-replies (Confirm/Cancel/Reschedule) are appointment-scoped
-      // and self-identify their target appointment via the button id (see
-      // lib/reminder-reply.js) — deliberately routed here BEFORE
-      // conversationStateService, and never touch conversation_state at all,
-      // since a contact's reminder can arrive regardless of whatever
-      // conversation_state they're independently in (see constants.js's
-      // REMINDER_SENT section / ARCHITECTURE.md section 4 for why this isn't
-      // a conversation_state value).
+      // Reminder quick-replies (Confirm/Cancel/Reschedule) self-identify their
+      // target appointment via the button payload (lib/reminder-reply.js) and
+      // are routed here BEFORE conversationStateService. Confirm/Cancel stay
+      // appointment-scoped; Reschedule may upsert conversation_state into
+      // SLOT_SELECTION for self-serve slot picking on the same appointment.
       const reminderReply = parseReminderReplyId(message.replyId);
       const result = reminderReply
         ? await reminderService.handleQuickReply({ clinic, message })

@@ -13,6 +13,9 @@
  * @property {"text"|"button_reply"|"list_reply"|"unknown"} type
  * @property {string|null} text        Free-text body (type === "text").
  * @property {string|null} replyId     Button/list row id (type === "button_reply"|"list_reply").
+ *                                   For template quick-reply taps (`messages.type=button`),
+ *                                   this is `button.payload` (the payload we stamped when
+ *                                   sending the template).
  * @property {string|null} replyTitle  Button/list row title, for logging/fallback display.
  * @property {string} timestamp        Unix seconds (as string, per Meta's payload).
  */
@@ -69,6 +72,20 @@ function normalizeMessage(message, phoneNumberId, contact) {
 
   if (message.type === "text") {
     return { ...base, type: "text", text: message.text?.body ?? "" };
+  }
+
+  // Template quick-reply taps (e.g. appt_reminder_* Confirm/Cancel/Reschedule)
+  // arrive as type=button with button.payload / button.text — NOT as
+  // interactive.button_reply. Normalize to button_reply so the rest of the
+  // booking domain can keep a single replyId-based routing path.
+  // Meta docs: https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/reference/messages/button
+  if (message.type === "button") {
+    return {
+      ...base,
+      type: "button_reply",
+      replyId: message.button?.payload ?? null,
+      replyTitle: message.button?.text ?? null,
+    };
   }
 
   if (message.type === "interactive") {

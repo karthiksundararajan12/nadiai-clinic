@@ -61,6 +61,7 @@ const EXPIRED_HOLD_CANCELLATION_REASON = "hold_expired";
 const PAYMENT_FAILED_CANCELLATION_REASON = "payment_failed";
 const PATIENT_CANCELLED_VIA_REMINDER_REASON = "patient_cancelled_via_reminder";
 const DASHBOARD_CANCELLED_REASON = "cancelled_by_doctor";
+const PATIENT_REQUESTED_CANCELLATION_REASON = "patient_requested";
 
 /** @typedef {"SLOT_TAKEN"|"DUPLICATE_MESSAGE"|"UNKNOWN_CONFLICT"} AppointmentInsertConflict */
 
@@ -575,6 +576,44 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * Patient free-text "cancel" from the WhatsApp booking bot.
+   * Cancels PAYMENT_PENDING (releases hold) or CONFIRMED rows. Idempotent:
+   * replaying against a non-cancellable status returns null.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async cancelViaPatientKeyword(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const cancellableStatuses = [
+      APPOINTMENT_STATUS.PAYMENT_PENDING,
+      APPOINTMENT_STATUS.CONFIRMED,
+    ];
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: PATIENT_REQUESTED_CANCELLATION_REASON,
+        cancelled_at: nowIso,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .in("status", cancellableStatuses)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during cancelViaPatientKeyword", { appointmentId, code: error.code });
+    throw new DatabaseError("cancelViaPatientKeyword", error);
+  }
+
+  /**
    * "Cancel" quick-reply on a reminder. A single conditional UPDATE scoped
    * to `status = 'confirmed'` — replaying the same webhook (Meta redelivery)
    * naturally becomes a no-op the second time (zero rows matched), the same
@@ -592,6 +631,7 @@ export class AppointmentRepository extends BaseRepository {
         status:              APPOINTMENT_STATUS.CANCELLED,
         cancellation_reason: PATIENT_CANCELLED_VIA_REMINDER_REASON,
         cancelled_at:        nowIso,
+        hold_expires_at:     null,
         updated_at:          nowIso,
       })
       .eq("id", appointmentId)
@@ -609,10 +649,46 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
-   * "Reschedule" quick-reply on a reminder. Marks the appointment
-   * RESCHEDULE_REQUESTED for manual doctor/staff follow-up — the self-serve
-   * loop back into SLOT_SELECTION is Session 6 scope (see
-   * APPOINTMENT_STATUS.RESCHEDULE_REQUESTED's doc comment in constants.js).
+   * Self-serve reschedule from a reminder: move a CONFIRMED appointment to a
+   * new slot on the SAME row (does not insert a new appointment). Relies on
+   * appointments_no_double_booking for the new slot. Zero rows / unique
+   * violation → caller handles as stale / SLOT_TAKEN.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @param {string} slotStart ISO
+   * @param {string} slotEnd ISO
+   * @returns {Promise<{ row: object|null; conflict: AppointmentInsertConflict|null }>}
+   */
+  async rescheduleConfirmedSlot(clinicId, appointmentId, slotStart, slotEnd) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        slot_start: slotStart,
+        slot_end: slotEnd,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return { row: data, conflict: null };
+    if (error.code === NOT_FOUND_CODE) return { row: null, conflict: null };
+    if (error.code === UNIQUE_VIOLATION_CODE) {
+      return { row: null, conflict: "SLOT_TAKEN" };
+    }
+    throw new DatabaseError("rescheduleConfirmedSlot", error);
+  }
+
+  /**
+   * "Reschedule" quick-reply on a reminder — legacy manual-follow-up path.
+   * Prefer {@link rescheduleConfirmedSlot} + SlotSelectionService for
+   * self-serve. Kept for callers/tests that still mark RESCHEDULE_REQUESTED.
    *
    * @param {string} clinicId
    * @param {string} appointmentId

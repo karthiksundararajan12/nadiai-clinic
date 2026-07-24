@@ -14,6 +14,7 @@ import {
   SLOT_LIST_MORE_ROW_ID,
   SLOT_HOLD_DURATION_MINUTES,
   WHATSAPP_CONFIG,
+  REMINDER_COPY,
 } from "../constants.js";
 import { normalizeWorkingHours, generateCandidateSlots, slotRowId } from "../lib/slot-engine.js";
 
@@ -91,14 +92,33 @@ function createFakeConversationRepo(initialRow) {
       row = { ...row, ...updates };
       return row;
     },
+    async upsertToState(clinicId, contactPhone, { currentState, context = {} }) {
+      row = {
+        ...row,
+        clinic_id: clinicId,
+        contact_phone: contactPhone,
+        current_state: currentState,
+        context,
+        retry_count: 0,
+        last_message_at: new Date().toISOString(),
+      };
+      return row;
+    },
   };
 }
 
-function createFakeAppointmentRepo({ takenIsos = [], overlaps = [], createIfAvailableImpl = null } = {}) {
+function createFakeAppointmentRepo({
+  takenIsos = [],
+  overlaps = [],
+  createIfAvailableImpl = null,
+  rescheduleConfirmedSlotImpl = null,
+} = {}) {
   const createCalls = [];
+  const rescheduleCalls = [];
   let idCounter = 1;
   return {
     createCalls,
+    rescheduleCalls,
     async findTakenSlotStarts() {
       return takenIsos;
     },
@@ -109,6 +129,25 @@ function createFakeAppointmentRepo({ takenIsos = [], overlaps = [], createIfAvai
       createCalls.push(data);
       if (createIfAvailableImpl) return createIfAvailableImpl(data, createCalls.length);
       return { row: { id: `appt-${idCounter++}`, ...data }, conflict: null };
+    },
+    async rescheduleConfirmedSlot(clinicId, appointmentId, slotStart, slotEnd) {
+      rescheduleCalls.push({ clinicId, appointmentId, slotStart, slotEnd });
+      if (rescheduleConfirmedSlotImpl) {
+        return rescheduleConfirmedSlotImpl(clinicId, appointmentId, slotStart, slotEnd);
+      }
+      return {
+        row: {
+          id: appointmentId,
+          clinic_id: clinicId,
+          doctor_id: "doc-1",
+          patient_id: "p1",
+          status: "confirmed",
+          slot_start: slotStart,
+          slot_end: slotEnd,
+          hold_expires_at: null,
+        },
+        conflict: null,
+      };
     },
   };
 }
@@ -156,14 +195,35 @@ function createFakeRazorpayClient() {
   };
 }
 
-function makeService({ doctor = DOCTOR_FREE, takenIsos = [], overlaps = [], createIfAvailableImpl = null, row } = {}) {
+function makeService({
+  doctor = DOCTOR_FREE,
+  takenIsos = [],
+  overlaps = [],
+  createIfAvailableImpl = null,
+  rescheduleConfirmedSlotImpl = null,
+  row,
+  inAppNotificationService = null,
+} = {}) {
   const repo = createFakeConversationRepo(row ?? buildRow());
-  const appointmentRepo = createFakeAppointmentRepo({ takenIsos, overlaps, createIfAvailableImpl });
+  const appointmentRepo = createFakeAppointmentRepo({
+    takenIsos,
+    overlaps,
+    createIfAvailableImpl,
+    rescheduleConfirmedSlotImpl,
+  });
   const doctorRepo = createFakeDoctorProfileRepo(doctor);
   const wa = createFakeWhatsAppClient();
   const notifier = createFakeDoctorNotificationService();
   const razorpay = createFakeRazorpayClient();
-  const service = new SlotSelectionService(repo, appointmentRepo, doctorRepo, wa, notifier, razorpay);
+  const service = new SlotSelectionService(
+    repo,
+    appointmentRepo,
+    doctorRepo,
+    wa,
+    notifier,
+    razorpay,
+    { inAppNotificationService },
+  );
   return { service, repo, appointmentRepo, doctorRepo, wa, notifier, razorpay };
 }
 
@@ -699,4 +759,84 @@ test("an unknown/missing slotSelectionStep re-enters slot selection from scratch
 
   assert.equal(result.action, "SLOTS_PRESENTED");
   assert.equal(wa.calls[0].type, "list");
+});
+
+// ─────────────────────────────────────────────────────────────
+// Reminder self-serve reschedule
+// ─────────────────────────────────────────────────────────────
+
+test("enterRescheduleFlow: upserts SLOT_SELECTION with rescheduleAppointmentId and presents slots", async () => {
+  const appointment = {
+    id: "appt-existing",
+    patient_id: "p1",
+    doctor_id: "doc-1",
+    status: "confirmed",
+    slot_start: SLOT_A.slotStart,
+    slot_end: SLOT_A.slotEnd,
+  };
+  const { service, repo, wa } = makeService({
+    doctor: DOCTOR_FREE,
+    row: buildRow({ current_state: CONVERSATION_STATE.START, context: {} }),
+  });
+
+  const result = await service.enterRescheduleFlow({
+    clinic: CLINIC,
+    message: buildMessage(),
+    appointment,
+    patientName: "Asha Kapoor",
+  });
+
+  assert.equal(result.action, "SLOTS_PRESENTED");
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.SLOT_SELECTION);
+  assert.equal(repo.row.context.rescheduleAppointmentId, "appt-existing");
+  assert.equal(repo.row.context.appointmentId, "appt-existing");
+  assert.equal(repo.row.context.selectedPatientId, "p1");
+  assert.equal(wa.calls.length, 2);
+  assert.equal(wa.calls[0].type, "text");
+  assert.equal(wa.calls[0].body, REMINDER_COPY.RESCHEDULE_PICK_SLOT);
+  assert.equal(wa.calls[1].type, "list");
+});
+
+test("slot pick with rescheduleAppointmentId updates the SAME appointment row (no createIfAvailable)", async () => {
+  const inApp = {
+    createAppointmentRescheduledCalls: [],
+    async createAppointmentRescheduled(args) {
+      this.createAppointmentRescheduledCalls.push(args);
+    },
+  };
+  const row = buildRow({
+    context: {
+      selectedPatientId: "p1",
+      selectedPatientName: "Asha Kapoor",
+      doctorId: DOCTOR_FREE.id,
+      appointmentId: "appt-existing",
+      rescheduleAppointmentId: "appt-existing",
+      slotSelectionStep: SLOT_SELECTION_STEP.AWAITING_SELECTION,
+      offeredSlots: [SLOT_A, SLOT_B],
+    },
+  });
+  const { service, repo, appointmentRepo, wa } = makeService({
+    row,
+    doctor: DOCTOR_FREE,
+    inAppNotificationService: inApp,
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_B.slotStart)) }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "RESCHEDULED");
+  assert.equal(result.appointmentId, "appt-existing");
+  assert.equal(result.currentState, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(appointmentRepo.createCalls.length, 0);
+  assert.equal(appointmentRepo.rescheduleCalls.length, 1);
+  assert.equal(appointmentRepo.rescheduleCalls[0].appointmentId, "appt-existing");
+  assert.equal(appointmentRepo.rescheduleCalls[0].slotStart, SLOT_B.slotStart);
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(repo.row.context.rescheduleAppointmentId, null);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /^Done — your appointment is now on /);
+  assert.equal(inApp.createAppointmentRescheduledCalls.length, 1);
 });

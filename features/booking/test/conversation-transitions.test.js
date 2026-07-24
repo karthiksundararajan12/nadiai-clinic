@@ -25,13 +25,17 @@ test("START -> HUMAN_HANDOFF is a valid transition", () => {
   assert.equal(canTransitionConversation(CONVERSATION_STATE.START, CONVERSATION_STATE.HUMAN_HANDOFF), true);
 });
 
-test("START -> SLOT_SELECTION (skipping COLLECTING_PATIENT) is invalid", () => {
-  assert.equal(canTransitionConversation(CONVERSATION_STATE.START, CONVERSATION_STATE.SLOT_SELECTION), false);
+test("START -> SLOT_SELECTION is valid (reminder Reschedule self-serve)", () => {
+  assert.equal(canTransitionConversation(CONVERSATION_STATE.START, CONVERSATION_STATE.SLOT_SELECTION), true);
+});
+
+test("CONFIRMED -> SLOT_SELECTION is valid (reminder Reschedule self-serve)", () => {
+  assert.equal(canTransitionConversation(CONVERSATION_STATE.CONFIRMED, CONVERSATION_STATE.SLOT_SELECTION), true);
 });
 
 test("assertValidConversationTransition throws for an invalid transition", () => {
   assert.throws(
-    () => assertValidConversationTransition(CONVERSATION_STATE.START, CONVERSATION_STATE.SLOT_SELECTION),
+    () => assertValidConversationTransition(CONVERSATION_STATE.START, CONVERSATION_STATE.PAYMENT_PENDING),
     InvalidConversationTransitionError,
   );
 });
@@ -49,7 +53,7 @@ test("SLOT_SELECTION -> START is valid (global reset keywords)", () => {
   );
 });
 
-test("CONFIRMED -> START is valid (conversation reset only, not appointment cancel)", () => {
+test("CONFIRMED -> START is valid (reset keywords and post-cancel reset)", () => {
   assert.equal(
     canTransitionConversation(CONVERSATION_STATE.CONFIRMED, CONVERSATION_STATE.START),
     true,

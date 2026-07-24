@@ -21,6 +21,7 @@ class FakeQueryBuilder {
 
   select(...args) { return this._record("select", args); }
   eq(...args) { return this._record("eq", args); }
+  in(...args) { return this._record("in", args); }
   is(...args) { return this._record("is", args); }
   not(...args) { return this._record("not", args); }
   or(...args) { return this._record("or", args); }
@@ -508,6 +509,11 @@ test("findDueForReminder: scopes by clinic/CONFIRMED/not-deleted/reminder column
   const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
   assert.ok(eqArgs.some(([col, val]) => col === "clinic_id" && val === "clinic-1"));
   assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+  // Cancelled appointments are excluded because the query requires status=confirmed.
+  assert.equal(
+    eqArgs.some(([col, val]) => col === "status" && val === "cancelled"),
+    false,
+  );
   const isArgs = db.lastBuilder.calls.filter((c) => c.method === "is").map((c) => c.args);
   assert.ok(isArgs.some(([col, val]) => col === "reminder_24h_sent_at" && val === null));
   assert.ok(isArgs.some(([col, val]) => col === "deleted_at" && val === null));
@@ -515,6 +521,38 @@ test("findDueForReminder: scopes by clinic/CONFIRMED/not-deleted/reminder column
   assert.deepEqual(gteArgs, ["slot_start", "2026-07-05T03:10:00.000Z"]);
   const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
   assert.deepEqual(ltArgs, ["slot_start", "2026-07-05T03:30:00.000Z"]);
+});
+
+test("cancelViaPatientKeyword: cancels PAYMENT_PENDING, clears hold, sets patient_requested", async () => {
+  const cancelledRow = {
+    id: "appt-1",
+    status: "cancelled",
+    cancellation_reason: "patient_requested",
+    cancelled_at: "2026-07-23T12:00:00.000Z",
+    hold_expires_at: null,
+  };
+  const db = createFakeSupabaseClient({ data: cancelledRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaPatientKeyword("clinic-1", "appt-1");
+
+  assert.deepEqual(result, cancelledRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
+  assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "patient_requested");
+  assert.ok(db.lastBuilder.updatedWith.cancelled_at);
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
+  const inArgs = db.lastBuilder.calls.find((c) => c.method === "in")?.args;
+  assert.deepEqual(inArgs[0], "status");
+  assert.deepEqual(inArgs[1], ["payment_pending", "confirmed"]);
+});
+
+test("cancelViaPatientKeyword: already-cancelled appointment is a no-op (returns null)", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaPatientKeyword("clinic-1", "appt-1");
+
+  assert.equal(result, null);
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -605,6 +643,7 @@ test("cancelViaReminderReply: happy path cancels the appointment, scoped by the 
   assert.deepEqual(result, cancelledRow);
   assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
   assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "patient_cancelled_via_reminder");
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
   assert.ok(db.lastBuilder.updatedWith.cancelled_at);
   const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
   assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
@@ -659,4 +698,62 @@ test("requestRescheduleViaReminderReply: a non-constraint DB error throws Databa
   const repo = new AppointmentRepository(db);
 
   await assert.rejects(() => repo.requestRescheduleViaReminderReply("clinic-1", "appt-1"), DatabaseError);
+});
+
+// ─────────────────────────────────────────────────────────────
+// Self-serve reschedule — rescheduleConfirmedSlot
+// ─────────────────────────────────────────────────────────────
+
+test("rescheduleConfirmedSlot: updates slot_start/slot_end on the same CONFIRMED row", async () => {
+  const updatedRow = {
+    id: "appt-1",
+    status: "confirmed",
+    slot_start: "2026-07-07T03:30:00.000Z",
+    slot_end: "2026-07-07T04:00:00.000Z",
+  };
+  const db = createFakeSupabaseClient({ data: updatedRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.rescheduleConfirmedSlot(
+    "clinic-1",
+    "appt-1",
+    "2026-07-07T03:30:00.000Z",
+    "2026-07-07T04:00:00.000Z",
+  );
+
+  assert.deepEqual(result, { row: updatedRow, conflict: null });
+  assert.equal(db.lastBuilder.updatedWith.slot_start, "2026-07-07T03:30:00.000Z");
+  assert.equal(db.lastBuilder.updatedWith.slot_end, "2026-07-07T04:00:00.000Z");
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
+  assert.equal(db.lastBuilder.updatedWith.status, undefined);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("rescheduleConfirmedSlot: SLOT_TAKEN on unique violation", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "23505" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.rescheduleConfirmedSlot(
+    "clinic-1",
+    "appt-1",
+    "2026-07-07T03:30:00.000Z",
+    "2026-07-07T04:00:00.000Z",
+  );
+
+  assert.deepEqual(result, { row: null, conflict: "SLOT_TAKEN" });
+});
+
+test("rescheduleConfirmedSlot: no longer CONFIRMED returns null row without conflict", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.rescheduleConfirmedSlot(
+    "clinic-1",
+    "appt-1",
+    "2026-07-07T03:30:00.000Z",
+    "2026-07-07T04:00:00.000Z",
+  );
+
+  assert.deepEqual(result, { row: null, conflict: null });
 });

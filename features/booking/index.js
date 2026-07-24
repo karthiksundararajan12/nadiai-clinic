@@ -189,11 +189,11 @@
  * 25. Confirm/Cancel/Reschedule quick-replies on a reminder are routed by
  *     the webhook route BEFORE conversationStateService, using
  *     lib/reminder-reply.js to decode the target appointment_id directly
- *     from the button id — never via conversation_state (see note #22).
- *     "Reschedule" only marks `appointments.status = 'reschedule_requested'`
- *     and alerts the doctor for manual follow-up; the self-serve loop-back
- *     into SLOT_SELECTION with pre-filled patient context is explicitly
- *     Session 6 scope, not built here.
+ *     from the button id. Confirm is an ack-only (no patient_confirmed
+ *     column). Cancel uses cancelViaReminderReply + in-app notify.
+ *     Reschedule enters SlotSelectionService.enterRescheduleFlow
+ *     (conversation_state → SLOT_SELECTION with rescheduleAppointmentId)
+ *     and updates the SAME appointments row on the next slot pick.
  *
  * 26. No-response timeout (past-due CONFIRMED, no reply) transitions
  *     straight to COMPLETED — NO_SHOW tracking is deferred per explicit
@@ -238,8 +238,12 @@ export {
   PATIENT_NAME_FUZZY_MATCH_THRESHOLD,
   CANCEL_KEYWORD,
   RESET_KEYWORDS,
+  CANCEL_KEYWORDS,
   RESET_CONFIRM_INTENT,
+  CANCEL_CONFIRM_INTENT,
   RESET_COPY,
+  CANCEL_COPY,
+  PATIENT_REQUESTED_CANCELLATION_REASON,
   CONFIRMED_INBOUND_COPY,
   CONFIRMED_INBOUND_FALLBACK_STATES,
   APPOINTMENT_STATUS,
@@ -350,6 +354,8 @@ export {
   InAppNotificationService,
   NOTIFICATION_TYPE,
   formatPaymentReceivedMessage,
+  formatAppointmentCancelledMessage,
+  formatAppointmentRescheduledMessage,
   formatNotificationAmount,
 } from "./services/in-app-notification.service.js";
 export { NotificationRepository } from "./repository/notification.repository.js";
@@ -443,6 +449,10 @@ export function createBookingServices(supabaseClient) {
     keySecret: process.env.RAZORPAY_KEY_SECRET,
   });
   const doctorNotificationService = new _DoctorNotificationService(doctorProfileRepository, whatsappClient);
+  const inAppNotificationService = new _InAppNotificationService(
+    notificationRepository,
+    patientRepository,
+  );
   const slotSelectionService = new _SlotSelectionService(
     conversationStateRepository,
     appointmentRepository,
@@ -450,6 +460,7 @@ export function createBookingServices(supabaseClient) {
     whatsappClient,
     doctorNotificationService,
     razorpayClient,
+    { inAppNotificationService },
   );
   const patientCollectionService = new _PatientCollectionService(
     conversationStateRepository,
@@ -464,6 +475,7 @@ export function createBookingServices(supabaseClient) {
     patientCollectionService,
     slotSelectionService,
     appointmentRepository,
+    inAppNotificationService,
   );
   const invoiceStorageService = new _InvoiceStorageService(supabase);
   const invoiceService = new _InvoiceService(
@@ -476,10 +488,6 @@ export function createBookingServices(supabaseClient) {
       whatsappClient,
       templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
     },
-  );
-  const inAppNotificationService = new _InAppNotificationService(
-    notificationRepository,
-    patientRepository,
   );
   const paymentWebhookService = new _PaymentWebhookService(
     appointmentRepository,
@@ -504,6 +512,8 @@ export function createBookingServices(supabaseClient) {
     {
       templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
       doctorProfileRepository,
+      slotSelectionService,
+      inAppNotificationService,
     },
   );
 

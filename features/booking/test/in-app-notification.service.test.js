@@ -128,6 +128,48 @@ test("createPaymentReceived inserts payment_received row scoped to clinic_id", a
   assert.equal(row.is_read, false);
 });
 
+test("createAppointmentCancelled inserts appointment_cancelled row scoped to clinic_id", async () => {
+  const repo = createFakeNotificationRepo();
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  const row = await service.createAppointmentCancelled({
+    clinicId: CLINIC_A,
+    appointment: APPOINTMENT,
+  });
+
+  assert.equal(repo.insertCalls.length, 1);
+  assert.equal(repo.insertCalls[0].clinicId, CLINIC_A);
+  assert.equal(repo.insertCalls[0].type, NOTIFICATION_TYPE.APPOINTMENT_CANCELLED);
+  assert.equal(repo.insertCalls[0].title, "Appointment cancelled");
+  assert.equal(repo.insertCalls[0].relatedAppointmentId, "appt-1");
+  assert.match(
+    repo.insertCalls[0].message,
+    /^Asha Kumar cancelled their appointment on /,
+  );
+  assert.equal(row.type, NOTIFICATION_TYPE.APPOINTMENT_CANCELLED);
+});
+
+test("createAppointmentRescheduled inserts appointment_rescheduled row scoped to clinic_id", async () => {
+  const repo = createFakeNotificationRepo();
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  const row = await service.createAppointmentRescheduled({
+    clinicId: CLINIC_A,
+    appointment: APPOINTMENT,
+  });
+
+  assert.equal(repo.insertCalls.length, 1);
+  assert.equal(repo.insertCalls[0].clinicId, CLINIC_A);
+  assert.equal(repo.insertCalls[0].type, NOTIFICATION_TYPE.APPOINTMENT_RESCHEDULED);
+  assert.equal(repo.insertCalls[0].title, "Appointment rescheduled");
+  assert.equal(repo.insertCalls[0].relatedAppointmentId, "appt-1");
+  assert.match(
+    repo.insertCalls[0].message,
+    /^Asha Kumar rescheduled their appointment to /,
+  );
+  assert.equal(row.type, NOTIFICATION_TYPE.APPOINTMENT_RESCHEDULED);
+});
+
 test("listForClinic unreadCount is scoped to the requesting clinic only", async () => {
   const repo = createFakeNotificationRepo([
     {

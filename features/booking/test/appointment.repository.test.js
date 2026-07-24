@@ -666,6 +666,30 @@ test("cancelViaReminderReply: a non-constraint DB error throws DatabaseError ins
   await assert.rejects(() => repo.cancelViaReminderReply("clinic-1", "appt-1"), DatabaseError);
 });
 
+test("updateRefundFields: persists refund_status, refund_id, refunded_at, and payment_status", async () => {
+  const updatedRow = {
+    id: "appt-1",
+    refund_status: "completed",
+    refund_id: "rfnd_1",
+    payment_status: "refunded",
+  };
+  const db = createFakeSupabaseClient({ data: updatedRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.updateRefundFields("clinic-1", "appt-1", {
+    refundStatus: "completed",
+    refundId: "rfnd_1",
+    refundedAt: "2026-07-24T10:00:00.000Z",
+    paymentStatus: "refunded",
+  });
+
+  assert.deepEqual(result, updatedRow);
+  assert.equal(db.lastBuilder.updatedWith.refund_status, "completed");
+  assert.equal(db.lastBuilder.updatedWith.refund_id, "rfnd_1");
+  assert.equal(db.lastBuilder.updatedWith.refunded_at, "2026-07-24T10:00:00.000Z");
+  assert.equal(db.lastBuilder.updatedWith.payment_status, "refunded");
+});
+
 // ─────────────────────────────────────────────────────────────
 // Session 5 — requestRescheduleViaReminderReply
 // ─────────────────────────────────────────────────────────────

@@ -27,8 +27,9 @@
  * infrastructure failures (DB errors), which the route logs and still ACKs
  * 200 for, matching the WhatsApp webhook route's anti-retry-storm pattern.
  *
- * Out of scope (per spec): refunds, and an admin UI for reconciling
- * late/expired payments — logging is enough for now.
+ * Refunds on patient Cancel are handled by ReminderService (not this
+ * webhook). Out of scope here: refund.processed events, and an admin UI
+ * for reconciling late/expired payments — logging is enough for now.
  */
 
 import {

@@ -37,15 +37,37 @@ export function formatPaymentReceivedMessage({ patientName, amount, slotStart })
 }
 
 /**
- * @param {{ patientName: string; slotStart: string|Date }} params
+ * @param {{
+ *   patientName: string;
+ *   slotStart: string|Date;
+ *   refundStatus?: string|null;
+ *   paymentAmount?: number|string|null;
+ * }} params
  * @returns {string}
  */
-export function formatAppointmentCancelledMessage({ patientName, slotStart }) {
+export function formatAppointmentCancelledMessage({
+  patientName,
+  slotStart,
+  refundStatus = null,
+  paymentAmount = null,
+}) {
   const slot =
     slotStart instanceof Date
       ? formatSlotLabel(slotStart)
       : formatSlotLabel(new Date(slotStart));
-  return `${patientName} cancelled their appointment on ${slot}`;
+  const base = `${patientName} cancelled their appointment on ${slot}`;
+  if (!refundStatus || refundStatus === "not_applicable") return base;
+  if (refundStatus === "completed" || refundStatus === "processing") {
+    const amountPart =
+      paymentAmount != null && paymentAmount !== ""
+        ? ` of ₹${formatNotificationAmount(paymentAmount)}`
+        : "";
+    return `${base}. Refund${amountPart}: ${refundStatus}.`;
+  }
+  if (refundStatus === "failed") {
+    return `${base}. Refund: failed (manual follow-up needed).`;
+  }
+  return `${base}. Refund: ${refundStatus}.`;
 }
 
 /**
@@ -108,12 +130,16 @@ export class InAppNotificationService {
   /**
    * Inserts an appointment_cancelled notification after a patient WhatsApp
    * "cancel". Caller wraps in try/catch for best-effort use.
+   * When refund_status is present it is stored in payload and surfaced in
+   * the message so the dashboard can see refund outcome without a join.
    *
    * @param {{ clinicId: string; appointment: {
    *   id: string;
    *   doctor_id?: string|null;
    *   patient_id?: string|null;
    *   slot_start: string;
+   *   refund_status?: string|null;
+   *   payment_amount?: number|string|null;
    * } }} params
    * @returns {Promise<import("../repository/notification.repository.js").ClinicNotification>}
    */
@@ -124,6 +150,9 @@ export class InAppNotificationService {
       if (patient?.full_name) patientName = patient.full_name;
     }
 
+    const refundStatus = appointment.refund_status ?? null;
+    const payload = refundStatus ? { refund_status: refundStatus } : null;
+
     return this._notificationRepo.insert({
       clinicId,
       doctorId: appointment.doctor_id ?? null,
@@ -132,8 +161,11 @@ export class InAppNotificationService {
       message: formatAppointmentCancelledMessage({
         patientName,
         slotStart: appointment.slot_start,
+        refundStatus,
+        paymentAmount: appointment.payment_amount,
       }),
       relatedAppointmentId: appointment.id,
+      payload,
     });
   }
 

@@ -649,6 +649,51 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * Records Razorpay refund outcome on a cancelled appointment. Best-effort
+   * side effect after cancelViaReminderReply — never used to gate cancellation.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @param {{
+   *   refundStatus: string;
+   *   refundId?: string|null;
+   *   refundedAt?: string|null;
+   *   paymentStatus?: string|null;
+   * }} fields
+   * @returns {Promise<object|null>}
+   */
+  async updateRefundFields(clinicId, appointmentId, {
+    refundStatus,
+    refundId = null,
+    refundedAt = null,
+    paymentStatus = null,
+  }) {
+    const nowIso = new Date().toISOString();
+    const patch = {
+      refund_status: refundStatus,
+      updated_at: nowIso,
+    };
+    if (refundId != null) patch.refund_id = refundId;
+    if (refundedAt != null) patch.refunded_at = refundedAt;
+    if (paymentStatus != null) patch.payment_status = paymentStatus;
+
+    const { data, error } = await this._db
+      .from(this._table)
+      .update(patch)
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during updateRefundFields", { appointmentId, code: error.code });
+    throw new DatabaseError("updateRefundFields", error);
+  }
+
+  /**
    * Self-serve reschedule from a reminder: move a CONFIRMED appointment to a
    * new slot on the SAME row (does not insert a new appointment). Relies on
    * appointments_no_double_booking for the new slot. Zero rows / unique

@@ -34,8 +34,9 @@ function createFakeNotificationRepo(seed = []) {
       title,
       message,
       relatedAppointmentId = null,
+      payload = null,
     }) {
-      insertCalls.push({ clinicId, doctorId, type, title, message, relatedAppointmentId });
+      insertCalls.push({ clinicId, doctorId, type, title, message, relatedAppointmentId, payload });
       const row = {
         id: `notif-${rows.length + 1}`,
         clinic_id: clinicId,
@@ -44,6 +45,7 @@ function createFakeNotificationRepo(seed = []) {
         title,
         message,
         related_appointment_id: relatedAppointmentId,
+        payload,
         is_read: false,
         created_at: new Date().toISOString(),
       };
@@ -146,7 +148,25 @@ test("createAppointmentCancelled inserts appointment_cancelled row scoped to cli
     repo.insertCalls[0].message,
     /^Asha Kumar cancelled their appointment on /,
   );
+  assert.equal(repo.insertCalls[0].payload, null);
   assert.equal(row.type, NOTIFICATION_TYPE.APPOINTMENT_CANCELLED);
+});
+
+test("createAppointmentCancelled includes refund_status in payload and message when refunded", async () => {
+  const repo = createFakeNotificationRepo();
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  await service.createAppointmentCancelled({
+    clinicId: CLINIC_A,
+    appointment: {
+      ...APPOINTMENT,
+      refund_status: "completed",
+      payment_amount: 500,
+    },
+  });
+
+  assert.deepEqual(repo.insertCalls[0].payload, { refund_status: "completed" });
+  assert.match(repo.insertCalls[0].message, /Refund of ₹500: completed/);
 });
 
 test("createAppointmentRescheduled inserts appointment_rescheduled row scoped to clinic_id", async () => {

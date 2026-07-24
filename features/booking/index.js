@@ -270,6 +270,8 @@ export {
   SLOT_LIST_MAX_OPTIONS,
   SLOT_LIST_MORE_ROW_ID,
   RAZORPAY_EVENT_TYPE,
+  REFUND_STATUS,
+  CAPTURED_PAYMENT_STATUSES,
   INBOUND_MESSAGE_TYPE,
   WHATSAPP_CONFIG,
   REMINDER_KIND,
@@ -514,6 +516,7 @@ export function createBookingServices(supabaseClient) {
       doctorProfileRepository,
       slotSelectionService,
       inAppNotificationService,
+      razorpayClient,
     },
   );
 

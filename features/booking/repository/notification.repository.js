@@ -15,13 +15,14 @@ import { DatabaseError } from "../errors.js";
  *   title: string;
  *   message: string;
  *   related_appointment_id: string|null;
+ *   payload: Record<string, unknown>|null;
  *   is_read: boolean;
  *   created_at: string;
  * }} ClinicNotification
  */
 
 const SELECT_COLS =
-  "id, clinic_id, doctor_id, type, title, message, related_appointment_id, is_read, created_at";
+  "id, clinic_id, doctor_id, type, title, message, related_appointment_id, payload, is_read, created_at";
 
 export class NotificationRepository extends BaseRepository {
   /** @param {import("@supabase/supabase-js").SupabaseClient} supabase */
@@ -37,6 +38,7 @@ export class NotificationRepository extends BaseRepository {
    *   title: string;
    *   message: string;
    *   relatedAppointmentId?: string|null;
+   *   payload?: Record<string, unknown>|null;
    * }} row
    * @returns {Promise<ClinicNotification>}
    */
@@ -47,6 +49,7 @@ export class NotificationRepository extends BaseRepository {
     title,
     message,
     relatedAppointmentId = null,
+    payload = null,
   }) {
     return this._run(
       () =>
@@ -59,6 +62,7 @@ export class NotificationRepository extends BaseRepository {
             title,
             message,
             related_appointment_id: relatedAppointmentId,
+            payload,
           })
           .select(SELECT_COLS)
           .single(),

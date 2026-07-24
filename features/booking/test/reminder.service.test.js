@@ -9,8 +9,10 @@ import {
   REMINDER_REPLY_ACTION,
   REMINDER_COPY,
   APPOINTMENT_STATUS,
+  REFUND_STATUS,
 } from "../constants.js";
 import { reminderReplyId } from "../lib/reminder-reply.js";
+import { RazorpaySendError } from "../errors.js";
 
 const CLINIC = Object.freeze({
   id: "clinic-1",
@@ -74,6 +76,7 @@ function createFakeRepos({
     findById: [],
     cancelViaReminderReply: [],
     requestRescheduleViaReminderReply: [],
+    updateRefundFields: [],
     isRemindersEnabledForClinic: [],
   };
 
@@ -120,6 +123,10 @@ function createFakeRepos({
       calls.requestRescheduleViaReminderReply.push({ clinicId, appointmentId });
       if (requestRescheduleViaReminderReplyImpl) return requestRescheduleViaReminderReplyImpl(clinicId, appointmentId);
       return buildAppointment({ id: appointmentId, status: APPOINTMENT_STATUS.RESCHEDULE_REQUESTED });
+    },
+    async updateRefundFields(clinicId, appointmentId, fields) {
+      calls.updateRefundFields.push({ clinicId, appointmentId, fields });
+      return { id: appointmentId, clinic_id: clinicId, ...fields };
     },
   };
 
@@ -195,6 +202,18 @@ function createFakeSlotSelectionService() {
         action: "SLOTS_PRESENTED",
         currentState: "SLOT_SELECTION",
       };
+    },
+  };
+}
+
+function createFakeRazorpayClient({ createRefundImpl = null } = {}) {
+  const createRefundCalls = [];
+  return {
+    createRefundCalls,
+    async createRefund(args) {
+      createRefundCalls.push(args);
+      if (createRefundImpl) return createRefundImpl(args);
+      return { id: "rfnd_1", paymentId: args.paymentId, amount: 50000, status: "processed" };
     },
   };
 }
@@ -446,6 +465,7 @@ test("handleQuickReply Cancel: cancels the appointment, acknowledges, and notifi
   const result = await service.handleQuickReply({ clinic: CLINIC, message });
 
   assert.equal(result.action, "CANCELLED");
+  assert.equal(result.refundStatus, REFUND_STATUS.NOT_APPLICABLE);
   assert.equal(calls.cancelViaReminderReply.length, 1);
   assert.equal(calls.cancelViaReminderReply[0].appointmentId, appointment.id);
   assert.ok(wa.sendTextCalls[0].body.startsWith("Your appointment on"));
@@ -468,6 +488,215 @@ test("handleQuickReply Cancel: replaying against an already-resolved appointment
 
   assert.equal(result.action, "STALE_APPOINTMENT");
   assert.equal(wa.sendTextCalls[0].body, REMINDER_COPY.STALE_OR_UNKNOWN_REPLY);
+});
+
+// ─────────────────────────────────────────────────────────────
+// handleQuickReply — Cancel + Razorpay refund
+// ─────────────────────────────────────────────────────────────
+
+test("handleQuickReply Cancel: captured payment triggers full Razorpay refund and refund ack", async () => {
+  const appointment = buildAppointment({
+    payment_status: "paid",
+    payment_amount: 500,
+    razorpay_payment_id: "pay_ABC",
+  });
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+    cancelViaReminderReplyImpl: () => cancelled,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const inApp = createFakeInAppNotificationService();
+  const razorpay = createFakeRazorpayClient();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    inAppNotificationService: inApp,
+    razorpayClient: razorpay,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
+  const result = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(result.action, "CANCELLED");
+  assert.equal(result.refundStatus, REFUND_STATUS.COMPLETED);
+  assert.equal(razorpay.createRefundCalls.length, 1);
+  assert.equal(razorpay.createRefundCalls[0].paymentId, "pay_ABC");
+  assert.equal(razorpay.createRefundCalls[0].idempotencyKey, `appt_cancel_${appointment.id}`);
+  assert.equal(
+    wa.sendTextCalls[0].body,
+    REMINDER_COPY.CANCEL_ACK_WITH_REFUND.replace("{amount}", "500"),
+  );
+  const refundStatuses = calls.updateRefundFields.map((c) => c.fields.refundStatus);
+  assert.ok(refundStatuses.includes(REFUND_STATUS.PROCESSING));
+  assert.ok(refundStatuses.includes(REFUND_STATUS.COMPLETED));
+  const completed = calls.updateRefundFields.find((c) => c.fields.refundStatus === REFUND_STATUS.COMPLETED);
+  assert.equal(completed.fields.refundId, "rfnd_1");
+  assert.equal(completed.fields.paymentStatus, "refunded");
+  assert.ok(completed.fields.refundedAt);
+  assert.equal(inApp.createAppointmentCancelledCalls[0].appointment.refund_status, REFUND_STATUS.COMPLETED);
+});
+
+test("handleQuickReply Cancel: Razorpay refund failure still cancels and uses cancellation-only ack", async () => {
+  const appointment = buildAppointment({
+    payment_status: "paid",
+    payment_amount: 750,
+    razorpay_payment_id: "pay_FAIL",
+  });
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+    cancelViaReminderReplyImpl: () => cancelled,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const inApp = createFakeInAppNotificationService();
+  const razorpay = createFakeRazorpayClient({
+    createRefundImpl: async () => {
+      throw new RazorpaySendError("Razorpay refund API responded with 500");
+    },
+  });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    inAppNotificationService: inApp,
+    razorpayClient: razorpay,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
+  const result = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(result.action, "CANCELLED");
+  assert.equal(result.refundStatus, REFUND_STATUS.FAILED);
+  assert.equal(calls.cancelViaReminderReply.length, 1);
+  assert.equal(razorpay.createRefundCalls.length, 1);
+  assert.ok(wa.sendTextCalls[0].body.startsWith("Your appointment on"));
+  assert.equal(
+    wa.sendTextCalls[0].body.includes("refund"),
+    false,
+    "patient ack must not expose refund failure",
+  );
+  const failed = calls.updateRefundFields.find((c) => c.fields.refundStatus === REFUND_STATUS.FAILED);
+  assert.ok(failed);
+  assert.equal(inApp.createAppointmentCancelledCalls[0].appointment.refund_status, REFUND_STATUS.FAILED);
+});
+
+test("handleQuickReply Cancel: no captured payment sets refund_status=not_applicable", async () => {
+  const appointment = buildAppointment({
+    payment_status: "not_required",
+    payment_amount: null,
+    razorpay_payment_id: null,
+  });
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+    cancelViaReminderReplyImpl: () => cancelled,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const razorpay = createFakeRazorpayClient();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    razorpayClient: razorpay,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
+  const result = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(result.action, "CANCELLED");
+  assert.equal(result.refundStatus, REFUND_STATUS.NOT_APPLICABLE);
+  assert.equal(razorpay.createRefundCalls.length, 0);
+  assert.equal(calls.updateRefundFields.length, 1);
+  assert.equal(calls.updateRefundFields[0].fields.refundStatus, REFUND_STATUS.NOT_APPLICABLE);
+  assert.ok(wa.sendTextCalls[0].body.startsWith("Your appointment on"));
+});
+
+test("handleQuickReply Cancel: double-cancel is idempotent — second cancel does not call Razorpay again", async () => {
+  const appointment = buildAppointment({
+    payment_status: "paid",
+    payment_amount: 500,
+    razorpay_payment_id: "pay_DUP",
+  });
+  let cancelCount = 0;
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+    cancelViaReminderReplyImpl: () => {
+      cancelCount += 1;
+      return cancelCount === 1 ? cancelled : null;
+    },
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const razorpay = createFakeRazorpayClient();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    razorpayClient: razorpay,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
+  const first = await service.handleQuickReply({ clinic: CLINIC, message });
+  const second = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(first.action, "CANCELLED");
+  assert.equal(first.refundStatus, REFUND_STATUS.COMPLETED);
+  assert.equal(second.action, "STALE_APPOINTMENT");
+  assert.equal(calls.cancelViaReminderReply.length, 2);
+  assert.equal(razorpay.createRefundCalls.length, 1, "Razorpay refund must not be called twice");
+});
+
+test("handleQuickReply Cancel: skips Razorpay when refund_status is already completed", async () => {
+  const appointment = buildAppointment({
+    payment_status: "refunded",
+    payment_amount: 500,
+    razorpay_payment_id: "pay_DONE",
+    refund_status: REFUND_STATUS.COMPLETED,
+    refund_id: "rfnd_existing",
+  });
+  const cancelled = {
+    ...appointment,
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancelled_at: new Date().toISOString(),
+    cancellation_reason: "patient_cancelled_via_reminder",
+    hold_expires_at: null,
+  };
+  const { clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findByIdForClinicImpl: () => appointment,
+    cancelViaReminderReplyImpl: () => cancelled,
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const razorpay = createFakeRazorpayClient();
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    razorpayClient: razorpay,
+  });
+
+  const message = buildMessage({ replyId: reminderReplyId(REMINDER_REPLY_ACTION.CANCEL, appointment.id) });
+  const result = await service.handleQuickReply({ clinic: CLINIC, message });
+
+  assert.equal(result.action, "CANCELLED");
+  assert.equal(result.refundStatus, REFUND_STATUS.COMPLETED);
+  assert.equal(razorpay.createRefundCalls.length, 0);
+  assert.ok(wa.sendTextCalls[0].body.includes("refund of ₹500"));
 });
 
 // ─────────────────────────────────────────────────────────────

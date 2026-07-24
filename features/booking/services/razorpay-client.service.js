@@ -1,7 +1,5 @@
 /**
- * @fileoverview Thin client for the Razorpay Payment Links API. Replaces
- * the Session 3 stub (lib/payment-stub.js, removed) with a real, payable
- * link.
+ * @fileoverview Thin client for the Razorpay Payment Links + Refunds APIs.
  *
  * Correlation with the webhook: `notes` passed to `createPaymentLink` are
  * copied by Razorpay onto the resulting Payment entity, so
@@ -20,6 +18,7 @@ import { RazorpayCredentialsError, RazorpaySendError } from "../errors.js";
 import { createLogger } from "../logger.js";
 
 const PAYMENT_LINKS_URL = "https://api.razorpay.com/v1/payment_links";
+const PAYMENTS_URL = "https://api.razorpay.com/v1/payments";
 const CURRENCY = "INR";
 
 export class RazorpayClientService {
@@ -35,6 +34,11 @@ export class RazorpayClientService {
     this._log = createLogger({ component: "RazorpayClientService" });
   }
 
+  /** @returns {string} */
+  _basicAuthHeader() {
+    return `Basic ${Buffer.from(`${this._keyId}:${this._keySecret}`).toString("base64")}`;
+  }
+
   /**
    * Creates a real, payable Razorpay Payment Link.
    *
@@ -47,15 +51,13 @@ export class RazorpayClientService {
    * @returns {Promise<{ id: string; shortUrl: string }>}
    */
   async createPaymentLink({ amountRupees, referenceId, description, notes }) {
-    const auth = Buffer.from(`${this._keyId}:${this._keySecret}`).toString("base64");
-
     let response;
     try {
       response = await fetch(PAYMENT_LINKS_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Basic ${auth}`,
+          "Authorization": this._basicAuthHeader(),
         },
         body: JSON.stringify({
           amount: Math.round(amountRupees * 100), // Razorpay amounts are in paise
@@ -86,5 +88,67 @@ export class RazorpayClientService {
     }
 
     return { id: payload.id, shortUrl: payload.short_url };
+  }
+
+  /**
+   * Issues a full refund for a captured Razorpay payment. Omitting `amount`
+   * refunds the entire payment (Razorpay default).
+   *
+   * Idempotency: pass a stable `idempotencyKey` (e.g. appointment id) so a
+   * redelivered Cancel webhook does not create a second refund at Razorpay.
+   *
+   * @param {{
+   *   paymentId: string;
+   *   idempotencyKey: string;
+   *   notes?: Record<string, string>;
+   * }} opts
+   * @returns {Promise<{ id: string; paymentId: string; amount: number|null; status: string|null }>}
+   */
+  async createRefund({ paymentId, idempotencyKey, notes }) {
+    if (!paymentId) {
+      throw new RazorpaySendError("Cannot refund — paymentId is required");
+    }
+    if (!idempotencyKey) {
+      throw new RazorpaySendError("Cannot refund — idempotencyKey is required");
+    }
+
+    const url = `${PAYMENTS_URL}/${encodeURIComponent(paymentId)}/refund`;
+    let response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": this._basicAuthHeader(),
+          "X-Razorpay-Idempotency-Key": String(idempotencyKey),
+        },
+        body: JSON.stringify({
+          ...(notes ? { notes } : {}),
+        }),
+      });
+    } catch (cause) {
+      this._log.error("Razorpay refund request failed (network)", { paymentId });
+      throw new RazorpaySendError("Failed to reach Razorpay refund API", { cause: String(cause) });
+    }
+
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      this._log.error("Razorpay refund request rejected", {
+        paymentId,
+        status: response.status,
+        error: payload?.error,
+      });
+      throw new RazorpaySendError(
+        payload?.error?.description ?? `Razorpay refund API responded with ${response.status}`,
+        payload?.error ?? null,
+      );
+    }
+
+    return {
+      id: payload.id,
+      paymentId: payload.payment_id ?? paymentId,
+      amount: payload.amount != null ? Number(payload.amount) : null,
+      status: payload.status ?? null,
+    };
   }
 }

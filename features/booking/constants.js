@@ -585,6 +585,26 @@ export const RAZORPAY_EVENT_TYPE = Object.freeze({
   PAYMENT_FAILED:   "payment.failed",
 });
 
+/**
+ * appointments.refund_status — Razorpay refund lifecycle after a paid
+ * appointment is cancelled (migration 028).
+ * @enum {string}
+ */
+export const REFUND_STATUS = Object.freeze({
+  PENDING:         "pending",
+  PROCESSING:      "processing",
+  COMPLETED:       "completed",
+  FAILED:          "failed",
+  NOT_APPLICABLE:  "not_applicable",
+});
+
+/**
+ * DB payment_status values that mean a captured Razorpay payment exists
+ * and is eligible for a full refund on cancel.
+ * (`paid` is written by confirmPayment; `captured` is accepted as an alias.)
+ */
+export const CAPTURED_PAYMENT_STATUSES = Object.freeze(["paid", "captured"]);
+
 // ─────────────────────────────────────────────────────────────
 // REMINDER_SENT (Session 5 — scheduled job, not user-triggered)
 //
@@ -687,6 +707,13 @@ export const REMINDER_COPY = Object.freeze({
   RESCHEDULE_BUTTON_LABEL: "Reschedule",
   CONFIRM_ACK: "Great, see you then!",
   CANCEL_ACK: "Your appointment on {slotLabel} has been cancelled. Send us any message whenever you'd like to book again.",
+  /**
+   * Cancel ack when a captured payment is being refunded. Amount is rupees
+   * (same units as appointments.payment_amount). Do not mention refund
+   * failures to the patient — use CANCEL_ACK instead.
+   */
+  CANCEL_ACK_WITH_REFUND:
+    "Your appointment has been cancelled. A refund of ₹{amount} will be processed within a few business days.",
   /** Shown before the slot list when patient taps Reschedule on a reminder. */
   RESCHEDULE_PICK_SLOT:
     "Sure — please pick a new time from the list below. Your current booking stays held until you choose.",

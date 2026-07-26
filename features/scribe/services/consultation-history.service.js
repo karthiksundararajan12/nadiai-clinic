@@ -61,7 +61,7 @@ export class ConsultationHistoryService {
   async _enrichSession(session, ctx) {
     const [patient, doctor, soapNote, prescription] = await Promise.all([
       session.patient_id
-        ? this._sessions.getPatientName(session.patient_id, ctx.doctorId)
+        ? this._sessions.getPatientName(session.patient_id, ctx.clinicId)
         : null,
       this._sessions.getDoctorName(ctx.doctorId),
       this._soap.getNoteBySession(session.id),

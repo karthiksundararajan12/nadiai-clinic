@@ -707,18 +707,23 @@ export class SessionRepository extends BaseRepository {
     );
   }
 
-  /** @param {string} patientId @param {string} doctorId */
-  async getPatientName(patientId, doctorId) {
+  /**
+   * @param {string} patientId
+   * @param {string} clinicId
+   * @returns {Promise<{ id: string; name: string }|null>}
+   */
+  async getPatientName(patientId, clinicId) {
     return this._runNullable(
       () =>
         this._db
           .from("patients")
-          .select("id, name")
+          .select("id, full_name")
           .eq("id", patientId)
-          .eq("doctor_id", doctorId)
+          .eq("clinic_id", clinicId)
+          .is("deleted_at", null)
           .single(),
       "getPatientName",
-    );
+    ).then((row) => (row ? { id: row.id, name: row.full_name } : null));
   }
 
   /** @param {string} doctorId */

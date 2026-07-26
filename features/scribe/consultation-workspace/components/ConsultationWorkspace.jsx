@@ -101,7 +101,10 @@ export function ConsultationWorkspace({
   });
 
   const session = statusPoll.session ?? transcript.session ?? soap.session;
-  const { patient: sessionPatient } = usePatientForSession(session?.patient_id);
+  const { patient: sessionPatient } = usePatientForSession(
+    session?.patient_id,
+    session?.clinic_id,
+  );
   const patient = selectedPatient ?? sessionPatient;
 
   const [versionsOpen, setVersionsOpen] = useState(false);

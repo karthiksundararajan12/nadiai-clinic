@@ -26,7 +26,9 @@ export class SOAPRepository extends BaseRepository {
     if (!session) return null;
 
     const [patient, doctor, appointment, latestTranscriptVersion, segments] = await Promise.all([
-      session.patient_id ? this._getPatient(session.patient_id, session.doctor_id) : null,
+      session.patient_id
+        ? this._getPatient(session.patient_id, session.clinic_id)
+        : null,
       this._getDoctor(session.doctor_id),
       session.appointment_id ? this._getAppointment(session.appointment_id, session.doctor_id) : null,
       this.getLatestTranscriptVersion(sessionId),
@@ -36,17 +38,45 @@ export class SOAPRepository extends BaseRepository {
     return { session, patient, doctor, appointment, latestTranscriptVersion, segments };
   }
 
-  /** @param {string} patientId @param {string} doctorId */
-  async _getPatient(patientId, doctorId) {
+  /**
+   * @param {string} patientId
+   * @param {string} clinicId
+   * @returns {Promise<{
+   *   id: string;
+   *   name: string;
+   *   age: number|null;
+   *   gender: string|null;
+   *   phone: string|null;
+   *   condition: null;
+   *   status: null;
+   *   last_visit: null;
+   * }|null>}
+   */
+  async _getPatient(patientId, clinicId) {
     return this._runNullable(
       () =>
         this._db
           .from("patients")
-          .select("id, name, age, gender, condition, status, last_visit")
+          .select("id, full_name, age_years, gender, contact_phone")
           .eq("id", patientId)
-          .eq("doctor_id", doctorId)
+          .eq("clinic_id", clinicId)
+          .is("deleted_at", null)
           .single(),
       "getSoapPatient",
+    ).then((row) =>
+      row
+        ? {
+            id: row.id,
+            name: row.full_name,
+            age: row.age_years ?? null,
+            gender: row.gender ?? null,
+            phone: row.contact_phone ?? null,
+            // Legacy prompt/UI fields — not present on clinic-scoped patients.
+            condition: null,
+            status: null,
+            last_visit: null,
+          }
+        : null,
     );
   }
 

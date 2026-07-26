@@ -92,6 +92,50 @@ export function canManualGenerateSOAP({
 }
 
 /**
+ * Whether the consultation toolbar should show "Complete review".
+ * Only while the transcript is still in REVIEWING (before SOAP exists/approved).
+ *
+ * @param {{
+ *   soapApproved: boolean;
+ *   readOnly: boolean;
+ *   sessionStatus: string|null|undefined;
+ *   waitingForTranscript: boolean;
+ * }} input
+ */
+export function canShowCompleteReview({
+  soapApproved,
+  readOnly,
+  sessionStatus,
+  waitingForTranscript,
+}) {
+  return (
+    !soapApproved &&
+    !readOnly &&
+    sessionStatus === "REVIEWING" &&
+    !waitingForTranscript
+  );
+}
+
+/**
+ * Whether the consultation toolbar should show "Generate SOAP".
+ * Never show once a SOAP note already exists — errors are retried via SOAP panel.
+ *
+ * @param {{
+ *   canGenerate: boolean;
+ *   hasSoap: boolean;
+ *   hasGenerationError: boolean;
+ * }} input
+ */
+export function canShowGenerateSOAPButton({
+  canGenerate,
+  hasSoap,
+  hasGenerationError,
+}) {
+  if (hasSoap) return false;
+  return canGenerate || hasGenerationError;
+}
+
+/**
  * Runs one SOAP generation attempt. Used by workspace auto + manual retry paths.
  *
  * @param {() => Promise<void>} generate

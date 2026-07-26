@@ -66,11 +66,11 @@ export function ConsultationActionBar({
             <Button
               className="gap-2 bg-primary px-5 hover:bg-primary/90"
               onClick={onApprove}
-              disabled={saving || regenerating || hasDirty || blockingApproval}
+              disabled={saving || regenerating || blockingApproval}
               data-testid="soap-approve"
             >
-              <CheckCircle2 className="h-4 w-4" />
-              Approve SOAP
+              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+              {saving ? "Working…" : "Approve SOAP"}
             </Button>
           )}
           <Button
@@ -78,9 +78,10 @@ export function ConsultationActionBar({
             className="gap-2"
             onClick={onSave}
             disabled={saving || !hasDirty}
+            data-testid="soap-action-bar-save"
           >
-            <Save className="h-4 w-4" />
-            Save Draft
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            {saving ? "Saving…" : "Save Draft"}
           </Button>
           {canRegenerate && (
             <Button

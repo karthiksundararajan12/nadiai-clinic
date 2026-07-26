@@ -9,12 +9,14 @@ export function ConsultationToolbar({
   transcriptDirty,
   soapDirty,
   saving,
+  completingReview = false,
   autosaveStatus,
   canCompleteReview,
   canGenerateSOAP,
   generatingSOAP,
   canApproveSOAP,
   soapApproved,
+  actionError = null,
   onSave,
   onCompleteReview,
   onGenerateSOAP,
@@ -22,6 +24,7 @@ export function ConsultationToolbar({
   onRejectSOAP,
 }) {
   const hasChanges = transcriptDirty || soapDirty;
+  const busy = saving || completingReview || generatingSOAP;
 
   return (
     <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
@@ -39,68 +42,84 @@ export function ConsultationToolbar({
         </span>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onSave}
-          disabled={saving || !hasChanges || soapApproved}
-        >
-          <Save className="size-4" />
-          Save
-        </Button>
-
-        {canCompleteReview && (
-          <Button
-            size="sm"
-            variant="secondary"
-            data-testid="scribe-complete-review"
-            onClick={onCompleteReview}
-            disabled={saving || transcriptDirty || generatingSOAP}
+      <div className="flex flex-col items-stretch gap-2 md:items-end">
+        {actionError && (
+          <p
+            className="max-w-md text-right text-xs text-rose-600"
+            role="alert"
+            data-testid="scribe-toolbar-action-error"
           >
-            <CheckCircle2 className="size-4" />
-            Complete review
-          </Button>
+            {actionError}
+          </p>
         )}
-
-        {canGenerateSOAP && (
+        <div className="flex flex-wrap items-center gap-2">
           <Button
+            variant="outline"
             size="sm"
-            data-testid="scribe-generate-soap"
-            onClick={onGenerateSOAP}
-            disabled={saving || transcriptDirty || generatingSOAP}
+            onClick={onSave}
+            disabled={busy || !hasChanges || soapApproved}
+            data-testid="scribe-toolbar-save"
           >
-            {generatingSOAP ? (
-              <Loader2 className="size-4 animate-spin" />
-            ) : (
-              <Sparkles className="size-4" />
-            )}
-            {generatingSOAP ? "Generating…" : "Generate SOAP"}
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
+            {saving ? "Saving…" : "Save"}
           </Button>
-        )}
 
-        {canApproveSOAP && (
-          <>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRejectSOAP}
-              disabled={saving || soapDirty}
-            >
-              <XCircle className="size-4" />
-              Reject
-            </Button>
+          {canCompleteReview && (
             <Button
               size="sm"
-              data-testid="soap-approve"
-              onClick={onApproveSOAP}
-              disabled={saving || soapDirty}
+              variant="secondary"
+              data-testid="scribe-complete-review"
+              onClick={onCompleteReview}
+              disabled={busy || transcriptDirty}
             >
-              <CheckCircle2 className="size-4" />
-              Approve SOAP
+              {completingReview ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <CheckCircle2 className="size-4" />
+              )}
+              {completingReview ? "Completing…" : "Complete review"}
             </Button>
-          </>
-        )}
+          )}
+
+          {canGenerateSOAP && (
+            <Button
+              size="sm"
+              data-testid="scribe-generate-soap"
+              onClick={onGenerateSOAP}
+              disabled={busy || transcriptDirty}
+            >
+              {generatingSOAP ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Sparkles className="size-4" />
+              )}
+              {generatingSOAP ? "Generating…" : "Generate SOAP"}
+            </Button>
+          )}
+
+          {canApproveSOAP && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onRejectSOAP}
+                disabled={busy || soapDirty}
+              >
+                <XCircle className="size-4" />
+                Reject
+              </Button>
+              <Button
+                size="sm"
+                data-testid="soap-approve"
+                onClick={onApproveSOAP}
+                disabled={busy || soapDirty}
+              >
+                <CheckCircle2 className="size-4" />
+                Approve SOAP
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

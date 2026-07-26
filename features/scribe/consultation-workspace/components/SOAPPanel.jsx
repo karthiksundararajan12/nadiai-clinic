@@ -77,6 +77,8 @@ export function SOAPEditorPanel({
   onSectionFocus,
 }) {
   const [exportError, setExportError] = useState(null);
+  const [actionError, setActionError] = useState(null);
+  const [actionBusy, setActionBusy] = useState(false);
   const [showSecondary, setShowSecondary] = useState(false);
 
   const warnings = useMemo(() => getSoapClinicalWarnings(draft), [draft]);
@@ -91,7 +93,7 @@ export function SOAPEditorPanel({
     );
   }
 
-  const disabled = readOnly || saving || generating || regenerating;
+  const disabled = readOnly || saving || generating || regenerating || actionBusy;
   const hasDirty = Object.keys(dirty).length > 0;
 
   const handleExport = async () => {
@@ -103,17 +105,37 @@ export function SOAPEditorPanel({
     }
   };
 
-  const handleApprove = async () => {
-    if (hasDirty) {
-      const ok = window.confirm("You have unsaved SOAP changes. Save and approve?");
-      if (!ok) return;
+  const handleSave = async () => {
+    setActionError(null);
+    setActionBusy(true);
+    try {
       await onSave?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to save SOAP note");
+    } finally {
+      setActionBusy(false);
     }
+  };
+
+  const handleApprove = async () => {
+    setActionError(null);
     if (blocking) {
-      window.alert("Assessment and Plan are required before approval.");
+      setActionError("Assessment and Plan are required before approval.");
       return;
     }
-    await onApprove?.();
+    setActionBusy(true);
+    try {
+      if (hasDirty) {
+        const ok = window.confirm("You have unsaved SOAP changes. Save and approve?");
+        if (!ok) return;
+        await onSave?.();
+      }
+      await onApprove?.();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : "Failed to approve SOAP note");
+    } finally {
+      setActionBusy(false);
+    }
   };
 
   const handleReject = async () => {
@@ -216,17 +238,26 @@ export function SOAPEditorPanel({
 
       {!readOnly && (
         <div className="shrink-0 space-y-2 border-t border-slate-100 p-4">
-          {exportError && <p className="text-xs text-rose-600">{exportError}</p>}
+          {(exportError || actionError) && (
+            <p className="text-xs text-rose-600" role="alert" data-testid="soap-panel-action-error">
+              {actionError || exportError}
+            </p>
+          )}
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
               className="flex-1 gap-1.5 min-w-[100px]"
-              onClick={onSave}
-              disabled={saving || generating || regenerating || !hasDirty}
+              onClick={handleSave}
+              disabled={saving || actionBusy || generating || regenerating || !hasDirty}
+              data-testid="soap-panel-save"
             >
-              <Save className="h-3.5 w-3.5" />
-              Save
+              {saving || actionBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Save className="h-3.5 w-3.5" />
+              )}
+              {saving || actionBusy ? "Saving…" : "Save"}
             </Button>
             {canRegenerate && (
               <Button
@@ -234,7 +265,7 @@ export function SOAPEditorPanel({
                 size="sm"
                 className="flex-1 gap-1.5 min-w-[100px]"
                 onClick={handleRegenerate}
-                disabled={saving || generating || regenerating}
+                disabled={saving || actionBusy || generating || regenerating}
               >
                 <RefreshCw className={cn("h-3.5 w-3.5", regenerating && "animate-spin")} />
                 Regenerate
@@ -246,7 +277,7 @@ export function SOAPEditorPanel({
                 size="sm"
                 className="flex-1 gap-1.5 min-w-[100px]"
                 onClick={handleExport}
-                disabled={exporting || generating || hasDirty}
+                disabled={exporting || generating || hasDirty || actionBusy}
                 data-testid="soap-export-pdf"
               >
                 {exporting ? (
@@ -266,7 +297,7 @@ export function SOAPEditorPanel({
                   size="sm"
                   className="flex-1 gap-1.5 border-rose-200 text-rose-700 hover:bg-rose-50"
                   onClick={handleReject}
-                  disabled={saving || generating || regenerating}
+                  disabled={saving || actionBusy || generating || regenerating}
                   data-testid="soap-reject"
                 >
                   <XCircle className="h-3.5 w-3.5" />
@@ -277,10 +308,14 @@ export function SOAPEditorPanel({
                   size="sm"
                   data-testid="soap-approve"
                   onClick={handleApprove}
-                  disabled={saving || generating || regenerating || hasDirty || blocking}
+                  disabled={saving || actionBusy || generating || regenerating || blocking}
                 >
-                  <CheckCircle2 className="h-4 w-4" />
-                  Approve
+                  {actionBusy ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-4 w-4" />
+                  )}
+                  {actionBusy ? "Working…" : "Approve"}
                 </Button>
               </>
             )}

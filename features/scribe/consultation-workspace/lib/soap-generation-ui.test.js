@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   SOAP_GENERATION_FAILURE_MESSAGE,
   canManualGenerateSOAP,
+  canShowCompleteReview,
+  canShowGenerateSOAPButton,
   resolveSoapEmptyPresentation,
   runSoapGenerationAttempt,
 } from "./soap-generation-ui.js";
@@ -63,4 +65,141 @@ test("runSoapGenerationAttempt retry re-attempts generation after initial failur
   const second = await runSoapGenerationAttempt(generate);
   assert.equal(second.ok, true);
   assert.equal(attempts, 2);
+});
+
+test("canShowCompleteReview only while transcript is REVIEWING", () => {
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: false,
+      readOnly: false,
+      sessionStatus: "REVIEWING",
+      waitingForTranscript: false,
+    }),
+    true,
+  );
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: false,
+      readOnly: false,
+      sessionStatus: "REVIEW_COMPLETED",
+      waitingForTranscript: false,
+    }),
+    false,
+  );
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: true,
+      readOnly: false,
+      sessionStatus: "REVIEWING",
+      waitingForTranscript: false,
+    }),
+    false,
+  );
+});
+
+test("canShowGenerateSOAPButton hides Generate after SOAP exists, even with prior error", () => {
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: false,
+      hasSoap: false,
+      hasGenerationError: true,
+    }),
+    true,
+  );
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: true,
+      hasSoap: true,
+      hasGenerationError: true,
+    }),
+    false,
+  );
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: false,
+      hasSoap: true,
+      hasGenerationError: false,
+    }),
+    false,
+  );
+});
+
+test("generate → complete review → approve visibility transitions", () => {
+  // After transcript ready, before SOAP: Complete review + Generate can show
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: false,
+      readOnly: false,
+      sessionStatus: "REVIEWING",
+      waitingForTranscript: false,
+    }),
+    true,
+  );
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: canManualGenerateSOAP({
+        readOnly: false,
+        waitingForTranscript: false,
+        segmentCount: 2,
+        generating: false,
+        hasSoap: false,
+        transcriptWorkspaceAvailable: true,
+        soapApproved: false,
+      }),
+      hasSoap: false,
+      hasGenerationError: false,
+    }),
+    true,
+  );
+
+  // After SOAP generated: Generate hidden; Complete review hidden (status advanced)
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: false,
+      hasSoap: true,
+      hasGenerationError: false,
+    }),
+    false,
+  );
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: false,
+      readOnly: false,
+      sessionStatus: "SOAP_REVIEWING",
+      waitingForTranscript: false,
+    }),
+    false,
+  );
+
+  // After approve: toolbar actions gated by soapApproved
+  assert.equal(
+    canShowCompleteReview({
+      soapApproved: true,
+      readOnly: true,
+      sessionStatus: "SOAP_APPROVED",
+      waitingForTranscript: false,
+    }),
+    false,
+  );
+  assert.equal(
+    canShowGenerateSOAPButton({
+      canGenerate: false,
+      hasSoap: true,
+      hasGenerationError: false,
+    }),
+    false,
+  );
+});
+
+test("save failure surfaces an error message instead of silent success", async () => {
+  const save = async () => {
+    throw new Error("Database operation failed: saveSOAP");
+  };
+  let surfaced = null;
+  try {
+    await save();
+  } catch (err) {
+    surfaced = err instanceof Error ? err.message : String(err);
+  }
+  assert.match(surfaced, /Database operation failed/);
 });

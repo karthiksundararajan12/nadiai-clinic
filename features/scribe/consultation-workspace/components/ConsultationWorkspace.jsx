@@ -31,6 +31,8 @@ import { usePrescriptionPanel } from "../../prescription-review/hooks/use-prescr
 import { ConsultationToolbar } from "./ConsultationToolbar.jsx";
 import {
   canManualGenerateSOAP,
+  canShowCompleteReview,
+  canShowGenerateSOAPButton,
   resolveSoapEmptyPresentation,
   runSoapGenerationAttempt,
 } from "../lib/soap-generation-ui.js";
@@ -120,6 +122,8 @@ export function ConsultationWorkspace({
   soapDraftForQualityRef.current = soap.draft;
   const [icdOverride, setIcdOverride] = useState(null);
   const [rpmEnabled, setRpmEnabled] = useState(false);
+  const [completingReview, setCompletingReview] = useState(false);
+  const [toolbarActionError, setToolbarActionError] = useState(null);
 
   const readOnly = readOnlyProp ?? transcript.readOnly;
   const statusApproved =
@@ -428,9 +432,32 @@ export function ConsultationWorkspace({
   }, [soap]);
 
   const handleSaveDraft = useCallback(async () => {
-    if (transcript.hasChanges) await transcript.manualSave();
-    if (soap.hasChanges) await soap.manualSave();
+    setToolbarActionError(null);
+    try {
+      if (transcript.hasChanges) await transcript.manualSave();
+      if (soap.hasChanges) await soap.manualSave();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to save changes";
+      setToolbarActionError(message);
+      throw err;
+    }
   }, [transcript, soap]);
+
+  const handleCompleteReview = useCallback(async () => {
+    setToolbarActionError(null);
+    setCompletingReview(true);
+    try {
+      if (transcript.hasChanges) await transcript.manualSave();
+      await transcript.completeReview();
+      await statusPoll.refresh?.();
+      await transcript.load();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to complete review";
+      setToolbarActionError(message);
+    } finally {
+      setCompletingReview(false);
+    }
+  }, [statusPoll, transcript]);
 
   const handleOpenSoapReview = useCallback(() => {
     setReviewModalOpen(true);
@@ -549,6 +576,7 @@ export function ConsultationWorkspace({
   const transcriptWorkspaceAvailable = isTranscriptWorkspaceAvailable(resolvedSessionStatus);
 
   const handleGenerateSOAP = useCallback(async () => {
+    setToolbarActionError(null);
     setSoapGenerationError(null);
     setAutoPipelineRunning(true);
     const result = await runSoapGenerationAttempt(async () => {
@@ -562,6 +590,7 @@ export function ConsultationWorkspace({
 
     if (!result.ok) {
       setSoapGenerationError(result.error);
+      setToolbarActionError(result.error.message);
     } else {
       setSoapGenerationError(null);
       try {
@@ -587,6 +616,8 @@ export function ConsultationWorkspace({
     autoPipelineAttemptedRef.current = false;
     setAutoPipelineRunning(false);
     setSoapGenerationError(null);
+    setToolbarActionError(null);
+    setCompletingReview(false);
   }, [sessionId]);
 
   useEffect(() => {
@@ -698,11 +729,18 @@ export function ConsultationWorkspace({
     soapApproved,
   });
 
-  const canCompleteReview =
-    !soapApproved &&
-    !readOnly &&
-    resolvedSessionStatus === "REVIEWING" &&
-    !waitingForTranscript;
+  const canCompleteReview = canShowCompleteReview({
+    soapApproved,
+    readOnly,
+    sessionStatus: resolvedSessionStatus,
+    waitingForTranscript,
+  });
+
+  const showGenerateSOAP = canShowGenerateSOAPButton({
+    canGenerate: canGenerateSOAP,
+    hasSoap,
+    hasGenerationError: Boolean(soapGenerationError),
+  });
 
   const workspaceToolbar = !waitingForTranscript && !soapApproved ? (
     <ConsultationToolbar
@@ -710,14 +748,16 @@ export function ConsultationWorkspace({
       transcriptDirty={transcript.hasChanges}
       soapDirty={soap.hasChanges}
       saving={transcript.saving || soap.saving}
+      completingReview={completingReview}
       autosaveStatus={transcript.autosaveStatus ?? soap.autosaveStatus ?? "idle"}
       canCompleteReview={canCompleteReview}
-      canGenerateSOAP={canGenerateSOAP || Boolean(soapGenerationError)}
+      canGenerateSOAP={showGenerateSOAP}
       generatingSOAP={noteGenerating}
       canApproveSOAP={canApproveSOAP}
       soapApproved={soapApproved}
+      actionError={toolbarActionError}
       onSave={handleSaveDraft}
-      onCompleteReview={handleGenerateSOAP}
+      onCompleteReview={handleCompleteReview}
       onGenerateSOAP={handleGenerateSOAP}
       onApproveSOAP={handleApproveSOAP}
       onRejectSOAP={handleOpenSoapReview}

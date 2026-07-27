@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, Copy, Loader2, RefreshCw } from "lucide-react";
+import { Activity, ChevronDown, ChevronUp, Copy, Loader2, Pencil, Quote, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { VitalsInput } from "./VitalsInput.jsx";
 import {
@@ -12,19 +12,47 @@ import {
 import { SoapStatementList } from "./SoapStatementList.jsx";
 
 const SECTION_STYLES = {
-  subjective: { border: "border-l-blue-500", text: "text-blue-600", ring: "focus:ring-blue-500/30" },
-  objective: { border: "border-l-primary", text: "text-primary", ring: "focus:ring-primary/30" },
-  assessment: { border: "border-l-red-500", text: "text-red-500", ring: "focus:ring-red-500/30" },
-  plan: { border: "border-l-green-600", text: "text-green-600", ring: "focus:ring-green-600/30" },
+  subjective: {
+    border: "border-l-blue-500",
+    text: "text-blue-700",
+    dot: "bg-blue-500",
+    chip: "bg-blue-50/70",
+    ring: "focus:border-blue-400 focus:ring-blue-500/20",
+  },
+  objective: {
+    border: "border-l-primary",
+    text: "text-primary",
+    dot: "bg-primary",
+    chip: "bg-primary/[0.04]",
+    ring: "focus:border-primary/40 focus:ring-primary/20",
+  },
+  assessment: {
+    border: "border-l-rose-500",
+    text: "text-rose-700",
+    dot: "bg-rose-500",
+    chip: "bg-rose-50/70",
+    ring: "focus:border-rose-400 focus:ring-rose-500/20",
+  },
+  plan: {
+    border: "border-l-emerald-600",
+    text: "text-emerald-700",
+    dot: "bg-emerald-600",
+    chip: "bg-emerald-50/70",
+    ring: "focus:border-emerald-400 focus:ring-emerald-500/20",
+  },
 };
 
 const COLLAPSE_LEN = 150;
 
-function SectionFieldLabel({ children }) {
+function FieldLabel({ icon: Icon, children, hint }) {
   return (
-    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
-      {children}
-    </p>
+    <div className="mb-2 flex items-baseline gap-1.5">
+      <Icon className="h-3 w-3 shrink-0 translate-y-[1px] text-gray-400" strokeWidth={2} aria-hidden />
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+        {children}
+        {hint && <span className="ml-1 font-normal normal-case tracking-normal text-gray-400">· {hint}</span>}
+      </p>
+    </div>
   );
 }
 
@@ -85,24 +113,25 @@ export function SOAPSection({
     <article
       id={`soap-section-${sectionKey}`}
       className={cn(
-        "bg-white border border-gray-200 rounded-lg shadow-none border-l-4 transition-all duration-200",
+        "overflow-hidden rounded-xl border border-gray-200 bg-white border-l-4 shadow-clinical transition-all duration-200",
         style.border,
         isActive && "ring-2 ring-primary/20",
       )}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-gray-200 px-4 py-2.5">
-        <div className="flex items-center gap-2">
-          <span className={cn("text-xs font-bold uppercase tracking-wide", style.text)}>{label}</span>
+      <div className={cn("flex items-center justify-between gap-2 border-b border-gray-100 px-4 py-3", style.chip)}>
+        <div className="flex items-center gap-2.5">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", style.dot)} aria-hidden />
+          <span className={cn("text-[13px] font-bold uppercase tracking-[0.06em]", style.text)}>{label}</span>
           {showConfidence && (
-            <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-600">
+            <span className="rounded-full bg-white px-2 py-0.5 text-[10px] font-medium text-gray-600 ring-1 ring-inset ring-gray-200">
               {confidence}%
             </span>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           <button
             type="button"
-            className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-gray-800"
+            className="cursor-pointer rounded-md p-1.5 text-gray-500 transition-all duration-200 hover:bg-white/80 hover:text-gray-800"
             onClick={handleCopy}
             aria-label="Copy section"
           >
@@ -112,7 +141,7 @@ export function SOAPSection({
           {!readOnly && onRegenerateSection && (
             <button
               type="button"
-              className="cursor-pointer rounded p-1.5 text-gray-500 transition-all duration-200 hover:bg-gray-100 hover:text-primary"
+              className="cursor-pointer rounded-md p-1.5 text-gray-500 transition-all duration-200 hover:bg-white/80 hover:text-primary"
               onClick={() => onRegenerateSection(sectionKey)}
               disabled={regenerating}
               aria-label="Regenerate section"
@@ -123,15 +152,21 @@ export function SOAPSection({
         </div>
       </div>
 
-      <div className="px-4 py-3">
+      <div className="px-4 py-4">
         {showVitals && !readOnly && (
-          <>
+          <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50/70 p-3">
+            <FieldLabel icon={Activity}>Vitals</FieldLabel>
             <VitalsInput
               value={value}
               onChange={(v) => onChange?.(sectionKey, v)}
               disabled={false}
             />
-            <SectionFieldLabel>Draft (editable)</SectionFieldLabel>
+          </div>
+        )}
+
+        {showVitals && !readOnly && (
+          <div>
+            <FieldLabel icon={Pencil} hint="editable">Draft</FieldLabel>
             <textarea
               value={stripVitalsFromObjective(value)}
               onChange={(e) => {
@@ -142,16 +177,16 @@ export function SOAPSection({
               rows={3}
               placeholder="Additional objective findings (e.g. BP discussion, exam notes)…"
               className={cn(
-                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
+                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm leading-relaxed shadow-sm transition-all duration-200 focus:outline-none focus:ring-4",
                 style.ring,
               )}
             />
-          </>
+          </div>
         )}
 
         {!readOnly && !showVitals ? (
           <div>
-            <SectionFieldLabel>Draft (editable)</SectionFieldLabel>
+            <FieldLabel icon={Pencil} hint="editable">Draft</FieldLabel>
             <textarea
               ref={textareaRef}
               value={value}
@@ -161,7 +196,7 @@ export function SOAPSection({
               rows={3}
               placeholder={`Enter ${label.toLowerCase()}…`}
               className={cn(
-                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
+                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm leading-relaxed shadow-sm transition-all duration-200 focus:outline-none focus:ring-4",
                 style.ring,
                 saving && "opacity-80",
               )}
@@ -186,8 +221,8 @@ export function SOAPSection({
         ) : null}
 
         {showStatementEvidence && String(value).trim() && (
-          <div className={cn(!readOnly && "mt-3 border-t border-gray-100 pt-3")}>
-            <SectionFieldLabel>Source evidence</SectionFieldLabel>
+          <div className={cn("rounded-lg border border-gray-100 bg-gray-50/70 p-3", !readOnly && "mt-4")}>
+            <FieldLabel icon={Quote} hint="from transcript">Source evidence</FieldLabel>
             <SoapStatementList
               sectionKey={sectionKey}
               sectionText={showVitals ? stripVitalsFromObjective(value) : value}
@@ -202,7 +237,7 @@ export function SOAPSection({
         {readOnly && isLong && (
           <button
             type="button"
-            className="mt-2 flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-all duration-200 hover:text-primary/90"
+            className="mt-3 flex cursor-pointer items-center gap-1 text-xs font-medium text-primary transition-all duration-200 hover:text-primary/90"
             onClick={() => setExpanded((v) => !v)}
           >
             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
@@ -210,7 +245,6 @@ export function SOAPSection({
           </button>
         )}
       </div>
-
     </article>
   );
 }

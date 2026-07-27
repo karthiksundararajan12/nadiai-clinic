@@ -149,10 +149,10 @@ export function ConsultationClinicalLayout({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-white" data-testid="consultation-workspace">
-      <div className="flex shrink-0 items-center justify-between border-b border-gray-200 bg-white px-4 py-3">
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-3.5 md:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-gray-900">SOAP Note</h2>
+            <h2 className="font-display text-base font-semibold text-gray-900">SOAP Note</h2>
             {formattedDate && (
               <p className="text-xs text-gray-500">
                 {sessionDateLabel} {formattedDate}
@@ -162,26 +162,33 @@ export function ConsultationClinicalLayout({
           {toolbarLeft}
         </div>
         <div className="flex items-center gap-2">
-          <ApprovedStatusBadge approved={approved} />
-          {(soapNoteStatus === "edited" || workflowAction === "doctor_edited") && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
-              Edited by Doctor
-              {(soapDoctorEditedAt || soapNote?.reviewed_at) && (
-                <span className="ml-1 font-normal text-amber-700">
-                  · {new Date(soapDoctorEditedAt ?? soapNote.reviewed_at).toLocaleString()}
-                </span>
-              )}
-            </span>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <ApprovedStatusBadge approved={approved} />
+            {(soapNoteStatus === "edited" || workflowAction === "doctor_edited") && (
+              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+                Edited by Doctor
+                {(soapDoctorEditedAt || soapNote?.reviewed_at) && (
+                  <span className="ml-1 font-normal text-amber-700">
+                    · {new Date(soapDoctorEditedAt ?? soapNote.reviewed_at).toLocaleString()}
+                  </span>
+                )}
+              </span>
+            )}
+            {(soapNoteStatus === "regenerated" || workflowAction === "regenerated") && !approved && (
+              <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
+                Regenerated
+              </span>
+            )}
+          </div>
+
+          {(canApprove || (approved && prescriptionReady && onViewPrescription)) && (
+            <div className="h-6 w-px shrink-0 bg-gray-200" aria-hidden />
           )}
-          {(soapNoteStatus === "regenerated" || workflowAction === "regenerated") && !approved && (
-            <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-medium text-blue-800">
-              Regenerated
-            </span>
-          )}
+
           {canApprove && (
             <button
               type="button"
-              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-all duration-200 hover:bg-primary/90 disabled:opacity-50"
+              className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-primary/20 transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={onApprove}
               disabled={approving}
               data-testid="soap-approve"
@@ -200,6 +207,9 @@ export function ConsultationClinicalLayout({
               View Prescription
             </button>
           )}
+
+          <div className="h-6 w-px shrink-0 bg-gray-200" aria-hidden />
+
           <button
             type="button"
             className="cursor-pointer rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-medium text-gray-700 transition-all duration-200 hover:bg-gray-50"

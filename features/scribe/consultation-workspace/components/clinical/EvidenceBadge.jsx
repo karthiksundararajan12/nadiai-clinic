@@ -37,7 +37,7 @@ export function EvidenceBadge({ evidence, onClick, className }) {
   const Icon = style.Icon;
 
   return (
-    <div className={cn("flex flex-wrap items-center gap-2", className)}>
+    <div className={cn("flex shrink-0 flex-wrap items-center gap-1.5", className)}>
       <button
         type="button"
         onClick={(e) => {
@@ -45,7 +45,7 @@ export function EvidenceBadge({ evidence, onClick, className }) {
           onClick?.();
         }}
         className={cn(
-          "inline-flex cursor-pointer items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-semibold transition-colors",
+          "inline-flex h-5 cursor-pointer items-center gap-1 whitespace-nowrap rounded-full border px-2 text-[10px] font-semibold leading-none transition-colors",
           style.className,
         )}
       >
@@ -59,7 +59,7 @@ export function EvidenceBadge({ evidence, onClick, className }) {
           side="top"
           className="max-w-[220px] whitespace-normal text-center"
         >
-          <span className="inline-flex cursor-help items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-900">
+          <span className="inline-flex h-5 cursor-help items-center gap-1 whitespace-nowrap rounded-full border border-amber-300 bg-amber-50 px-2 text-[10px] font-medium leading-none text-amber-900">
             <AlertTriangle className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} aria-hidden />
             Low Confidence
           </span>

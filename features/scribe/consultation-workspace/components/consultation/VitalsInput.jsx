@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { cn } from "@/lib/utils";
 import {
   buildObjectiveWithVitals,
   parseVitalsFromObjective,
@@ -14,17 +15,20 @@ export {
   stripVitalsFromObjective,
 } from "../../lib/vitals-objective.js";
 
-function Field({ label, children }) {
+function Field({ label, unit, children }) {
   return (
-    <div className="min-w-0 flex-1">
-      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">{label}</p>
+    <div className="min-w-0">
+      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        {label}
+        {unit && <span className="ml-1 font-normal normal-case text-gray-400">{unit}</span>}
+      </p>
       {children}
     </div>
   );
 }
 
 const inputCls =
-  "w-full bg-white border border-gray-200 rounded px-2 py-1 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30";
+  "w-full min-w-0 bg-white border border-gray-200 rounded-md px-2 py-1.5 text-sm tabular-nums text-gray-900 shadow-sm transition-all duration-200 focus:outline-none focus:border-primary/40 focus:ring-4 focus:ring-primary/20";
 
 const VITALS_COMMIT_DELAY_MS = 2000;
 
@@ -82,24 +86,24 @@ export function VitalsInput({ value, onChange, disabled }) {
   };
 
   return (
-    <div className="mb-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
-      <Field label="BP (mmHg)">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+      <Field label="BP" unit="mmHg">
         <div className="flex items-center gap-1">
           <input
             type="text"
             inputMode="numeric"
-            className={inputCls}
+            className={cn(inputCls, "text-center")}
             placeholder="120"
             value={vitals.bpSys}
             disabled={disabled}
             onChange={(e) => update({ bpSys: e.target.value.replace(/[^\d]/g, "") })}
             onBlur={handleBlur}
           />
-          <span className="text-gray-400">/</span>
+          <span className="shrink-0 text-sm font-medium text-gray-300">/</span>
           <input
             type="text"
             inputMode="numeric"
-            className={inputCls}
+            className={cn(inputCls, "text-center")}
             placeholder="80"
             value={vitals.bpDia}
             disabled={disabled}
@@ -108,44 +112,48 @@ export function VitalsInput({ value, onChange, disabled }) {
           />
         </div>
       </Field>
-      <Field label="HR (bpm)">
+      <Field label="HR" unit="bpm">
         <input
           type="text"
           inputMode="numeric"
-          className={inputCls}
+          className={cn(inputCls, "text-center")}
+          placeholder="—"
           value={vitals.hr}
           disabled={disabled}
           onChange={(e) => update({ hr: e.target.value.replace(/[^\d]/g, "") })}
           onBlur={handleBlur}
         />
       </Field>
-      <Field label="Temp (°F)">
+      <Field label="Temp" unit="°F">
         <input
           type="text"
           inputMode="decimal"
-          className={inputCls}
+          className={cn(inputCls, "text-center")}
+          placeholder="—"
           value={vitals.temp}
           disabled={disabled}
           onChange={(e) => update({ temp: e.target.value.replace(/[^\d.]/g, "") })}
           onBlur={handleBlur}
         />
       </Field>
-      <Field label="SpO2 (%)">
+      <Field label="SpO2" unit="%">
         <input
           type="text"
           inputMode="numeric"
-          className={inputCls}
+          className={cn(inputCls, "text-center")}
+          placeholder="—"
           value={vitals.spo2}
           disabled={disabled}
           onChange={(e) => update({ spo2: e.target.value.replace(/[^\d]/g, "") })}
           onBlur={handleBlur}
         />
       </Field>
-      <Field label="Weight (kg)">
+      <Field label="Weight" unit="kg">
         <input
           type="text"
           inputMode="decimal"
-          className={inputCls}
+          className={cn(inputCls, "text-center")}
+          placeholder="—"
           value={vitals.weight}
           disabled={disabled}
           onChange={(e) => update({ weight: e.target.value.replace(/[^\d.]/g, "") })}

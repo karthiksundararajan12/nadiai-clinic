@@ -26,7 +26,7 @@ export function ConsultationToolbar({
   const busy = saving || completingReview || generatingSOAP;
 
   return (
-    <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between">
+    <div className="flex flex-col gap-3 border-b border-gray-200 bg-white px-4 py-3 md:flex-row md:items-center md:justify-between md:px-6">
       <div className="flex flex-wrap items-center gap-2">
         {sessionStatus && (
           <Badge variant="secondary" className="text-xs">
@@ -51,7 +51,7 @@ export function ConsultationToolbar({
             {actionError}
           </p>
         )}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <Button
             variant="outline"
             size="sm"
@@ -62,6 +62,22 @@ export function ConsultationToolbar({
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
             {saving ? "Saving…" : "Save"}
           </Button>
+
+          {canApproveSOAP && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRejectSOAP}
+              disabled={busy || soapDirty}
+            >
+              <XCircle className="size-4" />
+              Reject
+            </Button>
+          )}
+
+          {(canCompleteReview || canGenerateSOAP) && (
+            <span className="h-6 w-px shrink-0 bg-gray-200" aria-hidden />
+          )}
 
           {canCompleteReview && (
             <Button
@@ -86,6 +102,7 @@ export function ConsultationToolbar({
               data-testid="scribe-generate-soap"
               onClick={onGenerateSOAP}
               disabled={busy || transcriptDirty}
+              className="font-semibold shadow-sm shadow-primary/20"
             >
               {generatingSOAP ? (
                 <Loader2 className="size-4 animate-spin" />
@@ -93,18 +110,6 @@ export function ConsultationToolbar({
                 <Sparkles className="size-4" />
               )}
               {generatingSOAP ? "Generating…" : "Generate SOAP"}
-            </Button>
-          )}
-
-          {canApproveSOAP && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onRejectSOAP}
-              disabled={busy || soapDirty}
-            >
-              <XCircle className="size-4" />
-              Reject
             </Button>
           )}
         </div>

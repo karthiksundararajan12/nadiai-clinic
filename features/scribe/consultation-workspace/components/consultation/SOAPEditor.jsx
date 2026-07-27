@@ -49,11 +49,9 @@ export function SOAPEditor({
   }
 
   return (
-    <div className="space-y-3" data-testid="soap-review-workspace">
+    <div className="space-y-5" data-testid="soap-review-workspace">
       {quality && !readOnly && !generating && !regenerating && (
-        <div className="rounded-lg border border-gray-200 bg-white p-3 shadow-none">
-          <SOAPQualityIndicator quality={quality} />
-        </div>
+        <SOAPQualityIndicator quality={quality} />
       )}
       {CORE_SOAP_SECTIONS.map(([key, label]) => (
         <SOAPSection
@@ -78,7 +76,10 @@ export function SOAPEditor({
         />
       ))}
       {dirty && Object.keys(dirty).length > 0 && (
-        <p className="text-center text-[11px] text-primary">Unsaved changes</p>
+        <p className="flex items-center justify-center gap-1.5 text-[11px] font-medium text-primary">
+          <span className="h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          Unsaved changes
+        </p>
       )}
     </div>
   );

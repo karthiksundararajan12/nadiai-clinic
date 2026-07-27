@@ -3,9 +3,9 @@
 import { cn } from "@/lib/utils";
 
 const STYLES = {
-  high: { dot: "bg-emerald-500", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-800" },
-  review: { dot: "bg-amber-500", bg: "bg-amber-50 border-amber-200", text: "text-amber-800" },
-  low: { dot: "bg-rose-500", bg: "bg-rose-50 border-rose-200", text: "text-rose-800" },
+  high: { dot: "bg-emerald-500", bg: "bg-emerald-50 border-emerald-200", text: "text-emerald-800", desc: "text-emerald-700/80" },
+  review: { dot: "bg-amber-500", bg: "bg-amber-50 border-amber-200", text: "text-amber-800", desc: "text-amber-700/80" },
+  low: { dot: "bg-rose-500", bg: "bg-rose-50 border-rose-200", text: "text-rose-800", desc: "text-rose-700/80" },
 };
 
 export function SOAPQualityIndicator({ quality }) {
@@ -13,13 +13,16 @@ export function SOAPQualityIndicator({ quality }) {
   const style = STYLES[quality.level] ?? STYLES.review;
 
   return (
-    <div className={cn("rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-none", style.bg)}>
-      <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">SOAP Quality</p>
-      <div className="mt-1 flex items-center gap-2">
-        <span className={cn("h-2.5 w-2.5 rounded-full", style.dot)} />
-        <span className={cn("text-sm font-semibold", style.text)}>{quality.label}</span>
-      </div>
-      <p className="mt-1 text-xs text-slate-600">{quality.description}</p>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-x-2.5 gap-y-1 rounded-lg border px-3.5 py-2.5",
+        style.bg,
+      )}
+    >
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", style.dot)} aria-hidden />
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">SOAP Quality</span>
+      <span className={cn("text-sm font-semibold", style.text)}>{quality.label}</span>
+      <span className={cn("text-xs", style.desc)}>{quality.description}</span>
     </div>
   );
 }

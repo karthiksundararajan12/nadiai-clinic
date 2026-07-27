@@ -130,6 +130,7 @@ export class PrescriptionRepository extends BaseRepository {
   }
 
   /**
+   * Clinic-scoped appointments use slot_start/slot_end (not legacy date/time/type/notes/patient_name).
    * @param {string} appointmentId
    * @param {string} doctorId
    */
@@ -138,12 +139,13 @@ export class PrescriptionRepository extends BaseRepository {
       () =>
         this._db
           .from("appointments")
-          .select("id, patient_name, date, time, type, status, notes")
+          .select("id, patient_id, slot_start, slot_end, status")
           .eq("id", appointmentId)
           .eq("doctor_id", doctorId)
+          .is("deleted_at", null)
           .single(),
       "getPrescriptionAppointment",
-    );
+    ).then((row) => (row ? mapClinicAppointment(row) : null));
   }
 
   /** @param {string} sessionId */
@@ -392,3 +394,28 @@ export class PrescriptionRepository extends BaseRepository {
  * @property {Record<string,unknown>|null} appointment
  * @property {Record<string,unknown>|null} latestTranscriptVersion
  */
+
+/**
+ * @param {{
+ *   id: string;
+ *   patient_id?: string|null;
+ *   slot_start?: string|null;
+ *   slot_end?: string|null;
+ *   status?: string|null;
+ * }} row
+ */
+function mapClinicAppointment(row) {
+  const slotStart = row.slot_start ? String(row.slot_start) : null;
+  return {
+    id: row.id,
+    patient_id: row.patient_id ?? null,
+    patient_name: null,
+    date: slotStart ? slotStart.slice(0, 10) : null,
+    time: slotStart && slotStart.length >= 16 ? slotStart.slice(11, 16) : null,
+    type: null,
+    status: row.status ?? null,
+    notes: null,
+    slot_start: row.slot_start ?? null,
+    slot_end: row.slot_end ?? null,
+  };
+}

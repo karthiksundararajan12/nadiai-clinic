@@ -93,18 +93,24 @@ export class SOAPRepository extends BaseRepository {
     );
   }
 
-  /** @param {string} appointmentId @param {string} doctorId */
+  /**
+   * Clinic-scoped appointments use slot_start/slot_end (not legacy date/time/type/notes/patient_name).
+   * Map to the shape SOAP prompt builders still expect.
+   * @param {string} appointmentId
+   * @param {string} doctorId
+   */
   async _getAppointment(appointmentId, doctorId) {
     return this._runNullable(
       () =>
         this._db
           .from("appointments")
-          .select("id, patient_name, date, time, type, status, notes")
+          .select("id, patient_id, slot_start, slot_end, status")
           .eq("id", appointmentId)
           .eq("doctor_id", doctorId)
+          .is("deleted_at", null)
           .single(),
       "getSoapAppointment",
-    );
+    ).then((row) => (row ? mapClinicAppointment(row) : null));
   }
 
   /** @param {string} sessionId */
@@ -315,4 +321,29 @@ export class SOAPRepository extends BaseRepository {
       "getSoapNoteFeedback",
     );
   }
+}
+
+/**
+ * @param {{
+ *   id: string;
+ *   patient_id?: string|null;
+ *   slot_start?: string|null;
+ *   slot_end?: string|null;
+ *   status?: string|null;
+ * }} row
+ */
+export function mapClinicAppointment(row) {
+  const slotStart = row.slot_start ? String(row.slot_start) : null;
+  return {
+    id: row.id,
+    patient_id: row.patient_id ?? null,
+    patient_name: null,
+    date: slotStart ? slotStart.slice(0, 10) : null,
+    time: slotStart && slotStart.length >= 16 ? slotStart.slice(11, 16) : null,
+    type: null,
+    status: row.status ?? null,
+    notes: null,
+    slot_start: row.slot_start ?? null,
+    slot_end: row.slot_end ?? null,
+  };
 }

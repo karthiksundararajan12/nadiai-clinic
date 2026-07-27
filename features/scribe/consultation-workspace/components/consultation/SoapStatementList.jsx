@@ -32,7 +32,7 @@ export function SoapStatementList({
   );
 
   return (
-    <ul className="mt-3 space-y-3 border-t border-gray-100 pt-3">
+    <ul className="space-y-3">
       {statements.map((statement) => {
         const evidence = evidenceById.get(statement.id) ?? {
           soapStatementId: statement.id,

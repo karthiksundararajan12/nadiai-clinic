@@ -20,6 +20,14 @@ const SECTION_STYLES = {
 
 const COLLAPSE_LEN = 150;
 
+function SectionFieldLabel({ children }) {
+  return (
+    <p className="mb-1.5 text-[11px] font-medium uppercase tracking-wide text-gray-500">
+      {children}
+    </p>
+  );
+}
+
 export function SOAPSection({
   sectionKey,
   label,
@@ -123,6 +131,7 @@ export function SOAPSection({
               onChange={(v) => onChange?.(sectionKey, v)}
               disabled={false}
             />
+            <SectionFieldLabel>Draft (editable)</SectionFieldLabel>
             <textarea
               value={stripVitalsFromObjective(value)}
               onChange={(e) => {
@@ -141,20 +150,23 @@ export function SOAPSection({
         )}
 
         {!readOnly && !showVitals ? (
-          <textarea
-            ref={textareaRef}
-            value={value}
-            onChange={(e) => { onChange?.(sectionKey, e.target.value); autoResize(); }}
-            onFocus={() => onFocus?.(sectionKey)}
-            disabled={saving}
-            rows={3}
-            placeholder={`Enter ${label.toLowerCase()}…`}
-            className={cn(
-              "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
-              style.ring,
-              saving && "opacity-80",
-            )}
-          />
+          <div>
+            <SectionFieldLabel>Draft (editable)</SectionFieldLabel>
+            <textarea
+              ref={textareaRef}
+              value={value}
+              onChange={(e) => { onChange?.(sectionKey, e.target.value); autoResize(); }}
+              onFocus={() => onFocus?.(sectionKey)}
+              disabled={saving}
+              rows={3}
+              placeholder={`Enter ${label.toLowerCase()}…`}
+              className={cn(
+                "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm leading-relaxed transition-all duration-200 focus:outline-none focus:ring-2",
+                style.ring,
+                saving && "opacity-80",
+              )}
+            />
+          </div>
         ) : !showVitals && !showStatementEvidence ? (
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
             {displayValue || (
@@ -174,14 +186,17 @@ export function SOAPSection({
         ) : null}
 
         {showStatementEvidence && String(value).trim() && (
-          <SoapStatementList
-            sectionKey={sectionKey}
-            sectionText={showVitals ? stripVitalsFromObjective(value) : value}
-            evidenceMappings={statementEvidence}
-            activeStatementId={activeStatementId}
-            onStatementClick={onStatementClick}
-            onBadgeClick={onEvidenceBadgeClick}
-          />
+          <div className={cn(!readOnly && "mt-3 border-t border-gray-100 pt-3")}>
+            <SectionFieldLabel>Source evidence</SectionFieldLabel>
+            <SoapStatementList
+              sectionKey={sectionKey}
+              sectionText={showVitals ? stripVitalsFromObjective(value) : value}
+              evidenceMappings={statementEvidence}
+              activeStatementId={activeStatementId}
+              onStatementClick={onStatementClick}
+              onBadgeClick={onEvidenceBadgeClick}
+            />
+          </div>
         )}
 
         {readOnly && isLong && (

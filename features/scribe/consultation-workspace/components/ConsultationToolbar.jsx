@@ -20,7 +20,6 @@ export function ConsultationToolbar({
   onSave,
   onCompleteReview,
   onGenerateSOAP,
-  onApproveSOAP,
   onRejectSOAP,
 }) {
   const hasChanges = transcriptDirty || soapDirty;
@@ -98,26 +97,15 @@ export function ConsultationToolbar({
           )}
 
           {canApproveSOAP && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={onRejectSOAP}
-                disabled={busy || soapDirty}
-              >
-                <XCircle className="size-4" />
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                data-testid="soap-approve"
-                onClick={onApproveSOAP}
-                disabled={busy || soapDirty}
-              >
-                <CheckCircle2 className="size-4" />
-                Approve SOAP
-              </Button>
-            </>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRejectSOAP}
+              disabled={busy || soapDirty}
+            >
+              <XCircle className="size-4" />
+              Reject
+            </Button>
           )}
         </div>
       </div>

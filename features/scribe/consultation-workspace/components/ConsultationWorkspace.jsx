@@ -759,7 +759,6 @@ export function ConsultationWorkspace({
       onSave={handleSaveDraft}
       onCompleteReview={handleCompleteReview}
       onGenerateSOAP={handleGenerateSOAP}
-      onApproveSOAP={handleApproveSOAP}
       onRejectSOAP={handleOpenSoapReview}
     />
   ) : null;

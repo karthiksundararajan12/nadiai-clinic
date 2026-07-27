@@ -3,13 +3,13 @@
 import { Menu, Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SearchInput } from "@/components/shared/search-input";
+import { Tooltip } from "@/components/ui/tooltip";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
 import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 
 export function Header({ title, subtitle, onMenuClick }) {
-  const [search, setSearch] = useState("");
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState("");
 
@@ -53,12 +53,17 @@ export function Header({ title, subtitle, onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <SearchInput
-          value={search}
-          onChange={setSearch}
-          placeholder="Search patients, appointments..."
-          className="hidden w-64 md:block"
-        />
+        <div className="hidden md:block">
+          <Tooltip content="Coming soon" side="bottom">
+            <SearchInput
+              value=""
+              placeholder="Search patients, appointments..."
+              className="w-64"
+              disabled
+              title="Coming soon"
+            />
+          </Tooltip>
+        </div>
         <Button
           variant="ghost"
           size="icon"

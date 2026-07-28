@@ -9,6 +9,7 @@ import {
   CalendarDays,
   CreditCard,
   Users,
+  Syringe,
   Settings,
   LogOut,
   ChevronLeft,
@@ -33,6 +34,7 @@ const ICON_MAP = {
   CalendarDays,
   CreditCard,
   Users,
+  Syringe,
   Settings,
 };
 

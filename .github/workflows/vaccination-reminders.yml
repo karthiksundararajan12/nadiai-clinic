@@ -1,0 +1,23 @@
+name: Vaccination reminders
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log run timestamp
+        run: echo "Vaccination reminders trigger at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+      - name: Call vaccination reminders endpoint
+        run: |
+          response=$(curl -sS -w "\n%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            https://nadiai-clinic.vercel.app/api/cron/vaccination-reminders)
+          body=$(echo "$response" | head -n -1)
+          status=$(echo "$response" | tail -n 1)
+          echo "$body"
+          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+            echo "HTTP $status"
+            exit 1
+          fi

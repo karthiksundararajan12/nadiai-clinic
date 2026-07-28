@@ -340,7 +340,7 @@ export const SOAP_GENERATION_CONFIG = Object.freeze({
   DEFAULT_CLAUDE_MODEL: "claude-3-5-sonnet-latest",
   DEFAULT_OPENAI_MODEL: "gpt-4.1-mini",
   DEFAULT_GEMINI_MODEL: "gemini-2.5-flash",
-  PROMPT_VERSION: "soap_indian_gp_v1",
+  PROMPT_VERSION: "soap_indian_gp_v2",
   MAX_ATTEMPTS: 3,
   TEMPERATURE: 0.1,
   MAX_OUTPUT_TOKENS: 1800,

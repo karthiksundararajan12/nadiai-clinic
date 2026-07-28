@@ -10,6 +10,7 @@ import {
   CalendarDays,
   CreditCard,
   Users,
+  Syringe,
   Settings,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -23,6 +24,7 @@ const ICON_MAP = {
   CalendarDays,
   CreditCard,
   Users,
+  Syringe,
   Settings,
 };
 

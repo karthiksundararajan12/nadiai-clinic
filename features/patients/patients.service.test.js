@@ -26,7 +26,7 @@ const PATIENTS = [
   },
 ];
 
-function createService({ patients = PATIENTS, appointments = [], createResult } = {}) {
+function createService({ patients = PATIENTS, appointments = [], createResult, vaccinationSeedingService } = {}) {
   const calls = { findAllForClinic: [], findForClinic: [], create: [] };
 
   const patientRepository = {
@@ -43,6 +43,7 @@ function createService({ patients = PATIENTS, appointments = [], createResult } 
           contact_phone: data.contact_phone,
           age_years: data.age_years ?? null,
           gender: data.gender ?? null,
+          date_of_birth: data.date_of_birth ?? null,
           created_at: "2026-07-15T10:00:00.000Z",
         }
       );
@@ -58,7 +59,19 @@ function createService({ patients = PATIENTS, appointments = [], createResult } 
 
   return {
     calls,
-    service: new PatientsService(patientRepository, appointmentRepository),
+    service: new PatientsService(patientRepository, appointmentRepository, { vaccinationSeedingService }),
+  };
+}
+
+function createFakeVaccinationSeedingService({ seedResult, throwError } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async seedVaccinationSchedule(params) {
+      calls.push(params);
+      if (throwError) throw throwError;
+      return seedResult ?? { seeded: true, count: 39 };
+    },
   };
 }
 
@@ -126,6 +139,7 @@ test("create writes a validated patient row scoped to the clinic", async () => {
     full_name: "Karthik Sundar",
     age_years: 34,
     gender: "Male",
+    date_of_birth: null,
   });
   assert.equal(result.patient.name, "Karthik Sundar");
   assert.equal(result.patient.phone, "+91 9840227132");
@@ -161,6 +175,111 @@ test("create rejects invalid phone numbers", async () => {
       error.statusCode === 400 &&
       /Indian mobile/.test(error.message),
   );
+});
+
+test("create accepts an optional dateOfBirth and writes it to the patient row", async () => {
+  const { service, calls } = createService();
+
+  const result = await service.create("clinic-1", {
+    name: "Baby Sundar",
+    phone: "9840227132",
+    dateOfBirth: "2026-01-15",
+  });
+
+  assert.equal(calls.create[0].date_of_birth, "2026-01-15");
+  assert.equal(result.patient.dateOfBirth, "2026-01-15");
+});
+
+test("create rejects a malformed dateOfBirth", async () => {
+  const { service } = createService();
+
+  await assert.rejects(
+    () =>
+      service.create("clinic-1", {
+        name: "Baby Sundar",
+        phone: "9840227132",
+        dateOfBirth: "not-a-date",
+      }),
+    (error) =>
+      error instanceof PatientRequestError &&
+      error.statusCode === 400 &&
+      /Date of birth/.test(error.message),
+  );
+});
+
+test("create rejects a dateOfBirth in the future", async () => {
+  const { service } = createService();
+  const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+  await assert.rejects(
+    () =>
+      service.create("clinic-1", {
+        name: "Baby Sundar",
+        phone: "9840227132",
+        dateOfBirth: future,
+      }),
+    (error) =>
+      error instanceof PatientRequestError &&
+      /future/.test(error.message),
+  );
+});
+
+test("create triggers vaccination schedule auto-seed when a dateOfBirth is provided", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service } = createService({ vaccinationSeedingService });
+
+  await service.create("clinic-1", {
+    name: "Baby Sundar",
+    phone: "9840227132",
+    dateOfBirth: "2026-01-15",
+  });
+
+  assert.equal(vaccinationSeedingService.calls.length, 1);
+  assert.deepEqual(vaccinationSeedingService.calls[0], {
+    patientId: "patient-new",
+    clinicId: "clinic-1",
+    dateOfBirth: "2026-01-15",
+  });
+});
+
+test("create does not attempt auto-seed when no dateOfBirth is provided", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service } = createService({ vaccinationSeedingService });
+
+  await service.create("clinic-1", {
+    name: "Karthik Sundar",
+    phone: "9840227132",
+  });
+
+  assert.equal(vaccinationSeedingService.calls.length, 0);
+});
+
+test("create succeeds even if vaccination schedule auto-seed throws (best-effort, never blocks patient creation)", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService({
+    throwError: new Error("seeding boom"),
+  });
+  const { service } = createService({ vaccinationSeedingService });
+
+  const result = await service.create("clinic-1", {
+    name: "Baby Sundar",
+    phone: "9840227132",
+    dateOfBirth: "2026-01-15",
+  });
+
+  assert.equal(result.patient.name, "Baby Sundar");
+  assert.equal(vaccinationSeedingService.calls.length, 1);
+});
+
+test("create works without a vaccinationSeedingService configured at all", async () => {
+  const { service } = createService();
+
+  const result = await service.create("clinic-1", {
+    name: "Baby Sundar",
+    phone: "9840227132",
+    dateOfBirth: "2026-01-15",
+  });
+
+  assert.equal(result.patient.name, "Baby Sundar");
 });
 
 test("search returns patients matching name or phone", async () => {

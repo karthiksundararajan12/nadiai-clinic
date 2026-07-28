@@ -100,6 +100,40 @@ export class ClinicRepository extends BaseRepository {
     return all;
   }
 
+  /**
+   * Every clinic's id (+ name for logging) — used by the vaccination
+   * -schedule backfill script (scripts/backfill-vaccination-schedules.mjs)
+   * to enumerate every clinic and check pediatric-ness one at a time.
+   * Paginated internally like findAllWithWhatsAppConfigured.
+   *
+   * @returns {Promise<Array<{ id: string; name: string }>>}
+   */
+  async findAllIds() {
+    const PAGE_SIZE = 500;
+    const all = [];
+    let page = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      const rows = await this._run(
+        () =>
+          this._db
+            .from(this._table)
+            .select("id, name")
+            .order("id", { ascending: true })
+            .range(from, to),
+        "findAllIds",
+      );
+      all.push(...rows);
+      hasMore = rows.length === PAGE_SIZE;
+      page += 1;
+    }
+
+    return all;
+  }
+
   async updateById(clinicId, { name, phone, address }) {
     return this._run(
       () =>

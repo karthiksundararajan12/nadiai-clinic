@@ -10,6 +10,7 @@ import {
   START_MENU_INTENT,
 } from "../constants.js";
 import { patientOptionRowId } from "../lib/patient-list.js";
+import { parseAgeOrDob } from "../lib/patient-input.js";
 
 const CLINIC = { id: "clinic-1", name: "Test Clinic", whatsapp_phone_number_id: "PNID_1" };
 
@@ -131,12 +132,25 @@ function createFakeSlotSelectionService() {
   };
 }
 
-function makeService({ patients = [] } = {}) {
+/** In-memory fake standing in for VaccinationSeedingService. Records every call. */
+function createFakeVaccinationSeedingService({ throwError } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async seedVaccinationSchedule(params) {
+      calls.push(params);
+      if (throwError) throw throwError;
+      return { seeded: true, count: 39 };
+    },
+  };
+}
+
+function makeService({ patients = [], vaccinationSeedingService } = {}) {
   const repo = createFakeConversationRepo(buildRow());
   const patientRepo = createFakePatientRepo(patients);
   const wa = createFakeWhatsAppClient();
   const slotSvc = createFakeSlotSelectionService();
-  const service = new PatientCollectionService(repo, patientRepo, wa, slotSvc);
+  const service = new PatientCollectionService(repo, patientRepo, wa, slotSvc, { vaccinationSeedingService });
   return { service, repo, patientRepo, wa, slotSvc };
 }
 
@@ -405,7 +419,7 @@ test("AWAITING_DUPLICATE_CONFIRMATION: unrecognized reply re-prompts the same tw
 // AWAITING_AGE_OR_DOB
 // ─────────────────────────────────────────────────────────────
 
-test("AWAITING_AGE_OR_DOB: valid age proceeds to consent prompt", async () => {
+test("AWAITING_AGE_OR_DOB: valid age proceeds to consent prompt and stashes an approximate DOB", async () => {
   const { service, repo, wa } = makeService();
   await repo.update(repo.row.id, {
     context: { collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_AGE_OR_DOB, pendingPatient: { name: "Rohan Sharma" } },
@@ -420,8 +434,37 @@ test("AWAITING_AGE_OR_DOB: valid age proceeds to consent prompt", async () => {
   assert.equal(result.action, "CONSENT_PROMPTED");
   assert.equal(repo.row.context.collectingPatientStep, COLLECTING_PATIENT_STEP.AWAITING_CONSENT);
   assert.equal(repo.row.context.pendingPatient.ageYears, 34);
+  assert.equal(repo.row.context.pendingPatient.dobIsApproximate, true);
+  const expectedYear = new Date().getFullYear() - 34;
+  assert.equal(repo.row.context.pendingPatient.dateOfBirth, `${expectedYear}-01-01`);
   assert.equal(wa.calls[0].type, "buttons");
   assert.match(wa.calls[0].opts.bodyText, /Rohan Sharma/);
+});
+
+test("AWAITING_AGE_OR_DOB: a real date of birth reply is stashed as-is, never approximated", async () => {
+  const { service, repo } = makeService();
+  await repo.update(repo.row.id, {
+    context: { collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_AGE_OR_DOB, pendingPatient: { name: "Little Kiran" } },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "text", text: "15-01-2022" }),
+    row: repo.row,
+  });
+
+  // Golden value comes from the parser itself (not hardcoded) so this test
+  // isn't coupled to the pre-existing, out-of-scope UTC-conversion behavior
+  // of the exact-DOB branch (parsed.toISOString() can shift a local
+  // midnight parse by a day depending on the runner's timezone) — it only
+  // asserts that whatever a real DOB parses to is never replaced by the
+  // age-based approximation, and that "2022" (the year 4 years before a
+  // ~2026 "now") never collides with the Jan-1 approximation format either.
+  const golden = parseAgeOrDob("15-01-2022");
+  assert.equal(result.action, "CONSENT_PROMPTED");
+  assert.equal(repo.row.context.pendingPatient.dobIsApproximate, false);
+  assert.equal(repo.row.context.pendingPatient.dateOfBirth, golden.dateOfBirth);
+  assert.notEqual(repo.row.context.pendingPatient.dateOfBirth, "2022-01-01"); // not the age-4 approximation
 });
 
 test("AWAITING_AGE_OR_DOB: out-of-range age is rejected and re-prompted", async () => {
@@ -474,6 +517,174 @@ test("AWAITING_CONSENT: consenting for a NEW patient creates the record and tran
   assert.equal(repo.row.context.selectedPatientId, created.id);
   assert.equal(slotSvc.calls.length, 1);
   assert.equal(slotSvc.calls[0].patientId, created.id);
+});
+
+test("AWAITING_CONSENT: consenting for a NEW patient with a date of birth triggers vaccination schedule auto-seed", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, repo, patientRepo } = makeService({ vaccinationSeedingService });
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      pendingPatient: { name: "Little Kiran", ageYears: 4, dateOfBirth: "2022-01-15" },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  const created = Array.from(patientRepo.patients.values())[0];
+  assert.equal(created.date_of_birth_is_approximate, false);
+  assert.equal(vaccinationSeedingService.calls.length, 1);
+  assert.deepEqual(vaccinationSeedingService.calls[0], {
+    patientId: created.id,
+    clinicId: "clinic-1",
+    dateOfBirth: "2022-01-15",
+  });
+});
+
+test("AWAITING_CONSENT: consenting for a NEW patient from a plain age reply (approximate DOB) now triggers vaccination schedule auto-seed", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, repo, patientRepo } = makeService({ vaccinationSeedingService });
+  const approxDateOfBirth = `${new Date().getFullYear() - 34}-01-01`;
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      // Shape produced by _handleAgeOrDobReply for a plain "34" reply (see
+      // parseAgeOrDob) — no real DOB was ever typed, only an age.
+      pendingPatient: { name: "Rohan Sharma", ageYears: 34, dateOfBirth: approxDateOfBirth, dobIsApproximate: true },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  const created = Array.from(patientRepo.patients.values())[0];
+  assert.equal(created.date_of_birth, approxDateOfBirth);
+  assert.equal(created.date_of_birth_is_approximate, true);
+  assert.equal(vaccinationSeedingService.calls.length, 1);
+  assert.deepEqual(vaccinationSeedingService.calls[0], {
+    patientId: created.id,
+    clinicId: "clinic-1",
+    dateOfBirth: approxDateOfBirth,
+  });
+});
+
+test("AWAITING_CONSENT: a real DOB reply is never overwritten by the age-based approximation when both happen to be present", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, repo, patientRepo } = makeService({ vaccinationSeedingService });
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      // A real parsed DOB (dobIsApproximate: false) must win — the
+      // approximation only ever applies when no real DOB was parsed.
+      pendingPatient: { name: "Little Kiran", ageYears: 4, dateOfBirth: "2022-01-15", dobIsApproximate: false },
+    },
+  });
+
+  await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  const created = Array.from(patientRepo.patients.values())[0];
+  assert.equal(created.date_of_birth, "2022-01-15");
+  assert.equal(created.date_of_birth_is_approximate, false);
+  assert.equal(vaccinationSeedingService.calls[0].dateOfBirth, "2022-01-15");
+});
+
+test("AWAITING_CONSENT: defensive guard — no dateOfBirth at all on pendingPatient skips auto-seed, patient still created", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, repo, patientRepo } = makeService({ vaccinationSeedingService });
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      // Hand-built context bypassing AWAITING_AGE_OR_DOB entirely (e.g. a
+      // future/alternate flow) — parseAgeOrDob normally always yields some
+      // dateOfBirth, so this only exercises the defensive `if` guard.
+      pendingPatient: { name: "Rohan Sharma", ageYears: 34, dateOfBirth: null },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  assert.equal(patientRepo.patients.size, 1); // patient creation unaffected
+  assert.equal(vaccinationSeedingService.calls.length, 0); // never called without a DOB
+});
+
+test("AWAITING_CONSENT: new patient creation succeeds even when vaccination schedule auto-seed throws (best-effort, never blocks)", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService({ throwError: new Error("seeding boom") });
+  const { service, repo, patientRepo, slotSvc } = makeService({ vaccinationSeedingService });
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      pendingPatient: { name: "Little Kiran", ageYears: 4, dateOfBirth: "2022-01-15" },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  assert.equal(patientRepo.patients.size, 1);
+  assert.equal(slotSvc.calls.length, 1);
+  assert.equal(vaccinationSeedingService.calls.length, 1);
+});
+
+test("AWAITING_CONSENT: works with no vaccinationSeedingService configured at all (factory default)", async () => {
+  const { service, repo, patientRepo } = makeService(); // no vaccinationSeedingService passed
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      pendingPatient: { name: "Little Kiran", ageYears: 4, dateOfBirth: "2022-01-15" },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  assert.equal(patientRepo.patients.size, 1);
+});
+
+test("AWAITING_CONSENT: consenting for an EXISTING (previously non-consented) patient never triggers auto-seed (no new patient row)", async () => {
+  const patient = { id: "p1", clinic_id: "clinic-1", contact_phone: "919876543210", full_name: "Asha Kapoor", consent_given: false };
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, repo } = makeService({ patients: [patient], vaccinationSeedingService });
+  await repo.update(repo.row.id, {
+    context: {
+      collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_CONSENT,
+      pendingPatient: { existingPatientId: "p1", full_name: "Asha Kapoor" },
+    },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "button_reply", replyId: CONSENT_INTENT.YES }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "SLOT_SELECTION_ENTERED");
+  assert.equal(vaccinationSeedingService.calls.length, 0);
 });
 
 test("AWAITING_CONSENT: consenting for an EXISTING (previously non-consented) patient stamps consent, doesn't duplicate", async () => {

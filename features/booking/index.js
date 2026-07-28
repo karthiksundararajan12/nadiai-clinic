@@ -212,6 +212,24 @@
  *     /login before it ever reached assertWorkerAuthorized. Fixed by
  *     exempting the /api/cron/ prefix the same way PUBLIC_WEBHOOK_PATHS
  *     already exempts the two webhook routes — see middleware.js.
+ *
+ * ── Vaccination schedule auto-seed reaches into this factory ───────────
+ *
+ * 28. createBookingServices() constructs a VaccinationSeedingService
+ *     (features/vaccinations) and injects it into PatientCollectionService
+ *     so a new patient created via the WhatsApp booking bot — not just the
+ *     dashboard's PatientsService.create — gets the same IAP
+ *     auto-seed-if-pediatric-and-date_of_birth-present behavior. This is a
+ *     deliberate, one-directional exception to "features/vaccinations
+ *     reaches into features/booking's internals, not the reverse" (see
+ *     that feature's own repository/service header comments): there is no
+ *     other wiring point for PatientCollectionService (unlike
+ *     PatientsService, which is constructed per-request in
+ *     app/api/patients/route.js and can be injected there instead), since
+ *     it only ever gets built here. No circular import exists — the
+ *     vaccinations files imported below pull in booking's individual
+ *     submodules (logger.js, errors.js, base.repository.js), never this
+ *     barrel file.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -410,6 +428,8 @@ import { InvoiceStorageService as _InvoiceStorageService } from "./services/invo
 import { InvoiceService as _InvoiceService } from "./services/invoice.service.js";
 import { NotificationRepository as _NotificationRepo } from "./repository/notification.repository.js";
 import { InAppNotificationService as _InAppNotificationService } from "./services/in-app-notification.service.js";
+import { VaccinationRepository as _VaccinationRepo } from "../vaccinations/vaccination.repository.js";
+import { VaccinationSeedingService as _VaccinationSeedingService } from "../vaccinations/vaccination-seeding.service.js";
 
 /**
  * Wires together all booking domain services.
@@ -438,6 +458,8 @@ import { InAppNotificationService as _InAppNotificationService } from "./service
  *   invoiceService: import("./services/invoice.service.js").InvoiceService;
  *   invoiceStorageService: import("./services/invoice-storage.service.js").InvoiceStorageService;
  *   inAppNotificationService: import("./services/in-app-notification.service.js").InAppNotificationService;
+ *   vaccinationRepository: import("../vaccinations/vaccination.repository.js").VaccinationRepository;
+ *   vaccinationSeedingService: import("../vaccinations/vaccination-seeding.service.js").VaccinationSeedingService;
  * }}
  */
 export function createBookingServices(supabaseClient) {
@@ -464,6 +486,8 @@ export function createBookingServices(supabaseClient) {
     notificationRepository,
     patientRepository,
   );
+  const vaccinationRepository = new _VaccinationRepo(supabase);
+  const vaccinationSeedingService = new _VaccinationSeedingService(vaccinationRepository, doctorProfileRepository);
   const slotSelectionService = new _SlotSelectionService(
     conversationStateRepository,
     appointmentRepository,
@@ -478,6 +502,7 @@ export function createBookingServices(supabaseClient) {
     patientRepository,
     whatsappClient,
     slotSelectionService,
+    { vaccinationSeedingService },
   );
   const conversationStateService = new _ConvService(
     conversationStateRepository,
@@ -549,5 +574,7 @@ export function createBookingServices(supabaseClient) {
     invoiceService,
     invoiceStorageService,
     inAppNotificationService,
+    vaccinationRepository,
+    vaccinationSeedingService,
   };
 }

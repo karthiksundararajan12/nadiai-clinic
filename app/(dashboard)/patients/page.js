@@ -64,6 +64,7 @@ export default function PatientsPage() {
     name: "",
     age: "",
     gender: "Male",
+    dateOfBirth: "",
     phone: "",
   });
 
@@ -85,6 +86,7 @@ export default function PatientsPage() {
         name: "",
         age: "",
         gender: "Male",
+        dateOfBirth: "",
         phone: "",
       });
       setDialogOpen(false);
@@ -369,6 +371,25 @@ export default function PatientsPage() {
                     ))}
                   </div>
                 </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="patient-dob">Date of Birth (optional)</Label>
+                <Input
+                  id="patient-dob"
+                  type="date"
+                  max={new Date().toISOString().slice(0, 10)}
+                  value={newPatient.dateOfBirth}
+                  disabled={saving}
+                  onChange={(e) =>
+                    setNewPatient((prev) => ({
+                      ...prev,
+                      dateOfBirth: e.target.value,
+                    }))
+                  }
+                />
+                <p className="text-xs text-muted-foreground">
+                  For pediatric clinics, this automatically schedules the standard IAP vaccination reminders.
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="patient-phone">Phone Number</Label>

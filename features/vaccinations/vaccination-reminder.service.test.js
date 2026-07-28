@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   VaccinationReminderService,
   sendVaccinationReminder,
+  isTemplateLive,
 } from "./vaccination-reminder.service.js";
 import { VACCINATION_STATUS, VACCINATION_REMINDER_TEMPLATE_NAME } from "./constants.js";
 import { BookingError } from "../booking/errors.js";
@@ -18,6 +19,9 @@ const PATIENT = {
   full_name: "Asha Kumar",
   contact_phone: "919876543210",
 };
+
+// Both gates on — used by tests that need an actual (fake) send to happen.
+const BOTH_LIVE = { templatesLive: true, vaccinationReminderTemplateLive: true };
 
 function schedule(overrides = {}) {
   return {
@@ -37,7 +41,13 @@ function schedule(overrides = {}) {
 function createFakeVaccinationRepo({ due = [], findByIdResult, claimResult } = {}) {
   /** @type {Map<string, object>} */
   const rows = new Map(due.map((row) => [row.id, { ...row }]));
-  const calls = { findDueForReminder: [], claimReminderSent: [], markOverdue: [], findById: [] };
+  const calls = {
+    findDueForReminder: [],
+    claimReminderSent: [],
+    revertToPending: [],
+    markOverdue: [],
+    findById: [],
+  };
 
   return {
     calls,
@@ -55,6 +65,14 @@ function createFakeVaccinationRepo({ due = [], findByIdResult, claimResult } = {
       if (!row || row.status !== VACCINATION_STATUS.PENDING) return null;
       row.status = VACCINATION_STATUS.REMINDER_SENT;
       row.reminder_sent_at = new Date().toISOString();
+      return { ...row };
+    },
+    async revertToPending(scheduleId) {
+      calls.revertToPending.push(scheduleId);
+      const row = rows.get(scheduleId);
+      if (!row || row.status !== VACCINATION_STATUS.REMINDER_SENT) return null;
+      row.status = VACCINATION_STATUS.PENDING;
+      row.reminder_sent_at = null;
       return { ...row };
     },
     async markOverdue(todayDate) {
@@ -85,37 +103,86 @@ function createFakePatientRepo(patient = PATIENT) {
   return { async findById() { return patient; } };
 }
 
-function createFakeWhatsAppClient() {
+function createFakeWhatsAppClient({ sendTemplate } = {}) {
   const sendTemplateCalls = [];
   return {
     sendTemplateCalls,
     async sendTemplate(phoneNumberId, toPhone, opts) {
       sendTemplateCalls.push({ phoneNumberId, toPhone, opts });
+      if (sendTemplate) return sendTemplate(phoneNumberId, toPhone, opts);
       return { ok: true };
     },
   };
 }
 
-test("sendVaccinationReminder logs instead of sending when WHATSAPP_TEMPLATES_LIVE is false", async () => {
+test("isTemplateLive requires both the global and template-specific flags", () => {
+  assert.equal(
+    isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, { globalLive: false, templateLive: false }),
+    false,
+  );
+  assert.equal(
+    isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, { globalLive: true, templateLive: false }),
+    false,
+  );
+  assert.equal(
+    isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, { globalLive: false, templateLive: true }),
+    false,
+  );
+  assert.equal(
+    isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, { globalLive: true, templateLive: true }),
+    true,
+  );
+});
+
+test("isTemplateLive falls back to the global flag alone for templates with no registered per-template gate", () => {
+  assert.equal(isTemplateLive("some_other_already_approved_template", { globalLive: true }), true);
+  assert.equal(isTemplateLive("some_other_already_approved_template", { globalLive: false }), false);
+});
+
+test("sendVaccinationReminder skips with TEMPLATE_NOT_LIVE when WHATSAPP_TEMPLATES_LIVE is false", async () => {
   const wa = createFakeWhatsAppClient();
 
   const result = await sendVaccinationReminder("phone-1", "919876543210", {
     whatsappClient: wa,
     bodyParams: ["Asha", "MMR", "1 Aug 2026"],
     templatesLive: false,
+    vaccinationReminderTemplateLive: true,
   });
 
-  assert.deepEqual(result, { stubbed: true, templateName: VACCINATION_REMINDER_TEMPLATE_NAME });
+  assert.deepEqual(result, {
+    stubbed: true,
+    templateName: VACCINATION_REMINDER_TEMPLATE_NAME,
+    skippedReason: "TEMPLATE_NOT_LIVE",
+  });
   assert.equal(wa.sendTemplateCalls.length, 0);
 });
 
-test("sendVaccinationReminder calls the WhatsApp client when templatesLive is true", async () => {
+test("sendVaccinationReminder skips with TEMPLATE_NOT_LIVE when the global flag is on but the template-specific flag is off", async () => {
   const wa = createFakeWhatsAppClient();
 
   const result = await sendVaccinationReminder("phone-1", "919876543210", {
     whatsappClient: wa,
     bodyParams: ["Asha", "MMR", "1 Aug 2026"],
     templatesLive: true,
+    vaccinationReminderTemplateLive: false,
+  });
+
+  assert.deepEqual(result, {
+    stubbed: true,
+    templateName: VACCINATION_REMINDER_TEMPLATE_NAME,
+    skippedReason: "TEMPLATE_NOT_LIVE",
+  });
+  assert.equal(wa.sendTemplateCalls.length, 0);
+});
+
+test("sendVaccinationReminder calls the WhatsApp client when both templatesLive and vaccinationReminderTemplateLive are true", async () => {
+  const wa = createFakeWhatsAppClient();
+
+  const result = await sendVaccinationReminder("phone-1", "919876543210", {
+    whatsappClient: wa,
+    bodyParams: ["Asha", "MMR", "1 Aug 2026"],
+    templatesLive: true,
+    vaccinationReminderTemplateLive: true,
   });
 
   assert.equal(result.templateSent, true);
@@ -132,7 +199,7 @@ test("runReminderSweep sends a reminder for a schedule due within the lead windo
     createFakeClinicRepo(),
     createFakePatientRepo(),
     wa,
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
@@ -140,6 +207,7 @@ test("runReminderSweep sends a reminder for a schedule due within the lead windo
   assert.equal(summary.scanned, 1);
   assert.equal(summary.remindersSent, 1);
   assert.equal(summary.remindersFailed, 0);
+  assert.equal(summary.remindersSkippedTemplateNotLive, 0);
   assert.equal(vaccinationRepo.rows.get("due-soon").status, VACCINATION_STATUS.REMINDER_SENT);
   assert.equal(wa.sendTemplateCalls.length, 1);
   assert.equal(wa.sendTemplateCalls[0].toPhone, PATIENT.contact_phone);
@@ -153,7 +221,7 @@ test("runReminderSweep does not touch schedules outside the lead window", async 
     createFakeClinicRepo(),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: false },
+    { templatesLive: false, vaccinationReminderTemplateLive: false },
   );
 
   const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
@@ -180,7 +248,7 @@ test("runReminderSweep sweeps overdue reminder_sent schedules to overdue", async
     createFakeClinicRepo(),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: false },
+    { templatesLive: false, vaccinationReminderTemplateLive: false },
   );
 
   const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
@@ -203,7 +271,7 @@ test("runReminderSweep never re-sends a schedule that is already reminder_sent (
     createFakeClinicRepo(),
     createFakePatientRepo(),
     wa,
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
@@ -212,6 +280,60 @@ test("runReminderSweep never re-sends a schedule that is already reminder_sent (
   // row is never even a candidate — the dedup guard is defense in depth.
   assert.equal(summary.scanned, 0);
   assert.equal(wa.sendTemplateCalls.length, 0);
+});
+
+test("runReminderSweep skips due schedules with TEMPLATE_NOT_LIVE and leaves them pending when only the global flag is on", async () => {
+  const dueSoon = schedule({ id: "due-soon", due_date: "2026-07-18" });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
+  const wa = createFakeWhatsAppClient();
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(),
+    wa,
+    { templatesLive: true, vaccinationReminderTemplateLive: false },
+  );
+
+  const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
+
+  assert.equal(summary.scanned, 1);
+  assert.equal(summary.remindersSent, 0);
+  assert.equal(summary.remindersFailed, 0);
+  assert.equal(summary.remindersSkippedTemplateNotLive, 1);
+  // Not claimed — stays pending so it's retried once the template goes live.
+  assert.equal(vaccinationRepo.rows.get("due-soon").status, VACCINATION_STATUS.PENDING);
+  assert.equal(vaccinationRepo.calls.claimReminderSent.length, 0);
+  assert.equal(wa.sendTemplateCalls.length, 0);
+});
+
+test("runReminderSweep rolls a schedule back to pending (not reminder_sent) when the WhatsApp send throws after being claimed", async () => {
+  const dueSoon = schedule({ id: "due-soon", due_date: "2026-07-18" });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
+  const wa = createFakeWhatsAppClient({
+    sendTemplate: async () => {
+      throw new Error("Meta error 132001: template not found");
+    },
+  });
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(),
+    wa,
+    BOTH_LIVE,
+  );
+
+  const summary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
+
+  assert.equal(summary.remindersSent, 0);
+  assert.equal(summary.remindersFailed, 1);
+  assert.equal(summary.remindersSkippedTemplateNotLive, 0);
+  // Claimed (reminder_sent) then rolled back to pending — never left stuck
+  // as "sent" despite the send actually failing.
+  assert.equal(vaccinationRepo.calls.claimReminderSent.length, 1);
+  assert.equal(vaccinationRepo.calls.revertToPending.length, 1);
+  const row = vaccinationRepo.rows.get("due-soon");
+  assert.equal(row.status, VACCINATION_STATUS.PENDING);
+  assert.equal(row.reminder_sent_at, null);
 });
 
 test("sendReminderNow force-sends a pending schedule regardless of due_date", async () => {
@@ -223,7 +345,7 @@ test("sendReminderNow force-sends a pending schedule regardless of due_date", as
     createFakeClinicRepo(),
     createFakePatientRepo(),
     wa,
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   const result = await service.sendReminderNow({ scheduleId: "force-1" });
@@ -234,6 +356,26 @@ test("sendReminderNow force-sends a pending schedule regardless of due_date", as
   assert.equal(wa.sendTemplateCalls.length, 1);
 });
 
+test("sendReminderNow returns TEMPLATE_NOT_LIVE (not CLAIM_OR_SEND_FAILED) and leaves the schedule pending when the template-specific flag is off", async () => {
+  const farOut = schedule({ id: "force-1", due_date: "2027-01-01" });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [farOut] });
+  const wa = createFakeWhatsAppClient();
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(),
+    wa,
+    { templatesLive: true, vaccinationReminderTemplateLive: false },
+  );
+
+  const result = await service.sendReminderNow({ scheduleId: "force-1" });
+
+  assert.equal(result.sent, false);
+  assert.equal(result.skippedReason, "TEMPLATE_NOT_LIVE");
+  assert.equal(vaccinationRepo.rows.get("force-1").status, VACCINATION_STATUS.PENDING);
+  assert.equal(wa.sendTemplateCalls.length, 0);
+});
+
 test("sendReminderNow skips a schedule that is not pending", async () => {
   const completed = schedule({ id: "done-1", status: VACCINATION_STATUS.COMPLETED });
   const vaccinationRepo = createFakeVaccinationRepo({ due: [completed] });
@@ -242,7 +384,7 @@ test("sendReminderNow skips a schedule that is not pending", async () => {
     createFakeClinicRepo(),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   const result = await service.sendReminderNow({ scheduleId: "done-1" });
@@ -258,7 +400,7 @@ test("sendReminderNow rejects a missing scheduleId", async () => {
     createFakeClinicRepo(),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: false },
+    { templatesLive: false, vaccinationReminderTemplateLive: false },
   );
 
   await assert.rejects(
@@ -274,7 +416,7 @@ test("sendReminderNow throws 404 for an unknown schedule", async () => {
     createFakeClinicRepo(),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: false },
+    { templatesLive: false, vaccinationReminderTemplateLive: false },
   );
 
   await assert.rejects(
@@ -291,7 +433,7 @@ test("sendReminderNow throws when the clinic has no WhatsApp phone number config
     createFakeClinicRepo({ ...CLINIC, whatsapp_phone_number_id: null }),
     createFakePatientRepo(),
     createFakeWhatsAppClient(),
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   await assert.rejects(
@@ -311,7 +453,7 @@ test("an overlapping claim attempt on the same schedule only sends once", async 
     createFakeClinicRepo(),
     createFakePatientRepo(),
     wa,
-    { templatesLive: true },
+    BOTH_LIVE,
   );
 
   const [first, second] = await Promise.all([
@@ -319,7 +461,7 @@ test("an overlapping claim attempt on the same schedule only sends once", async 
     service._claimAndSend(dueSoon),
   ]);
 
-  const sentCount = [first, second].filter(Boolean).length;
+  const sentCount = [first, second].filter((r) => r.sent).length;
   assert.equal(sentCount, 1);
   assert.equal(wa.sendTemplateCalls.length, 1);
 });

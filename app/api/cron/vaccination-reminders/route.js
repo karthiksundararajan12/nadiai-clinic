@@ -20,8 +20,12 @@
  *      schedule. Still requires CRON_SECRET; still respects
  *      pending-only/already-sent gates.
  *
- * Template `vaccination_reminder` is stubbed/logged unless
- * WHATSAPP_TEMPLATES_LIVE=true — see vaccination-reminder.service.js.
+ * Template `vaccination_reminder` is stubbed/logged unless BOTH
+ * WHATSAPP_TEMPLATES_LIVE=true AND
+ * WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE=true — see
+ * vaccination-reminder.service.js (isTemplateLive). Do not set the latter
+ * until `vaccination_reminder` is confirmed APPROVED in Meta Business
+ * Manager.
  */
 
 import { NextResponse } from "next/server";
@@ -51,7 +55,10 @@ function createVaccinationReminderService() {
     new ClinicRepository(supabase),
     new PatientRepository(supabase),
     whatsappClient,
-    { templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true" },
+    {
+      templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+      vaccinationReminderTemplateLive: process.env.WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE === "true",
+    },
   );
 }
 

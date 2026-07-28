@@ -171,6 +171,34 @@ export class DoctorProfileRepository extends BaseRepository {
   }
 
   /**
+   * The specialization of this clinic's primary doctor (v1 one-doctor-per
+   * -clinic assumption, earliest-created row — same convention as
+   * findPrimaryByClinicId/isRemindersEnabledForClinic). Used to gate
+   * pediatric-only features like the IAP vaccination-schedule auto-seed —
+   * see VaccinationSeedingService.isPediatricClinic. There is no dedicated
+   * clinic-level specialty column; this free-text field (set at onboarding,
+   * see SPECIALIZATIONS in app/(auth)/onboarding/page.js) is the closest
+   * existing signal.
+   *
+   * @param {string} clinicId
+   * @returns {Promise<string|null>}
+   */
+  async findPrimarySpecializationByClinicId(clinicId) {
+    const row = await this._runNullable(
+      () =>
+        this._db
+          .from(this._table)
+          .select("specialization")
+          .eq("clinic_id", clinicId)
+          .order("created_at", { ascending: true })
+          .limit(1)
+          .single(),
+      "findPrimarySpecializationByClinicId",
+    );
+    return row?.specialization ?? null;
+  }
+
+  /**
    * v1 assumes one doctor per clinic — uses the earliest-created profile row.
    *
    * @param {string} clinicId

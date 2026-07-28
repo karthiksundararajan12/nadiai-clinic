@@ -3,13 +3,11 @@
  * app/api/cron/vaccination-reminders/route.js):
  *
  *   1. runReminderSweep(): finds `vaccination_schedules` rows due within
- *      VACCINATION_REMINDER_LEAD_DAYS that are still `pending`, atomically
- *      claims + sends a WhatsApp reminder (template `vaccination_reminder`
- *      — NOT yet approved by Meta, so sends are logged-only unless
- *      WHATSAPP_TEMPLATES_LIVE=true, same pattern ReminderService and
- *      sendInvoiceDocument used before their templates were approved). On
- *      success: status -> reminder_sent, reminder_sent_at = now(). Also
- *      sweeps `reminder_sent` rows whose due_date has passed to `overdue`.
+ *      VACCINATION_REMINDER_LEAD_DAYS that are still `pending` and, if the
+ *      `vaccination_reminder` template is live (see isTemplateLive below),
+ *      atomically claims + sends a WhatsApp reminder. On success: status ->
+ *      reminder_sent, reminder_sent_at = now(). Also sweeps `reminder_sent`
+ *      rows whose due_date has passed to `overdue`.
  *
  *   2. sendReminderNow(): on-demand/test force-send for one schedule,
  *      bypassing the lead-time window — mirrors
@@ -23,9 +21,31 @@
  * VaccinationRepository.findDueForReminder.
  *
  * Every mutation goes through VaccinationRepository's atomic
- * conditional-UPDATE methods (claimReminderSent, markOverdue) — never
- * read-then-write — so an overlapping cron tick or a redelivered force-send
- * can't double-send a reminder (dedup on reminder_sent).
+ * conditional-UPDATE methods (claimReminderSent, markOverdue,
+ * revertToPending) — never read-then-write — so an overlapping cron tick or
+ * a redelivered force-send can't double-send a reminder (dedup on
+ * reminder_sent).
+ *
+ * ── Two-gate template approval (post-incident fix) ─────────────────────
+ *
+ * `WHATSAPP_TEMPLATES_LIVE` is a single *global* flag shared by every
+ * template in the booking feature. Once it was flipped on for already
+ * -approved templates (`appt_booking_confirmed`, `appt_invoice`,
+ * `appt_reminder_24h`/`appt_reminder_2h`), `sendVaccinationReminder` started
+ * inheriting that same flag and began attempting *real* sends for
+ * `vaccination_reminder` — a template that was never submitted/approved —
+ * which Meta rejected with error 132001 ("template not found").
+ *
+ * The fix is a second, template-specific gate: a schedule only sends for
+ * real when BOTH `WHATSAPP_TEMPLATES_LIVE` (global) AND
+ * `WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE` (this template only) are
+ * `"true"` — see `isTemplateLive`. Critically, this check happens *before*
+ * `claimReminderSent`: if the template isn't live, the schedule is left
+ * untouched (still `pending`) rather than being claimed as if it had been
+ * sent, so it's naturally picked up again once
+ * `WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE` is flipped on. Do not set
+ * that env var until `vaccination_reminder` is confirmed APPROVED in Meta
+ * Business Manager.
  */
 
 import {
@@ -63,11 +83,47 @@ function formatDueDateLabel(dueDate) {
 }
 
 /**
- * Sends (or, until the template is approved, logs) one vaccination
- * reminder. Guarded exactly like sendInvoiceDocument was guarded before
- * `appt_invoice` was approved — do not flip WHATSAPP_TEMPLATES_LIVE for
- * this template until `vaccination_reminder` is confirmed APPROVED in Meta
- * Business Manager, or a real send will be rejected by the Graph API.
+ * Registry of templates that require a *second*, template-specific env var
+ * on top of the global `WHATSAPP_TEMPLATES_LIVE` flag before they're
+ * allowed to send for real (see isTemplateLive). Templates NOT listed here
+ * fall back to the global flag alone — i.e. the pre-existing behavior for
+ * already-approved templates (`appt_booking_confirmed`, `appt_invoice`,
+ * `appt_reminder_24h`/`appt_reminder_2h`), which this fix does not touch.
+ *
+ * Register any future not-yet-approved template here so it's safe-by
+ * -default (cannot start sending for real just because the global flag
+ * happens to already be on for other, unrelated, approved templates) —
+ * exactly the gap that caused the Meta 132001 failure this fixes.
+ */
+export const TEMPLATE_SPECIFIC_LIVE_ENV_VAR = Object.freeze({
+  [VACCINATION_REMINDER_TEMPLATE_NAME]: "WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE",
+});
+
+/**
+ * Two-gate "is this template allowed to send for real right now" check.
+ * Reusable for any template registered in TEMPLATE_SPECIFIC_LIVE_ENV_VAR —
+ * not vaccination-reminder-specific.
+ *
+ * @param {string} templateName
+ * @param {{ globalLive?: boolean; templateLive?: boolean }} [overrides]
+ *   Test-only overrides; when omitted, reads from process.env.
+ * @returns {boolean}
+ */
+export function isTemplateLive(templateName, { globalLive, templateLive } = {}) {
+  const globalFlag = globalLive ?? (process.env.WHATSAPP_TEMPLATES_LIVE === "true");
+  if (!globalFlag) return false;
+
+  const envVarName = TEMPLATE_SPECIFIC_LIVE_ENV_VAR[templateName];
+  if (!envVarName) return true;
+
+  return templateLive ?? (process.env[envVarName] === "true");
+}
+
+/**
+ * Sends (or, until both gates are live, logs) one vaccination reminder.
+ * Guarded by isTemplateLive — do not set WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE
+ * until `vaccination_reminder` is confirmed APPROVED in Meta Business
+ * Manager, or a real send will be rejected by the Graph API (error 132001).
  *
  * @param {string} phoneNumberId Clinic's Meta phone_number_id
  * @param {string} patientPhone WhatsApp `to` (digits, no +)
@@ -75,19 +131,26 @@ function formatDueDateLabel(dueDate) {
  *   whatsappClient?: import("../booking/services/whatsapp-client.service.js").WhatsAppClientService;
  *   bodyParams: string[];
  *   templatesLive?: boolean;
+ *   vaccinationReminderTemplateLive?: boolean;
  * }} opts
- * @returns {Promise<{ stubbed?: true; templateName: string; templateSent?: boolean }>}
+ * @returns {Promise<{ stubbed?: true; templateName: string; templateSent?: boolean; skippedReason?: string }>}
  */
 export async function sendVaccinationReminder(phoneNumberId, patientPhone, opts) {
   const {
     whatsappClient,
     bodyParams,
-    templatesLive = process.env.WHATSAPP_TEMPLATES_LIVE === "true",
+    templatesLive,
+    vaccinationReminderTemplateLive,
   } = opts ?? {};
 
-  if (!templatesLive) {
+  const live = isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, {
+    globalLive: templatesLive,
+    templateLive: vaccinationReminderTemplateLive,
+  });
+
+  if (!live) {
     createLogger({ component: "sendVaccinationReminder" }).info(
-      "WHATSAPP_TEMPLATES_LIVE=false — skipping vaccination_reminder WhatsApp send (template pending Meta approval)",
+      "vaccination_reminder is not live (WHATSAPP_TEMPLATES_LIVE and/or WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE is not true) — skipping WhatsApp send (template pending Meta approval)",
       {
         phoneNumberId,
         patientPhone,
@@ -95,11 +158,15 @@ export async function sendVaccinationReminder(phoneNumberId, patientPhone, opts)
         bodyParams,
       },
     );
-    return { stubbed: true, templateName: VACCINATION_REMINDER_TEMPLATE_NAME };
+    return {
+      stubbed: true,
+      templateName: VACCINATION_REMINDER_TEMPLATE_NAME,
+      skippedReason: "TEMPLATE_NOT_LIVE",
+    };
   }
 
   if (!whatsappClient) {
-    throw new Error("sendVaccinationReminder requires whatsappClient when WHATSAPP_TEMPLATES_LIVE=true");
+    throw new Error("sendVaccinationReminder requires whatsappClient when both live gates are true");
   }
   if (!patientPhone) {
     throw new Error("sendVaccinationReminder requires a patient contact_phone");
@@ -120,20 +187,30 @@ export class VaccinationReminderService {
    * @param {import("../booking/repository/clinic.repository.js").ClinicRepository} clinicRepository
    * @param {import("../booking/repository/patient.repository.js").PatientRepository} patientRepository
    * @param {import("../booking/services/whatsapp-client.service.js").WhatsAppClientService} whatsappClient
-   * @param {{ templatesLive?: boolean }} [opts]
+   * @param {{ templatesLive?: boolean; vaccinationReminderTemplateLive?: boolean }} [opts]
    */
-  constructor(vaccinationRepository, clinicRepository, patientRepository, whatsappClient, { templatesLive = false } = {}) {
+  constructor(vaccinationRepository, clinicRepository, patientRepository, whatsappClient, {
+    templatesLive = false,
+    vaccinationReminderTemplateLive = false,
+  } = {}) {
     this._vaccinations = vaccinationRepository;
     this._clinicRepo = clinicRepository;
     this._patientRepo = patientRepository;
     this._wa = whatsappClient;
     this._templatesLive = templatesLive;
+    this._vaccinationReminderTemplateLive = vaccinationReminderTemplateLive;
     this._log = createLogger({ component: "VaccinationReminderService" });
   }
 
   /**
    * @param {Date} [now]
-   * @returns {Promise<{ scanned: number; remindersSent: number; remindersFailed: number; markedOverdue: number }>}
+   * @returns {Promise<{
+   *   scanned: number;
+   *   remindersSent: number;
+   *   remindersFailed: number;
+   *   remindersSkippedTemplateNotLive: number;
+   *   markedOverdue: number;
+   * }>}
    */
   async runReminderSweep(now = new Date()) {
     const cutoffDate = istDateKey(
@@ -143,8 +220,11 @@ export class VaccinationReminderService {
 
     const due = await this._vaccinations.findDueForReminder(cutoffDate);
     const results = await Promise.all(due.map((schedule) => this._claimAndSend(schedule)));
-    const remindersSent = results.filter(Boolean).length;
-    const remindersFailed = results.length - remindersSent;
+    const remindersSent = results.filter((r) => r.sent).length;
+    const remindersSkippedTemplateNotLive = results.filter(
+      (r) => r.skippedReason === "TEMPLATE_NOT_LIVE",
+    ).length;
+    const remindersFailed = results.length - remindersSent - remindersSkippedTemplateNotLive;
 
     let markedOverdue = 0;
     try {
@@ -156,16 +236,24 @@ export class VaccinationReminderService {
       });
     }
 
-    const summary = { scanned: due.length, remindersSent, remindersFailed, markedOverdue };
+    const summary = {
+      scanned: due.length,
+      remindersSent,
+      remindersFailed,
+      remindersSkippedTemplateNotLive,
+      markedOverdue,
+    };
     this._log.info("Vaccination reminder sweep finished", summary);
     return summary;
   }
 
   /**
    * On-demand / test trigger: claims + sends one reminder regardless of
-   * due_date, bypassing the lead-time window. Still uses the same atomic
-   * claimReminderSent path (at-most-once) and the same
-   * WHATSAPP_TEMPLATES_LIVE gate as the cron sweep.
+   * due_date, bypassing the lead-time window. Still uses the same
+   * pre-claim template-live gate and atomic claimReminderSent path
+   * (at-most-once) as the cron sweep — so force-sending before
+   * `vaccination_reminder` is actually live safely no-ops instead of
+   * hitting Meta with an unapproved template name.
    *
    * Intended for protected admin/cron callers (CRON_SECRET) only — never
    * expose without auth. Mirrors ReminderService.sendReminderNow.
@@ -206,24 +294,45 @@ export class VaccinationReminderService {
       );
     }
 
-    const sent = await this._claimAndSend(schedule, clinic);
-    return { sent, skippedReason: sent ? null : "CLAIM_OR_SEND_FAILED", scheduleId };
+    const result = await this._claimAndSend(schedule, clinic);
+    return { sent: result.sent, skippedReason: result.skippedReason, scheduleId };
   }
 
   /**
-   * Claims the reminder (atomic, at-most-once) then sends it. If the claim
-   * itself fails or is already taken, nothing is sent. If the claim
-   * succeeds but the send throws, this is deliberately NOT retried — same
-   * trade-off documented in ReminderService (favors never double-sending
-   * over guaranteed delivery); the failure is logged loudly instead of
-   * silently lost.
+   * Checks the two-gate template-live condition BEFORE claiming, then
+   * claims (atomic, at-most-once) and sends. Three distinct outcomes:
+   *
+   *   - Template not live (either gate off): skipped WITHOUT claiming — the
+   *     schedule stays `pending` so it's retried on a later sweep once
+   *     WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE is flipped on.
+   *     skippedReason: "TEMPLATE_NOT_LIVE".
+   *   - Already claimed/sent/completed elsewhere: skippedReason
+   *     "ALREADY_SENT".
+   *   - Claim succeeds but the actual send throws (e.g. a real Meta error):
+   *     the claim is rolled back to `pending` (reminder_sent_at cleared) so
+   *     the schedule is retried instead of being permanently stuck as
+   *     "sent" despite never being delivered. skippedReason
+   *     "CLAIM_OR_SEND_FAILED" — reserved for this and actual claim errors,
+   *     never for the expected not-yet-approved-template case above.
    *
    * @param {object} schedule
    * @param {object|null} [clinicHint] Pre-fetched clinic (avoids a second lookup in sendReminderNow)
-   * @returns {Promise<boolean>}
+   * @returns {Promise<{ sent: boolean; skippedReason: string|null }>}
    */
   async _claimAndSend(schedule, clinicHint = null) {
     const log = this._log.child({ clinicId: schedule.clinic_id, scheduleId: schedule.id });
+
+    const live = isTemplateLive(VACCINATION_REMINDER_TEMPLATE_NAME, {
+      globalLive: this._templatesLive,
+      templateLive: this._vaccinationReminderTemplateLive,
+    });
+    if (!live) {
+      log.info(
+        "vaccination_reminder is not live — skipping without claiming (template pending Meta approval)",
+        { vaccineName: schedule.vaccine_name, dueDate: schedule.due_date },
+      );
+      return { sent: false, skippedReason: "TEMPLATE_NOT_LIVE" };
+    }
 
     let claimed;
     try {
@@ -232,11 +341,11 @@ export class VaccinationReminderService {
       log.error("Failed to claim vaccination reminder", {
         error: err instanceof Error ? err.message : String(err),
       });
-      return false;
+      return { sent: false, skippedReason: "CLAIM_OR_SEND_FAILED" };
     }
     if (!claimed) {
       log.info("Vaccination reminder already claimed/sent/completed elsewhere — skipping");
-      return false;
+      return { sent: false, skippedReason: "ALREADY_SENT" };
     }
 
     try {
@@ -253,23 +362,27 @@ export class VaccinationReminderService {
         whatsappClient: this._wa,
         bodyParams,
         templatesLive: this._templatesLive,
+        vaccinationReminderTemplateLive: this._vaccinationReminderTemplateLive,
       });
-      log.info("Sent (or logged) vaccination reminder", {
+      log.info("Sent vaccination reminder", {
         vaccineName: claimed.vaccine_name,
         dueDate: claimed.due_date,
       });
-      return true;
+      return { sent: true, skippedReason: null };
     } catch (err) {
-      // Claim already stamped reminder_sent — we will NOT clear it (avoids
-      // double-send on retry). Log everything actionable so this doesn't
-      // look like a silent success.
-      log.error("Failed to send vaccination reminder after claiming it — will not retry this run", {
+      log.error("Failed to send vaccination reminder after claiming it — rolling back to pending for retry", {
         vaccineName: claimed.vaccine_name,
         dueDate: claimed.due_date,
-        claimLeftReminderSentSet: true,
         error: err instanceof Error ? err.message : String(err),
       });
-      return false;
+      try {
+        await this._vaccinations.revertToPending(claimed.id);
+      } catch (revertErr) {
+        log.error("Failed to roll back vaccination schedule after send failure — record may be stuck as reminder_sent", {
+          error: revertErr instanceof Error ? revertErr.message : String(revertErr),
+        });
+      }
+      return { sent: false, skippedReason: "CLAIM_OR_SEND_FAILED" };
     }
   }
 }

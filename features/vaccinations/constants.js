@@ -22,14 +22,18 @@ export const VACCINATION_REMINDER_LEAD_DAYS = 3;
 
 /**
  * Meta WhatsApp UTILITY template for vaccination due-date reminders —
- * NOT YET SUBMITTED/APPROVED. Same gating pattern as
- * ReminderService's REMINDER_TEMPLATE_NAME and sendInvoiceDocument before
- * appt_invoice was approved: sends are logged-only (see
- * sendVaccinationReminder in vaccination-reminder.service.js) unless
- * WHATSAPP_TEMPLATES_LIVE=true AND this exact template name is confirmed
- * APPROVED in Meta Business Manager. Do not flip that env var for this
- * template before then — a real send against an unapproved/non-existent
- * template name will be rejected by the Graph API.
+ * NOT YET SUBMITTED/APPROVED. Gated by a two-flag check (see isTemplateLive
+ * in vaccination-reminder.service.js): sends are logged-only unless BOTH
+ * WHATSAPP_TEMPLATES_LIVE=true (global) AND
+ * WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE=true (this template only) —
+ * the second, template-specific flag exists precisely so that flipping the
+ * global flag on for other, already-approved templates (appt_booking_confirmed,
+ * appt_invoice, appt_reminder_24h/2h) can never cause this
+ * not-yet-approved template to start sending for real. Do not set
+ * WHATSAPP_VACCINATION_REMINDER_TEMPLATE_LIVE until this exact template
+ * name is confirmed APPROVED in Meta Business Manager — a real send
+ * against an unapproved/non-existent template name will be rejected by
+ * the Graph API (error 132001).
  */
 export const VACCINATION_REMINDER_TEMPLATE_NAME = "vaccination_reminder";
 

@@ -39,6 +39,22 @@
  * mid-flow. Per spec ("reject with message, keep v1 simple") that's
  * detected up front in handleReply() and rejected without disturbing the
  * in-progress step — no queueing, no parallel sub-flows.
+ *
+ * Vaccination schedule auto-seed: right after a brand-new patient is
+ * created in AWAITING_CONSENT (never for the "existing patient re-consents"
+ * branch, which creates no new row), this optionally calls
+ * VaccinationSeedingService.seedVaccinationSchedule — same best-effort,
+ * try/catch-and-log pattern as PatientsService.create (dashboard patient
+ * creation). AWAITING_AGE_OR_DOB's prompt ("age in years, or date of
+ * birth") accepts either; parseAgeOrDob (lib/patient-input.js) derives an
+ * *approximate* date_of_birth (Jan 1 of the inferred birth year) when only
+ * a plain age is given, flagged via dobIsApproximate/
+ * date_of_birth_is_approximate, so the common "just typed an age" case
+ * still has a real date_of_birth to seed IAP due dates from — the guard
+ * below (`if (pendingPatient.dateOfBirth)`) is now effectively always true
+ * once AWAITING_AGE_OR_DOB has been answered; it's kept for defensiveness
+ * (e.g. hand-built context in tests/back-compat) rather than as the normal
+ * skip path. A real parsed DOB is never overwritten by the approximation.
  */
 
 import {
@@ -64,12 +80,14 @@ export class PatientCollectionService {
    * @param {import("../repository/patient.repository.js").PatientRepository} patientRepo
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("./slot-selection.service.js").SlotSelectionService} slotSelectionService
+   * @param {{ vaccinationSeedingService?: import("../../vaccinations/vaccination-seeding.service.js").VaccinationSeedingService|null }} [opts]
    */
-  constructor(conversationRepo, patientRepo, whatsappClient, slotSelectionService) {
+  constructor(conversationRepo, patientRepo, whatsappClient, slotSelectionService, { vaccinationSeedingService = null } = {}) {
     this._repo        = conversationRepo;
     this._patientRepo = patientRepo;
     this._wa          = whatsappClient;
     this._slotSvc     = slotSelectionService;
+    this._vaccinationSeeding = vaccinationSeedingService;
     this._log         = createLogger({ component: "PatientCollectionService" });
   }
 
@@ -346,6 +364,7 @@ export class PatientCollectionService {
       ...row.context?.pendingPatient,
       ageYears: parsed.ageYears,
       dateOfBirth: parsed.dateOfBirth,
+      dobIsApproximate: parsed.dobIsApproximate,
     };
     return this._promptForConsent({
       clinic,
@@ -413,11 +432,30 @@ export class PatientCollectionService {
       full_name: pendingPatient.name,
       age_years: pendingPatient.ageYears ?? null,
       date_of_birth: pendingPatient.dateOfBirth ?? null,
+      date_of_birth_is_approximate: pendingPatient.dobIsApproximate ?? false,
     });
     log.info("Created new patient with consent captured", {
       contactPhone: message.contactPhone,
       patientId: patient.id,
+      dobIsApproximate: pendingPatient.dobIsApproximate ?? false,
     });
+
+    if (this._vaccinationSeeding && pendingPatient.dateOfBirth) {
+      try {
+        await this._vaccinationSeeding.seedVaccinationSchedule({
+          patientId: patient.id,
+          clinicId: clinic.id,
+          dateOfBirth: pendingPatient.dateOfBirth,
+        });
+      } catch (err) {
+        log.error("Vaccination schedule auto-seed failed after patient create", {
+          clinicId: clinic.id,
+          patientId: patient.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+
     return this._transitionToSlotSelection({ clinic, message, row, patient, log });
   }
 

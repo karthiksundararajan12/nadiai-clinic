@@ -18,6 +18,7 @@ import { DatabaseError } from "../errors.js";
  * @property {string} contact_phone
  * @property {string} full_name
  * @property {string|null} date_of_birth
+ * @property {boolean} date_of_birth_is_approximate
  * @property {number|null} age_years
  * @property {string|null} gender
  * @property {string|null} relationship_to_contact
@@ -111,6 +112,9 @@ export class PatientRepository extends BaseRepository {
   /**
    * Patient options for authenticated clinic workflows such as manual
    * appointment creation. Paginated internally to avoid PostgREST row caps.
+   * Includes date_of_birth (in addition to age_years) so callers like the
+   * vaccination-schedule backfill script can compute IAP due dates without
+   * a second per-patient query.
    */
   async findAllForClinic(clinicId) {
     const PAGE_SIZE = 500;
@@ -125,7 +129,7 @@ export class PatientRepository extends BaseRepository {
         () =>
           this._db
             .from(this._table)
-            .select("id, full_name, contact_phone, age_years, gender, created_at, updated_at")
+            .select("id, full_name, contact_phone, age_years, date_of_birth, gender, created_at, updated_at")
             .eq("clinic_id", clinicId)
             .is("deleted_at", null)
             .order("full_name", { ascending: true })
@@ -147,6 +151,7 @@ export class PatientRepository extends BaseRepository {
    *   full_name: string;
    *   age_years?: number|null;
    *   date_of_birth?: string|null;
+   *   date_of_birth_is_approximate?: boolean;
    *   relationship_to_contact?: string;
    * }} data
    * @returns {Promise<BookingPatient>}

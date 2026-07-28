@@ -171,6 +171,56 @@ export class VaccinationRepository extends BaseRepository {
   }
 
   /**
+   * Bulk-inserts one row per entry, all status='pending' (DB default) —
+   * used by VaccinationSeedingService (IAP auto-seed on patient creation,
+   * and the one-time backfill script) to write a whole immunization
+   * schedule in one request instead of one insert per dose.
+   *
+   * @param {Array<{ clinicId: string; patientId: string; vaccineName: string; dueDate: string }>} entries
+   * @returns {Promise<object[]>}
+   */
+  async bulkCreate(entries) {
+    if (!entries.length) return [];
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .insert(
+            entries.map((e) => ({
+              clinic_id: e.clinicId,
+              patient_id: e.patientId,
+              vaccine_name: e.vaccineName,
+              due_date: e.dueDate,
+            })),
+          )
+          .select("*"),
+      "bulkCreate",
+    );
+  }
+
+  /**
+   * Whether this patient already has ANY vaccination_schedules row —
+   * idempotency guard for VaccinationSeedingService and the backfill
+   * script, regardless of whether the existing row(s) came from a prior
+   * auto-seed, the backfill script, or a manual /vaccinations/new entry.
+   *
+   * @param {string} patientId
+   * @returns {Promise<boolean>}
+   */
+  async existsForPatient(patientId) {
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("id")
+          .eq("patient_id", patientId)
+          .limit(1),
+      "existsForPatient",
+    );
+    return rows.length > 0;
+  }
+
+  /**
    * Global (cross-clinic) lookup for the cron sweep — see
    * VaccinationReminderService.runReminderSweep. Paginated internally like
    * ClinicRepository.findAllWithWhatsAppConfigured. Unlike
@@ -238,6 +288,37 @@ export class VaccinationRepository extends BaseRepository {
       code: error.code,
     });
     throw new DatabaseError("claimReminderSent", error);
+  }
+
+  /**
+   * Rolls a schedule back to `pending` (clearing reminder_sent_at) after a
+   * claimed send attempt failed to actually deliver (e.g. a real WhatsApp
+   * API error such as Meta 132001) — so it's picked up again on the next
+   * sweep instead of being permanently stuck as `reminder_sent` despite
+   * never being delivered. Scoped to rows still in `reminder_sent` so a
+   * concurrent transition (e.g. marked `completed` in the meantime) is
+   * never clobbered.
+   *
+   * @param {string} scheduleId
+   * @returns {Promise<object|null>}
+   */
+  async revertToPending(scheduleId) {
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({ status: VACCINATION_STATUS.PENDING, reminder_sent_at: null })
+      .eq("id", scheduleId)
+      .eq("status", VACCINATION_STATUS.REMINDER_SENT)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during revertToPending", {
+      scheduleId,
+      code: error.code,
+    });
+    throw new DatabaseError("revertToPending", error);
   }
 
   /**

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import {
   AppointmentRepository,
+  DoctorProfileRepository,
   PatientRepository,
   bookingLogger,
 } from "@/features/booking";
@@ -8,6 +9,8 @@ import {
   PatientRequestError,
   PatientsService,
 } from "@/features/patients/patients.service";
+import { VaccinationRepository } from "@/features/vaccinations/vaccination.repository";
+import { VaccinationSeedingService } from "@/features/vaccinations/vaccination-seeding.service";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 
@@ -32,9 +35,14 @@ function errorResponse(error) {
 
 async function resolvePatientsService() {
   const supabase = getSupabaseAdminClient();
+  const vaccinationSeedingService = new VaccinationSeedingService(
+    new VaccinationRepository(supabase),
+    new DoctorProfileRepository(supabase),
+  );
   return new PatientsService(
     new PatientRepository(supabase),
     new AppointmentRepository(supabase),
+    { vaccinationSeedingService },
   );
 }
 

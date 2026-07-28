@@ -19,11 +19,13 @@ test("validatePatientName: rejects unreasonably long names", () => {
   assert.equal(validatePatientName("a".repeat(200)).valid, false);
 });
 
-test("parseAgeOrDob: accepts a plain integer age within range", () => {
+test("parseAgeOrDob: accepts a plain integer age within range and derives an approximate DOB (Jan 1 of birth year)", () => {
   const result = parseAgeOrDob("34");
   assert.equal(result.valid, true);
   assert.equal(result.ageYears, 34);
-  assert.equal(result.dateOfBirth, null);
+  assert.equal(result.dobIsApproximate, true);
+  const expectedYear = new Date().getFullYear() - 34;
+  assert.equal(result.dateOfBirth, `${expectedYear}-01-01`);
 });
 
 test("parseAgeOrDob: accepts age 0 and age 120 (inclusive boundaries)", () => {
@@ -47,6 +49,7 @@ test("parseAgeOrDob: accepts DD-MM-YYYY date of birth and computes age", () => {
   assert.equal(result.valid, true);
   assert.equal(result.ageYears, 30);
   assert.ok(result.dateOfBirth.startsWith(String(yyyy)));
+  assert.equal(result.dobIsApproximate, false);
 });
 
 test("parseAgeOrDob: accepts DD/MM/YYYY and YYYY-MM-DD formats", () => {

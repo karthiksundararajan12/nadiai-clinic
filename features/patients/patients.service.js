@@ -3,6 +3,11 @@ import {
   formatPhoneForDisplay,
   normalizePhoneForWhatsApp,
 } from "../booking/lib/phone.js";
+import { createLogger } from "../booking/logger.js";
+
+const log = createLogger({ component: "PatientsService" });
+
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 const VISIT_STATUSES = new Set([
   APPOINTMENT_STATUS.CONFIRMED,
@@ -57,6 +62,19 @@ function parseAgeYears(rawAge) {
 function parseGender(rawGender) {
   const gender = String(rawGender ?? "").trim();
   return gender || null;
+}
+
+function parseDateOfBirth(rawDateOfBirth) {
+  const value = String(rawDateOfBirth ?? "").trim();
+  if (!value) return null;
+  if (!DATE_PATTERN.test(value) || Number.isNaN(Date.parse(value))) {
+    throw new PatientRequestError("Date of birth must be a valid date (YYYY-MM-DD)");
+  }
+  const todayKey = new Date().toISOString().slice(0, 10);
+  if (value > todayKey) {
+    throw new PatientRequestError("Date of birth cannot be in the future");
+  }
+  return value;
 }
 
 function buildVisitIndex(appointments, nowMs) {
@@ -127,9 +145,15 @@ function buildStats(patients, visitIndex) {
 }
 
 export class PatientsService {
-  constructor(patientRepository, appointmentRepository) {
+  /**
+   * @param {import("../booking/repository/patient.repository.js").PatientRepository} patientRepository
+   * @param {import("../booking/repository/appointment.repository.js").AppointmentRepository} appointmentRepository
+   * @param {{ vaccinationSeedingService?: import("../vaccinations/vaccination-seeding.service.js").VaccinationSeedingService|null }} [opts]
+   */
+  constructor(patientRepository, appointmentRepository, { vaccinationSeedingService = null } = {}) {
     this._patients = patientRepository;
     this._appointments = appointmentRepository;
+    this._vaccinationSeeding = vaccinationSeedingService;
   }
 
   async list(clinicId, now = new Date()) {
@@ -179,14 +203,41 @@ export class PatientsService {
     }));
   }
 
+  /**
+   * Creates a patient, then — best-effort, never blocking or rolling back
+   * the patient write — auto-seeds the standard IAP vaccination schedule
+   * when both a date_of_birth was provided and the clinic is pediatric
+   * (see VaccinationSeedingService). Auto-seed is the default path for new
+   * registrations; the manual /vaccinations/new form remains available for
+   * exceptions, catch-up doses, and edits regardless of whether auto-seed
+   * ran.
+   */
   async create(clinicId, input) {
+    const dateOfBirth = parseDateOfBirth(input.dateOfBirth);
     const created = await this._patients.create({
       clinic_id: clinicId,
       contact_phone: parseContactPhone(input.phone),
       full_name: parseFullName(input.name),
       age_years: parseAgeYears(input.age),
       gender: parseGender(input.gender),
+      date_of_birth: dateOfBirth,
     });
+
+    if (this._vaccinationSeeding && dateOfBirth) {
+      try {
+        await this._vaccinationSeeding.seedVaccinationSchedule({
+          patientId: created.id,
+          clinicId,
+          dateOfBirth,
+        });
+      } catch (err) {
+        log.error("Vaccination schedule auto-seed failed after patient create", {
+          clinicId,
+          patientId: created.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
 
     return {
       patient: {
@@ -194,6 +245,7 @@ export class PatientsService {
         name: created.full_name,
         age: created.age_years ?? null,
         gender: created.gender ?? null,
+        dateOfBirth: created.date_of_birth ?? null,
         phone: formatPhoneForDisplay(created.contact_phone),
         lastVisit: null,
         upcomingVisit: null,

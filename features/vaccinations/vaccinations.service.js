@@ -2,10 +2,11 @@
  * @fileoverview VaccinationsService — dashboard list + manual entry for
  * public.vaccination_schedules (migration 030).
  *
- * Automatic seeding of schedules from a standard immunization schedule is
- * explicitly out of scope for this build (pending doctor input) — `create`
- * is manual-entry only, mirroring PatientsService.create's validation
- * style.
+ * `create` here is manual-entry only (mirroring PatientsService.create's
+ * validation style) — used for exceptions, catch-up doses, and edits.
+ * Automatic seeding of the standard IAP schedule on patient creation lives
+ * separately in vaccination-seeding.service.js (VaccinationSeedingService),
+ * invoked from PatientsService.create, not from here.
  */
 
 import {

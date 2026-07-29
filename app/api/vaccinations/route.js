@@ -33,9 +33,23 @@ function errorResponse(error) {
       { status: error.statusCode },
     );
   }
+  // Previously only logged error.message, which for a DatabaseError is just
+  // the generic "Database operation failed: <operation>" wrapper — the
+  // actual Postgrest failure (e.g. a missing-column 42703) lives on
+  // `.cause` (see DatabaseError in features/booking/errors.js) and was
+  // being silently dropped, making this endpoint impossible to debug from
+  // logs alone. Log everything: message, error code, the underlying DB
+  // cause, and the stack.
   log.error("Vaccinations API failed", {
     error: error instanceof Error ? error.message : String(error),
+    code: error?.code,
+    cause: error?.cause ?? null,
+    stack: error instanceof Error ? error.stack : undefined,
   });
+  // Also console.error the raw error object (not just a rewrapped
+  // message) so it's visible even where structured log fields get
+  // truncated/dropped by the aggregator.
+  console.error("Vaccinations API failed:", error);
   return NextResponse.json(
     { error: "Failed to process vaccination request" },
     { status: 500 },

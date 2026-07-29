@@ -44,11 +44,24 @@ function parseDueDate(raw) {
   return value;
 }
 
-function formatVaccinationRow(row, patientName) {
+/**
+ * @param {object} row
+ * @param {{ patientName?: string|null; patientDateOfBirthIsApproximate?: boolean }} [overrides]
+ *   Used by create() to supply the patient fields it already looked up
+ *   separately, since the freshly-inserted vaccination_schedules row has no
+ *   patient join of its own.
+ */
+function formatVaccinationRow(row, overrides = {}) {
   return {
     id: row.id,
     patientId: row.patient_id,
-    patientName: patientName ?? row.patient_name ?? "Unknown patient",
+    patientName: overrides.patientName ?? row.patient_name ?? "Unknown patient",
+    // The linked patient's DOB may itself be an age-derived approximation
+    // (see PatientCollectionService / parseAgeOrDob), which this due_date
+    // was computed from — surfaced so the dashboard can flag it the same
+    // way the patient's own DOB display does.
+    patientDateOfBirthIsApproximate:
+      overrides.patientDateOfBirthIsApproximate ?? row.patient_date_of_birth_is_approximate ?? false,
     vaccineName: row.vaccine_name,
     dueDate: row.due_date,
     status: row.status,
@@ -138,6 +151,11 @@ export class VaccinationsService {
       dueDate,
     });
 
-    return { vaccination: formatVaccinationRow(created, patient.full_name) };
+    return {
+      vaccination: formatVaccinationRow(created, {
+        patientName: patient.full_name,
+        patientDateOfBirthIsApproximate: patient.date_of_birth_is_approximate,
+      }),
+    };
   }
 }

@@ -73,6 +73,7 @@ import { validatePatientName, parseAgeOrDob } from "../lib/patient-input.js";
 import { findClosestPatientMatch } from "../lib/fuzzy-match.js";
 import { buildPatientSelectionRows, parsePatientOptionRowId } from "../lib/patient-list.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 export class PatientCollectionService {
   /**
@@ -452,6 +453,14 @@ export class PatientCollectionService {
           clinicId: clinic.id,
           patientId: patient.id,
           error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "Vaccination schedule auto-seed failed after patient create (WhatsApp booking bot)",
+          step: OPS_ALERT_STEP.VACCINATION_SEED,
+          error: err,
+          clinicId: clinic.id,
+          patientId: patient.id,
+          contactPhone: message.contactPhone,
         });
       }
     }

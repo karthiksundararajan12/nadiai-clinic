@@ -21,6 +21,8 @@ const PATIENTS = [
     contact_phone: "919876543210",
     age_years: null,
     gender: null,
+    date_of_birth: "2022-01-01",
+    date_of_birth_is_approximate: true,
     created_at: "2026-06-02T10:00:00.000Z",
     updated_at: "2026-06-02T10:00:00.000Z",
   },
@@ -98,7 +100,10 @@ test("list returns clinic patients with last visit from past appointments", asyn
   assert.equal(result.patients[0].phone, "+91 9840227132");
   assert.equal(result.patients[0].lastVisit, "2026-07-01T09:00:00.000Z");
   assert.equal(result.patients[0].upcomingVisit, "2026-07-20T09:00:00.000Z");
+  assert.equal(result.patients[0].dateOfBirthIsApproximate, false); // no date_of_birth_is_approximate on fixture -> defaults false
   assert.equal(result.patients[1].lastVisit, null);
+  assert.equal(result.patients[1].dateOfBirth, "2022-01-01");
+  assert.equal(result.patients[1].dateOfBirthIsApproximate, true);
   assert.deepEqual(result.stats, {
     totalPatients: 2,
     withUpcomingVisit: 1,
@@ -188,6 +193,33 @@ test("create accepts an optional dateOfBirth and writes it to the patient row", 
 
   assert.equal(calls.create[0].date_of_birth, "2026-01-15");
   assert.equal(result.patient.dateOfBirth, "2026-01-15");
+  // Dashboard-collected DOBs are always exact (a real <input type="date">
+  // value), never age-derived — false whether the DB column comes back
+  // undefined (fake repo default) or explicitly false.
+  assert.equal(result.patient.dateOfBirthIsApproximate, false);
+});
+
+test("create surfaces date_of_birth_is_approximate on the returned patient when the repo reports it", async () => {
+  const { service } = createService({
+    createResult: {
+      id: "patient-new",
+      full_name: "Baby Sundar",
+      contact_phone: "919840227132",
+      age_years: null,
+      gender: null,
+      date_of_birth: "2022-01-01",
+      date_of_birth_is_approximate: true,
+      created_at: "2026-07-15T10:00:00.000Z",
+    },
+  });
+
+  const result = await service.create("clinic-1", {
+    name: "Baby Sundar",
+    phone: "9840227132",
+    dateOfBirth: "2022-01-01",
+  });
+
+  assert.equal(result.patient.dateOfBirthIsApproximate, true);
 });
 
 test("create rejects a malformed dateOfBirth", async () => {

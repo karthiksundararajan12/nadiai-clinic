@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ApproximateDobBadge } from "@/components/shared/approximate-dob-badge";
 import {
   Dialog,
   DialogContent,
@@ -24,6 +25,7 @@ import {
   Phone,
   Calendar,
   CalendarClock,
+  Cake,
   Loader2,
 } from "lucide-react";
 
@@ -51,6 +53,15 @@ function formatGenderAge(patient) {
   if (patient.age != null) parts.push(`${patient.age} yrs`);
   if (patient.gender) parts.push(patient.gender);
   return parts.length > 0 ? parts.join(" · ") : "Details not recorded";
+}
+
+function formatDob(isoValue) {
+  if (!isoValue) return null;
+  return new Date(isoValue).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
 }
 
 export default function PatientsPage() {
@@ -259,6 +270,13 @@ export default function PatientsPage() {
                       <Calendar className="h-3 w-3" />
                       <span>Last visit: {formatVisitDate(patient.lastVisit)}</span>
                     </div>
+                    {patient.dateOfBirth && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Cake className="h-3 w-3" />
+                        <span>DOB: {formatDob(patient.dateOfBirth)}</span>
+                        {patient.dateOfBirthIsApproximate && <ApproximateDobBadge />}
+                      </div>
+                    )}
                     {patient.upcomingVisit && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">
                         <CalendarClock className="h-3 w-3" />
@@ -305,6 +323,13 @@ export default function PatientsPage() {
                       <Calendar className="h-3 w-3" />
                       {formatVisitDate(patient.lastVisit)}
                     </span>
+                    {patient.dateOfBirth && (
+                      <span className="flex items-center gap-1.5">
+                        <Cake className="h-3 w-3" />
+                        {formatDob(patient.dateOfBirth)}
+                        {patient.dateOfBirthIsApproximate && <ApproximateDobBadge />}
+                      </span>
+                    )}
                   </div>
                 </div>
               ))}

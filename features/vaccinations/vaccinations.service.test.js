@@ -10,6 +10,8 @@ const PATIENT = {
   clinic_id: CLINIC_A,
   full_name: "Asha Kumar",
   contact_phone: "919876543210",
+  date_of_birth: "2022-01-01",
+  date_of_birth_is_approximate: true,
 };
 
 function createService({ patient = PATIENT, listResult, createResult } = {}) {
@@ -61,6 +63,7 @@ test("list scopes lookups to the requesting clinic and applies safe pagination d
           id: "vacc-1",
           patient_id: "patient-1",
           patient_name: "Asha Kumar",
+          patient_date_of_birth_is_approximate: true,
           vaccine_name: "MMR (2nd dose)",
           due_date: "2026-08-01",
           status: "pending",
@@ -82,8 +85,36 @@ test("list scopes lookups to the requesting clinic and applies safe pagination d
   assert.equal(result.vaccinations.length, 1);
   assert.equal(result.vaccinations[0].patientName, "Asha Kumar");
   assert.equal(result.vaccinations[0].statusLabel, "Pending");
+  // The linked patient's DOB is approximate (age-derived) -> the due date
+  // computed from it inherits that uncertainty, surfaced to the dashboard.
+  assert.equal(result.vaccinations[0].patientDateOfBirthIsApproximate, true);
   assert.equal(result.total, 1);
   assert.equal(result.hasMore, false);
+});
+
+test("list defaults patientDateOfBirthIsApproximate to false when the DB doesn't report it", async () => {
+  const { service } = createService({
+    listResult: {
+      rows: [
+        {
+          id: "vacc-1",
+          patient_id: "patient-1",
+          patient_name: "Asha Kumar",
+          vaccine_name: "MMR (2nd dose)",
+          due_date: "2026-08-01",
+          status: "pending",
+          reminder_sent_at: null,
+          completed_at: null,
+          created_at: "2026-07-01T10:00:00.000Z",
+        },
+      ],
+      total: 1,
+    },
+  });
+
+  const result = await service.list(CLINIC_A);
+
+  assert.equal(result.vaccinations[0].patientDateOfBirthIsApproximate, false);
 });
 
 test("list clamps limit to the 1-100 range and offset to a non-negative number", async () => {
@@ -163,4 +194,8 @@ test("create writes a validated vaccination row and returns the formatted result
   assert.equal(result.vaccination.vaccineName, "MMR (2nd dose)");
   assert.equal(result.vaccination.status, "pending");
   assert.equal(result.vaccination.statusLabel, "Pending");
+  // Carried over from the separately-looked-up patient (PATIENT fixture has
+  // date_of_birth_is_approximate: true), since the freshly-inserted
+  // vaccination_schedules row has no patient join of its own.
+  assert.equal(result.vaccination.patientDateOfBirthIsApproximate, true);
 });

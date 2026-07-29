@@ -21,6 +21,7 @@ import { HANDOFF_NOTIFICATION_COPY } from "../constants.js";
 import { normalizePhoneForWhatsApp } from "../lib/phone.js";
 import { describeInboundMessageForHandoff, describeContactForHandoff } from "../lib/handoff-summary.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 export class DoctorNotificationService {
   /**
@@ -47,6 +48,14 @@ export class DoctorNotificationService {
     } catch (err) {
       log.error("Failed to look up doctor phone(s) for HUMAN_HANDOFF notification", {
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to look up doctor phone(s) for HUMAN_HANDOFF notification",
+        step: OPS_ALERT_STEP.DOCTOR_HANDOFF_LOOKUP,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { reason },
       });
       return;
     }
@@ -75,6 +84,14 @@ export class DoctorNotificationService {
         log.error("Failed to send HUMAN_HANDOFF notification to doctor", {
           doctorId: doctor.id,
           error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "Failed to send HUMAN_HANDOFF notification to doctor",
+          step: OPS_ALERT_STEP.DOCTOR_HANDOFF_SEND,
+          error: err,
+          clinicId: clinic.id,
+          contactPhone: message.contactPhone,
+          extra: { doctorId: doctor.id, reason },
         });
       }
     }

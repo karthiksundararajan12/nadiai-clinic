@@ -230,6 +230,25 @@
  *     vaccinations files imported below pull in booking's individual
  *     submodules (logger.js, errors.js, base.repository.js), never this
  *     barrel file.
+ *
+ * ── Ops alerting (pre-pilot visibility pass) ────────────────────────────
+ *
+ * 29. Every previously-silent best-effort catch (`log.error(...)` only, no
+ *     rethrow) across features/booking and features/vaccinations now also
+ *     calls `alertOps()` (lib/alerting.js) — never changes what the catch
+ *     itself does, purely adds a side-effect. `alertOps` never throws and
+ *     degrades to "logged only" when no ops channel is configured (checked
+ *     .env.local first — as of this change neither Slack nor WhatsApp
+ *     alerting was configured; set OPS_ALERT_SLACK_WEBHOOK_URL or
+ *     OPS_ALERT_WHATSAPP_TO before the pilot goes live). Every call also
+ *     best-effort-writes an audit row to `public.ops_alerts` (migration
+ *     032), which DailyDigestService reads for the once-daily summary
+ *     (GET /api/cron/daily-digest, same CRON_SECRET pattern and GitHub
+ *     Actions cron infra as the two reminder crons). The WhatsApp webhook
+ *     route (app/api/whatsapp/webhook/route.js) additionally gained a
+ *     top-level error boundary: an unhandled exception while processing
+ *     one inbound message now alerts ops AND sends the patient a graceful
+ *     fallback reply, instead of leaving them with silence.
  */
 
 // ─────────────────────────────────────────────────────────────
@@ -347,6 +366,14 @@ export {
 export { resolveConsultationFee } from "./lib/consultation-fee.js";
 export { isBlockingAppointmentRow } from "./lib/appointment-availability.js";
 export { reminderReplyId, parseReminderReplyId } from "./lib/reminder-reply.js";
+export {
+  alertOps,
+  sendToOpsChannel,
+  OPS_ALERT_STEP,
+  VACCINATION_SEED_FAILURE_STEPS,
+  WEBHOOK_ERROR_STEPS,
+  WHATSAPP_SEND_FAILURE_STEPS,
+} from "./lib/alerting.js";
 
 // ─────────────────────────────────────────────────────────────
 // REPOSITORY + SERVICE EXPORTS
@@ -358,6 +385,7 @@ export { DoctorProfileRepository } from "./repository/doctor-profile.repository.
 export { PatientRepository } from "./repository/patient.repository.js";
 export { AppointmentRepository } from "./repository/appointment.repository.js";
 export { RazorpayWebhookEventRepository } from "./repository/razorpay-webhook-event.repository.js";
+export { OpsAlertRepository } from "./repository/ops-alert.repository.js";
 export { InvoiceRepository } from "./repository/invoice.repository.js";
 export { WhatsAppClientService } from "./services/whatsapp-client.service.js";
 export { RazorpayClientService } from "./services/razorpay-client.service.js";
@@ -367,6 +395,7 @@ export { PatientCollectionService } from "./services/patient-collection.service.
 export { SlotSelectionService } from "./services/slot-selection.service.js";
 export { PaymentWebhookService } from "./services/payment-webhook.service.js";
 export { ReminderService } from "./services/reminder.service.js";
+export { DailyDigestService } from "./services/daily-digest.service.js";
 export { InvoiceService } from "./services/invoice.service.js";
 export { InvoiceStorageService } from "./services/invoice-storage.service.js";
 export { sendInvoiceDocument } from "./services/invoice-whatsapp.js";

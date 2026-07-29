@@ -88,6 +88,7 @@ import {
 import { resolveConsultationFee } from "../lib/consultation-fee.js";
 import { DatabaseError } from "../errors.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 export class SlotSelectionService {
   /**
@@ -654,6 +655,14 @@ export class SlotSelectionService {
           clinicId: clinic.id,
           appointmentId: updated.id,
           error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "In-app reschedule notification failed",
+          step: OPS_ALERT_STEP.IN_APP_NOTIFICATION,
+          error: err,
+          clinicId: clinic.id,
+          patientId: updated.patient_id ?? null,
+          extra: { appointmentId: updated.id },
         });
       }
     }

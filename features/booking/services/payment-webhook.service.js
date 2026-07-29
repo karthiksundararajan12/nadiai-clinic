@@ -42,6 +42,7 @@ import {
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 export class PaymentWebhookService {
   /**
@@ -184,6 +185,14 @@ export class PaymentWebhookService {
         appointmentId: appointment.id,
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Invoice generation/send failed after payment webhook",
+        step: OPS_ALERT_STEP.INVOICE_DELIVERY,
+        error: err,
+        clinicId,
+        patientId: appointment.patient_id ?? null,
+        extra: { appointmentId: appointment.id },
+      });
     }
   }
 
@@ -203,6 +212,14 @@ export class PaymentWebhookService {
         clinicId,
         appointmentId: appointment.id,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "In-app payment-received notification failed after payment webhook",
+        step: OPS_ALERT_STEP.IN_APP_NOTIFICATION,
+        error: err,
+        clinicId,
+        patientId: appointment.patient_id ?? null,
+        extra: { appointmentId: appointment.id },
       });
     }
   }
@@ -264,6 +281,13 @@ export class PaymentWebhookService {
       log.error("Failed to send WhatsApp notification after payment webhook", {
         clinicId,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to notify patient after payment webhook",
+        step: OPS_ALERT_STEP.WHATSAPP_SEND,
+        error: err,
+        clinicId,
+        contactPhone,
       });
     }
   }
@@ -335,6 +359,14 @@ export class PaymentWebhookService {
         clinicId,
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to send appt_booking_confirmed template after payment webhook",
+        step: OPS_ALERT_STEP.WHATSAPP_SEND,
+        error: err,
+        clinicId,
+        contactPhone,
+        extra: { appointmentId: appointment.id },
+      });
     }
   }
 
@@ -374,6 +406,14 @@ export class PaymentWebhookService {
         contactPhone,
         targetState,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to advance conversation_state after payment webhook",
+        step: OPS_ALERT_STEP.CONVERSATION_STATE_ADVANCE,
+        error: err,
+        clinicId,
+        contactPhone,
+        extra: { targetState },
       });
     }
   }

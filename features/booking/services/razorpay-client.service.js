@@ -16,6 +16,7 @@
 
 import { RazorpayCredentialsError, RazorpaySendError } from "../errors.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 const PAYMENT_LINKS_URL = "https://api.razorpay.com/v1/payment_links";
 const PAYMENTS_URL = "https://api.razorpay.com/v1/payments";
@@ -71,6 +72,13 @@ export class RazorpayClientService {
       });
     } catch (cause) {
       this._log.error("Razorpay payment link request failed (network)", { referenceId });
+      await alertOps({
+        title: "Razorpay payment link creation failed (network error)",
+        step: OPS_ALERT_STEP.RAZORPAY_SEND,
+        error: cause,
+        clinicId: notes?.clinic_id ?? null,
+        extra: { referenceId, appointmentId: notes?.appointment_id ?? null },
+      });
       throw new RazorpaySendError("Failed to reach Razorpay API", { cause: String(cause) });
     }
 
@@ -80,6 +88,13 @@ export class RazorpayClientService {
         referenceId,
         status: response.status,
         error:  payload?.error,
+      });
+      await alertOps({
+        title: "Razorpay payment link creation failed (API error)",
+        step: OPS_ALERT_STEP.RAZORPAY_SEND,
+        error: new Error(payload?.error?.description ?? `Razorpay API responded with ${response.status}`),
+        clinicId: notes?.clinic_id ?? null,
+        extra: { referenceId, appointmentId: notes?.appointment_id ?? null, status: response.status },
       });
       throw new RazorpaySendError(
         payload?.error?.description ?? `Razorpay API responded with ${response.status}`,
@@ -128,6 +143,13 @@ export class RazorpayClientService {
       });
     } catch (cause) {
       this._log.error("Razorpay refund request failed (network)", { paymentId });
+      await alertOps({
+        title: "Razorpay refund failed (network error)",
+        step: OPS_ALERT_STEP.RAZORPAY_SEND,
+        error: cause,
+        clinicId: notes?.clinic_id ?? null,
+        extra: { paymentId, appointmentId: notes?.appointment_id ?? null },
+      });
       throw new RazorpaySendError("Failed to reach Razorpay refund API", { cause: String(cause) });
     }
 
@@ -137,6 +159,13 @@ export class RazorpayClientService {
         paymentId,
         status: response.status,
         error: payload?.error,
+      });
+      await alertOps({
+        title: "Razorpay refund failed (API error)",
+        step: OPS_ALERT_STEP.RAZORPAY_SEND,
+        error: new Error(payload?.error?.description ?? `Razorpay refund API responded with ${response.status}`),
+        clinicId: notes?.clinic_id ?? null,
+        extra: { paymentId, appointmentId: notes?.appointment_id ?? null, status: response.status },
       });
       throw new RazorpaySendError(
         payload?.error?.description ?? `Razorpay refund API responded with ${response.status}`,

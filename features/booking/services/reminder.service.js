@@ -47,6 +47,7 @@ import { formatSlotLabel } from "../lib/slot-engine.js";
 import { formatNotificationAmount } from "./in-app-notification.service.js";
 import { BookingError } from "../errors.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 export class ReminderService {
   /**
@@ -118,6 +119,12 @@ export class ReminderService {
       } catch (err) {
         log.error("Failed to complete expired CONFIRMED appointments", {
           error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "Failed to complete expired CONFIRMED appointments (no-response timeout sweep)",
+          step: OPS_ALERT_STEP.REMINDER_SWEEP,
+          error: err,
+          clinicId: clinic.id,
         });
       }
     }
@@ -212,6 +219,12 @@ export class ReminderService {
       log.error("Failed to read reminders_enabled — defaulting to enabled", {
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to read reminders_enabled — defaulted to enabled",
+        step: OPS_ALERT_STEP.REMINDER_SWEEP,
+        error: err,
+        clinicId,
+      });
       return true;
     }
   }
@@ -230,6 +243,13 @@ export class ReminderService {
       due = await this._appointmentRepo.findDueForReminder(clinic.id, sentAtColumn, fromIso, toIso);
     } catch (err) {
       log.error("Failed to query due reminders", { kind, error: err instanceof Error ? err.message : String(err) });
+      await alertOps({
+        title: "Failed to query due appointment reminders",
+        step: OPS_ALERT_STEP.REMINDER_SWEEP,
+        error: err,
+        clinicId: clinic.id,
+        extra: { kind },
+      });
       return { sent: 0, failed: 0 };
     }
 
@@ -266,6 +286,14 @@ export class ReminderService {
         errorCode: err?.code ?? null,
         errorDetails: err?.details ?? (err?.cause ?? null),
       });
+      await alertOps({
+        title: "Failed to claim appointment reminder",
+        step: OPS_ALERT_STEP.REMINDER_CLAIM,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: appointment.contact_phone,
+        extra: { appointmentId: appointment.id, kind },
+      });
       return false;
     }
     if (!claimed) {
@@ -298,6 +326,14 @@ export class ReminderService {
         errorCode: err?.code ?? null,
         errorDetails: err?.details ?? (err?.cause ?? null),
         errorStack: err instanceof Error ? err.stack : undefined,
+      });
+      await alertOps({
+        title: "Failed to send appointment reminder after claiming it",
+        step: OPS_ALERT_STEP.REMINDER_SEND,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: appointment.contact_phone,
+        extra: { appointmentId: appointment.id, kind },
       });
       return false;
     }
@@ -445,6 +481,14 @@ export class ReminderService {
           appointmentId: cancelled.id,
           error: err instanceof Error ? err.message : String(err),
         });
+        await alertOps({
+          title: "In-app cancel notification failed after reminder Cancel",
+          step: OPS_ALERT_STEP.IN_APP_NOTIFICATION,
+          error: err,
+          clinicId: clinic.id,
+          patientId: cancelled.patient_id ?? null,
+          extra: { appointmentId: cancelled.id },
+        });
       }
     }
 
@@ -499,6 +543,13 @@ export class ReminderService {
           appointmentId: appointment.id,
           error: err instanceof Error ? err.message : String(err),
         });
+        await alertOps({
+          title: "Failed to persist refund_status=not_applicable after cancel",
+          step: OPS_ALERT_STEP.REFUND,
+          error: err,
+          clinicId,
+          extra: { appointmentId: appointment.id },
+        });
       }
       return { refundStatus: REFUND_STATUS.NOT_APPLICABLE, refundInitiated: false };
     }
@@ -507,6 +558,13 @@ export class ReminderService {
       log.error("Razorpay client not wired — cannot refund captured payment after cancel", {
         appointmentId: appointment.id,
         paymentId,
+      });
+      await alertOps({
+        title: "Razorpay client not wired — cannot refund captured payment after cancel",
+        step: OPS_ALERT_STEP.REFUND,
+        error: new Error("Razorpay client not wired"),
+        clinicId,
+        extra: { appointmentId: appointment.id, paymentId },
       });
       try {
         await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
@@ -517,6 +575,13 @@ export class ReminderService {
           appointmentId: appointment.id,
           paymentId,
           error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "Failed to persist refund_status=failed after missing Razorpay client",
+          step: OPS_ALERT_STEP.REFUND,
+          error: err,
+          clinicId,
+          extra: { appointmentId: appointment.id, paymentId },
         });
       }
       return { refundStatus: REFUND_STATUS.FAILED, refundInitiated: false };
@@ -531,6 +596,13 @@ export class ReminderService {
         appointmentId: appointment.id,
         paymentId,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to mark refund_status=processing before Razorpay call",
+        step: OPS_ALERT_STEP.REFUND,
+        error: err,
+        clinicId,
+        extra: { appointmentId: appointment.id, paymentId },
       });
     }
 
@@ -559,6 +631,13 @@ export class ReminderService {
           refundId: refund.id,
           error: err instanceof Error ? err.message : String(err),
         });
+        await alertOps({
+          title: "Razorpay refund succeeded but failed to persist refund fields",
+          step: OPS_ALERT_STEP.REFUND,
+          error: err,
+          clinicId,
+          extra: { appointmentId: appointment.id, paymentId, refundId: refund.id },
+        });
       }
       log.info("Razorpay refund completed after reminder Cancel", {
         appointmentId: appointment.id,
@@ -578,6 +657,13 @@ export class ReminderService {
         paymentId,
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Razorpay refund failed after reminder Cancel — cancellation still stands",
+        step: OPS_ALERT_STEP.REFUND,
+        error: err,
+        clinicId,
+        extra: { appointmentId: appointment.id, paymentId },
+      });
       try {
         await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
           refundStatus: REFUND_STATUS.FAILED,
@@ -587,6 +673,13 @@ export class ReminderService {
           appointmentId: appointment.id,
           paymentId,
           error: persistErr instanceof Error ? persistErr.message : String(persistErr),
+        });
+        await alertOps({
+          title: "Failed to persist refund_status=failed after Razorpay error",
+          step: OPS_ALERT_STEP.REFUND,
+          error: persistErr,
+          clinicId,
+          extra: { appointmentId: appointment.id, paymentId },
         });
       }
       return { refundStatus: REFUND_STATUS.FAILED, refundInitiated: false };

@@ -13,6 +13,7 @@
 import { WHATSAPP_CONFIG } from "../constants.js";
 import { WhatsAppCredentialsError, WhatsAppSendError } from "../errors.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 const log = createLogger({ component: "WhatsAppClientService" });
 
@@ -50,6 +51,16 @@ export class WhatsAppClientService {
       });
     } catch (cause) {
       log.error("WhatsApp send request failed (network)", { phoneNumberId });
+      // Best-effort visibility only — never blocks the throw below, which
+      // is what actually surfaces this failure to the caller (a best-effort
+      // catch elsewhere, or the webhook route's top-level error boundary).
+      await alertOps({
+        title: "WhatsApp message failed to send (network error)",
+        step: OPS_ALERT_STEP.WHATSAPP_SEND,
+        error: cause,
+        contactPhone: body?.to ?? null,
+        extra: { phoneNumberId, messageType: body?.type ?? null },
+      });
       throw new WhatsAppSendError("Failed to reach WhatsApp Cloud API", { cause: String(cause) });
     }
 
@@ -59,6 +70,21 @@ export class WhatsAppClientService {
         phoneNumberId,
         status: response.status,
         error:  payload?.error,
+      });
+      // Covers bad numbers, rate limits, and any other Meta API rejection —
+      // "WhatsApp API failures caught specifically" per the pre-pilot
+      // visibility pass (see index.js header note #29).
+      await alertOps({
+        title: "WhatsApp message failed to send (API error)",
+        step: OPS_ALERT_STEP.WHATSAPP_SEND,
+        error: new Error(payload?.error?.message ?? `WhatsApp API responded with ${response.status}`),
+        contactPhone: body?.to ?? null,
+        extra: {
+          phoneNumberId,
+          messageType: body?.type ?? null,
+          status: response.status,
+          metaErrorCode: payload?.error?.code ?? null,
+        },
       });
       throw new WhatsAppSendError(
         payload?.error?.message ?? `WhatsApp API responded with ${response.status}`,

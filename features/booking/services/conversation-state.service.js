@@ -61,6 +61,7 @@ import { assertValidConversationTransition } from "../lib/conversation-transitio
 import { isConversationExpired } from "../lib/conversation-expiry.js";
 import { formatSlotDateTimeParts, formatSlotLabel } from "../lib/slot-engine.js";
 import { createLogger } from "../logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
 const CANCELLABLE_APPOINTMENT_STATUSES = new Set([
   APPOINTMENT_STATUS.PAYMENT_PENDING,
@@ -210,6 +211,14 @@ export class ConversationStateService {
       log.error("Failed to load appointment for cancel keyword", {
         appointmentId,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to load appointment for patient cancel keyword",
+        step: OPS_ALERT_STEP.APPOINTMENT_LOOKUP,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { appointmentId },
       });
       return this._handleResetKeyword({ clinic, message, row, log });
     }
@@ -394,6 +403,14 @@ export class ConversationStateService {
         appointmentId: appointment.id,
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to cancel appointment via patient keyword",
+        step: OPS_ALERT_STEP.APPOINTMENT_CANCEL,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { appointmentId: appointment.id },
+      });
       return this._resetConversationToStart({ clinic, message, row, log });
     }
 
@@ -457,6 +474,14 @@ export class ConversationStateService {
         clinicId,
         appointmentId: appointment.id,
         error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "In-app appointment-cancelled notification failed",
+        step: OPS_ALERT_STEP.IN_APP_NOTIFICATION,
+        error: err,
+        clinicId,
+        patientId: appointment.patient_id ?? null,
+        extra: { appointmentId: appointment.id },
       });
     }
   }

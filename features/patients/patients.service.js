@@ -4,6 +4,7 @@ import {
   normalizePhoneForWhatsApp,
 } from "../booking/lib/phone.js";
 import { createLogger } from "../booking/logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../booking/lib/alerting.js";
 
 const log = createLogger({ component: "PatientsService" });
 
@@ -119,6 +120,8 @@ function formatPatientRow(patient, visitIndex) {
     name: patient.full_name,
     age: patient.age_years ?? null,
     gender: patient.gender ?? null,
+    dateOfBirth: patient.date_of_birth ?? null,
+    dateOfBirthIsApproximate: patient.date_of_birth_is_approximate ?? false,
     phone: formatPhoneForDisplay(patient.contact_phone),
     lastVisit,
     upcomingVisit,
@@ -236,6 +239,13 @@ export class PatientsService {
           patientId: created.id,
           error: err instanceof Error ? err.message : String(err),
         });
+        await alertOps({
+          title: "Vaccination schedule auto-seed failed after patient create (dashboard manual add)",
+          step: OPS_ALERT_STEP.VACCINATION_SEED,
+          error: err,
+          clinicId,
+          patientId: created.id,
+        });
       }
     }
 
@@ -246,6 +256,7 @@ export class PatientsService {
         age: created.age_years ?? null,
         gender: created.gender ?? null,
         dateOfBirth: created.date_of_birth ?? null,
+        dateOfBirthIsApproximate: created.date_of_birth_is_approximate ?? false,
         phone: formatPhoneForDisplay(created.contact_phone),
         lastVisit: null,
         upcomingVisit: null,

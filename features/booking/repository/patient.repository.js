@@ -65,7 +65,7 @@ export class PatientRepository extends BaseRepository {
       () =>
         this._db
           .from(this._table)
-          .select("id, clinic_id, contact_phone, full_name, date_of_birth, age_years, gender, relationship_to_contact, consent_given, consent_given_at")
+          .select("id, clinic_id, contact_phone, full_name, date_of_birth, date_of_birth_is_approximate, age_years, gender, relationship_to_contact, consent_given, consent_given_at")
           .eq("clinic_id", clinicId)
           .eq("id", patientId)
           .is("deleted_at", null)
@@ -114,7 +114,9 @@ export class PatientRepository extends BaseRepository {
    * appointment creation. Paginated internally to avoid PostgREST row caps.
    * Includes date_of_birth (in addition to age_years) so callers like the
    * vaccination-schedule backfill script can compute IAP due dates without
-   * a second per-patient query.
+   * a second per-patient query. Also includes date_of_birth_is_approximate
+   * so the dashboard patients list can flag DOBs derived from an age reply
+   * (see PatientCollectionService / parseAgeOrDob) rather than a real date.
    */
   async findAllForClinic(clinicId) {
     const PAGE_SIZE = 500;
@@ -129,7 +131,7 @@ export class PatientRepository extends BaseRepository {
         () =>
           this._db
             .from(this._table)
-            .select("id, full_name, contact_phone, age_years, date_of_birth, gender, created_at, updated_at")
+            .select("id, full_name, contact_phone, age_years, date_of_birth, date_of_birth_is_approximate, gender, created_at, updated_at")
             .eq("clinic_id", clinicId)
             .is("deleted_at", null)
             .order("full_name", { ascending: true })

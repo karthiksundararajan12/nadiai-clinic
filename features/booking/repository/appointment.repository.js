@@ -617,6 +617,47 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   // ─────────────────────────────────────────────────────────────
+  // Daily digest (platform-wide, admin-only — see DailyDigestService)
+  // ─────────────────────────────────────────────────────────────
+
+  /**
+   * Counts appointments created within [fromIso, toIso), grouped by
+   * `status`. Deliberately NOT clinic-scoped — unlike every other method
+   * on this repository — since this backs the CRON_SECRET-gated daily
+   * digest, a platform-wide admin summary, never a doctor-facing query.
+   * Flagged here as the one intentional exception to this file's
+   * clinic-scoping convention.
+   *
+   * Row volume during the pilot is low enough that fetching just the
+   * `status` column and counting client-side (rather than a Postgres RPC)
+   * is fine — same "small enough, keeps this unit-testable" trade-off as
+   * findTakenSlotStarts above.
+   *
+   * @param {string} fromIso
+   * @param {string} toIso
+   * @returns {Promise<Record<string, number>>} e.g. { confirmed: 3, cancelled: 1 }
+   */
+  async countCreatedBetweenByStatus(fromIso, toIso) {
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("status")
+          .gte("created_at", fromIso)
+          .lt("created_at", toIso)
+          .is("deleted_at", null),
+      "countCreatedBetweenByStatus",
+    );
+
+    /** @type {Record<string, number>} */
+    const counts = {};
+    for (const row of rows) {
+      counts[row.status] = (counts[row.status] ?? 0) + 1;
+    }
+    return counts;
+  }
+
+  // ─────────────────────────────────────────────────────────────
   // Session 5 — REMINDER_SENT (reminder cron + quick-reply handling)
   // ─────────────────────────────────────────────────────────────
 

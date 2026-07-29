@@ -56,6 +56,7 @@ import {
 } from "./constants.js";
 import { BookingError } from "../booking/errors.js";
 import { createLogger } from "../booking/logger.js";
+import { alertOps, OPS_ALERT_STEP } from "../booking/lib/alerting.js";
 
 /** @param {Date} date @returns {string} YYYY-MM-DD in Asia/Kolkata */
 function istDateKey(date) {
@@ -234,6 +235,11 @@ export class VaccinationReminderService {
       this._log.error("Failed to sweep overdue vaccination schedules", {
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to sweep overdue vaccination schedules",
+        step: OPS_ALERT_STEP.VACCINATION_OVERDUE_SWEEP,
+        error: err,
+      });
     }
 
     const summary = {
@@ -341,6 +347,14 @@ export class VaccinationReminderService {
       log.error("Failed to claim vaccination reminder", {
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to claim vaccination reminder",
+        step: OPS_ALERT_STEP.VACCINATION_REMINDER_CLAIM,
+        error: err,
+        clinicId: schedule.clinic_id,
+        patientId: schedule.patient_id,
+        extra: { scheduleId: schedule.id, vaccineName: schedule.vaccine_name },
+      });
       return { sent: false, skippedReason: "CLAIM_OR_SEND_FAILED" };
     }
     if (!claimed) {
@@ -375,11 +389,27 @@ export class VaccinationReminderService {
         dueDate: claimed.due_date,
         error: err instanceof Error ? err.message : String(err),
       });
+      await alertOps({
+        title: "Failed to send vaccination reminder after claiming it",
+        step: OPS_ALERT_STEP.VACCINATION_REMINDER_SEND,
+        error: err,
+        clinicId: claimed.clinic_id,
+        patientId: claimed.patient_id,
+        extra: { scheduleId: claimed.id, vaccineName: claimed.vaccine_name, dueDate: claimed.due_date },
+      });
       try {
         await this._vaccinations.revertToPending(claimed.id);
       } catch (revertErr) {
         log.error("Failed to roll back vaccination schedule after send failure — record may be stuck as reminder_sent", {
           error: revertErr instanceof Error ? revertErr.message : String(revertErr),
+        });
+        await alertOps({
+          title: "Failed to roll back vaccination schedule after send failure — record may be stuck as reminder_sent",
+          step: OPS_ALERT_STEP.VACCINATION_REMINDER_REVERT,
+          error: revertErr,
+          clinicId: claimed.clinic_id,
+          patientId: claimed.patient_id,
+          extra: { scheduleId: claimed.id },
         });
       }
       return { sent: false, skippedReason: "CLAIM_OR_SEND_FAILED" };

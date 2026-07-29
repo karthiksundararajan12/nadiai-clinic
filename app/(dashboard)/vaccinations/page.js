@@ -13,6 +13,7 @@ import { ICON_SIZE_MD, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
+import { ApproximateDobBadge } from "@/components/shared/approximate-dob-badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -299,7 +300,10 @@ export default function VaccinationsPage() {
                         {vaccination.vaccineName}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        {formatDate(vaccination.dueDate)}
+                        <div className="flex items-center gap-1.5">
+                          <span>{formatDate(vaccination.dueDate)}</span>
+                          {vaccination.patientDateOfBirthIsApproximate && <ApproximateDobBadge />}
+                        </div>
                       </td>
                       <td className="px-4 py-3">
                         <span

@@ -19,6 +19,7 @@ const NOT_FOUND_CODE = "PGRST116";
  *   id: string;
  *   patient_id: string;
  *   patient_name: string;
+ *   patient_date_of_birth_is_approximate: boolean;
  *   vaccine_name: string;
  *   due_date: string;
  *   status: string;
@@ -100,7 +101,7 @@ export class VaccinationRepository extends BaseRepository {
           "reminder_sent_at",
           "completed_at",
           "created_at",
-          "patients!inner(full_name)",
+          "patients!inner(full_name, date_of_birth_is_approximate)",
         ].join(", "),
         { count: "exact" },
       )
@@ -373,6 +374,7 @@ function mapVaccinationRow(row) {
     id: row.id,
     patient_id: row.patient_id,
     patient_name: patient?.full_name ?? "Unknown patient",
+    patient_date_of_birth_is_approximate: patient?.date_of_birth_is_approximate ?? false,
     vaccine_name: row.vaccine_name,
     due_date: row.due_date,
     status: row.status,

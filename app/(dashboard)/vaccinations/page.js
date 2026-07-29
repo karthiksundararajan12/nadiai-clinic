@@ -43,6 +43,7 @@ const STATUS_OPTIONS = [
   { value: "reminder_sent", label: "Reminder sent" },
   { value: "completed", label: "Completed" },
   { value: "overdue", label: "Overdue" },
+  { value: "reminder_failed", label: "Reminder failed" },
 ];
 
 const STATUS_PILL = {
@@ -50,6 +51,10 @@ const STATUS_PILL = {
   reminder_sent: "border-primary/30 bg-primary/10 text-primary",
   completed: "border-success/30 bg-success/10 text-success",
   overdue: "border-destructive/30 bg-destructive/10 text-destructive",
+  // Distinct from `overdue` — this is a permanent send failure (exceeded
+  // max retry attempts) needing manual follow-up, not just a due-date
+  // that's passed. See VaccinationReminderService._claimAndSend.
+  reminder_failed: "border-destructive/50 bg-destructive/20 text-destructive",
 };
 
 export default function VaccinationsPage() {

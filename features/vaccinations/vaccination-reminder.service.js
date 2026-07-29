@@ -22,9 +22,26 @@
  *
  * Every mutation goes through VaccinationRepository's atomic
  * conditional-UPDATE methods (claimReminderSent, markOverdue,
- * revertToPending) — never read-then-write — so an overlapping cron tick or
- * a redelivered force-send can't double-send a reminder (dedup on
+ * recordReminderFailure) — never read-then-write — so an overlapping cron
+ * tick or a redelivered force-send can't double-send a reminder (dedup on
  * reminder_sent).
+ *
+ * ── Claim/retry on send failure (post-incident fix) ─────────────────────
+ *
+ * claimReminderSent flips a schedule to `reminder_sent` BEFORE the
+ * WhatsApp send is confirmed, so the send is only ever attempted against
+ * a row this run exclusively owns. If that send then throws, the claim
+ * must not be left dangling — that would permanently skip a reminder that
+ * was never actually delivered. _claimAndSend's catch block calls
+ * recordReminderFailure, which releases the claim back to `pending` for a
+ * retry on the next sweep, UNLESS this was the
+ * MAX_VACCINATION_REMINDER_ATTEMPTS-th consecutive failure, in which case
+ * the schedule is moved to the terminal `reminder_failed` status instead
+ * so a permanently-broken send (bad template, dead number) doesn't retry
+ * — and re-alert — forever. See VaccinationRepository.recordReminderFailure
+ * and constants.js for the attempt cap. A one-off admin recovery path for
+ * a stuck record lives at scripts/reset-vaccination-reminder-claim.mjs
+ * (VaccinationRepository.resetClaim).
  *
  * ── Two-gate template approval (post-incident fix) ─────────────────────
  *
@@ -53,6 +70,7 @@ import {
   VACCINATION_REMINDER_LEAD_DAYS,
   VACCINATION_REMINDER_TEMPLATE_NAME,
   VACCINATION_REMINDER_TEMPLATE_LANGUAGE_CODE,
+  MAX_VACCINATION_REMINDER_ATTEMPTS,
 } from "./constants.js";
 import { BookingError } from "../booking/errors.js";
 import { createLogger } from "../booking/logger.js";
@@ -210,6 +228,7 @@ export class VaccinationReminderService {
    *   remindersSent: number;
    *   remindersFailed: number;
    *   remindersSkippedTemplateNotLive: number;
+   *   remindersExhausted: number;
    *   markedOverdue: number;
    * }>}
    */
@@ -224,6 +243,12 @@ export class VaccinationReminderService {
     const remindersSent = results.filter((r) => r.sent).length;
     const remindersSkippedTemplateNotLive = results.filter(
       (r) => r.skippedReason === "TEMPLATE_NOT_LIVE",
+    ).length;
+    // Permanently given-up schedules (moved to `reminder_failed`) are a
+    // subset of "failed" but broken out separately so the digest can
+    // distinguish "will retry tomorrow" from "needs a human now".
+    const remindersExhausted = results.filter(
+      (r) => r.skippedReason === "MAX_ATTEMPTS_EXCEEDED",
     ).length;
     const remindersFailed = results.length - remindersSent - remindersSkippedTemplateNotLive;
 
@@ -247,6 +272,7 @@ export class VaccinationReminderService {
       remindersSent,
       remindersFailed,
       remindersSkippedTemplateNotLive,
+      remindersExhausted,
       markedOverdue,
     };
     this._log.info("Vaccination reminder sweep finished", summary);
@@ -306,7 +332,7 @@ export class VaccinationReminderService {
 
   /**
    * Checks the two-gate template-live condition BEFORE claiming, then
-   * claims (atomic, at-most-once) and sends. Three distinct outcomes:
+   * claims (atomic, at-most-once) and sends. Four distinct outcomes:
    *
    *   - Template not live (either gate off): skipped WITHOUT claiming — the
    *     schedule stays `pending` so it's retried on a later sweep once
@@ -314,12 +340,19 @@ export class VaccinationReminderService {
    *     skippedReason: "TEMPLATE_NOT_LIVE".
    *   - Already claimed/sent/completed elsewhere: skippedReason
    *     "ALREADY_SENT".
-   *   - Claim succeeds but the actual send throws (e.g. a real Meta error):
-   *     the claim is rolled back to `pending` (reminder_sent_at cleared) so
-   *     the schedule is retried instead of being permanently stuck as
-   *     "sent" despite never being delivered. skippedReason
-   *     "CLAIM_OR_SEND_FAILED" — reserved for this and actual claim errors,
-   *     never for the expected not-yet-approved-template case above.
+   *   - Claim succeeds but the actual send throws (e.g. a real Meta error)
+   *     and the schedule hasn't yet hit MAX_VACCINATION_REMINDER_ATTEMPTS:
+   *     the claim is released — rolled back to `pending`
+   *     (reminder_sent_at cleared, reminder_attempts incremented) — so the
+   *     schedule is retried on the next sweep instead of being permanently
+   *     stuck as "sent" despite never being delivered. skippedReason
+   *     "CLAIM_OR_SEND_FAILED".
+   *   - Claim succeeds but the send throws and this was the
+   *     MAX_VACCINATION_REMINDER_ATTEMPTS-th consecutive failure: the
+   *     schedule is moved to the terminal `reminder_failed` status instead
+   *     — never retried again, ops is alerted once for the permanent
+   *     failure, and the row is left visible on the dashboard for manual
+   *     follow-up. skippedReason "MAX_ATTEMPTS_EXCEEDED".
    *
    * @param {object} schedule
    * @param {object|null} [clinicHint] Pre-fetched clinic (avoids a second lookup in sendReminderNow)
@@ -384,9 +417,10 @@ export class VaccinationReminderService {
       });
       return { sent: true, skippedReason: null };
     } catch (err) {
-      log.error("Failed to send vaccination reminder after claiming it — rolling back to pending for retry", {
+      log.error("Failed to send vaccination reminder after claiming it", {
         vaccineName: claimed.vaccine_name,
         dueDate: claimed.due_date,
+        priorAttempts: claimed.reminder_attempts ?? 0,
         error: err instanceof Error ? err.message : String(err),
       });
       await alertOps({
@@ -397,16 +431,56 @@ export class VaccinationReminderService {
         patientId: claimed.patient_id,
         extra: { scheduleId: claimed.id, vaccineName: claimed.vaccine_name, dueDate: claimed.due_date },
       });
+
       try {
-        await this._vaccinations.revertToPending(claimed.id);
-      } catch (revertErr) {
-        log.error("Failed to roll back vaccination schedule after send failure — record may be stuck as reminder_sent", {
-          error: revertErr instanceof Error ? revertErr.message : String(revertErr),
+        const { exhausted, attempts } = await this._vaccinations.recordReminderFailure(
+          claimed.id,
+          claimed.reminder_attempts ?? 0,
+          MAX_VACCINATION_REMINDER_ATTEMPTS,
+        );
+
+        if (exhausted) {
+          // Distinct from the "released for retry" line below — this
+          // schedule will NEVER be retried again (findDueForReminder only
+          // selects `pending`), so it must not look like a routine
+          // per-run skip in the logs.
+          log.error(
+            "Vaccination reminder permanently failed — exceeded max attempts, giving up and marking reminder_failed",
+            { vaccineName: claimed.vaccine_name, dueDate: claimed.due_date, attempts, maxAttempts: MAX_VACCINATION_REMINDER_ATTEMPTS },
+          );
+          await alertOps({
+            title: `Vaccination reminder permanently failed after ${attempts} attempts — manual follow-up needed`,
+            step: OPS_ALERT_STEP.VACCINATION_REMINDER_EXHAUSTED,
+            error: err,
+            clinicId: claimed.clinic_id,
+            patientId: claimed.patient_id,
+            extra: {
+              scheduleId: claimed.id,
+              vaccineName: claimed.vaccine_name,
+              dueDate: claimed.due_date,
+              attempts,
+            },
+          });
+          return { sent: false, skippedReason: "MAX_ATTEMPTS_EXCEEDED" };
+        }
+
+        // Claim released — distinct log line (separate from the
+        // "CLAIM_OR_SEND_FAILED" skip reason above) so a released-for-retry
+        // claim is traceable without cross-referencing skippedReason.
+        log.warn("Vaccination reminder claim released — reverted to pending for retry on next sweep", {
+          vaccineName: claimed.vaccine_name,
+          dueDate: claimed.due_date,
+          attempts,
+          maxAttempts: MAX_VACCINATION_REMINDER_ATTEMPTS,
+        });
+      } catch (recordErr) {
+        log.error("Failed to record reminder failure / release claim — record may be stuck as reminder_sent", {
+          error: recordErr instanceof Error ? recordErr.message : String(recordErr),
         });
         await alertOps({
-          title: "Failed to roll back vaccination schedule after send failure — record may be stuck as reminder_sent",
+          title: "Failed to release vaccination reminder claim after send failure — record may be stuck as reminder_sent",
           step: OPS_ALERT_STEP.VACCINATION_REMINDER_REVERT,
-          error: revertErr,
+          error: recordErr,
           clinicId: claimed.clinic_id,
           patientId: claimed.patient_id,
           extra: { scheduleId: claimed.id },

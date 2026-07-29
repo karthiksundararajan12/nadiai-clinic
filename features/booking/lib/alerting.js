@@ -54,6 +54,7 @@ export const OPS_ALERT_STEP = Object.freeze({
   VACCINATION_REMINDER_CLAIM:    "vaccination_reminder_claim",
   VACCINATION_REMINDER_SEND:     "vaccination_reminder_send",
   VACCINATION_REMINDER_REVERT:   "vaccination_reminder_revert",
+  VACCINATION_REMINDER_EXHAUSTED: "vaccination_reminder_exhausted",
   VACCINATION_OVERDUE_SWEEP:     "vaccination_overdue_sweep",
   WHATSAPP_SEND:                 "whatsapp_send",
   WHATSAPP_WEBHOOK_MESSAGE:      "whatsapp_webhook_message",
@@ -79,6 +80,7 @@ export const VACCINATION_SEED_FAILURE_STEPS = Object.freeze([
   OPS_ALERT_STEP.VACCINATION_REMINDER_CLAIM,
   OPS_ALERT_STEP.VACCINATION_REMINDER_SEND,
   OPS_ALERT_STEP.VACCINATION_REMINDER_REVERT,
+  OPS_ALERT_STEP.VACCINATION_REMINDER_EXHAUSTED,
   OPS_ALERT_STEP.VACCINATION_OVERDUE_SWEEP,
 ]);
 

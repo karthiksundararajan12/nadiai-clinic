@@ -292,34 +292,86 @@ export class VaccinationRepository extends BaseRepository {
   }
 
   /**
-   * Rolls a schedule back to `pending` (clearing reminder_sent_at) after a
-   * claimed send attempt failed to actually deliver (e.g. a real WhatsApp
-   * API error such as Meta 132001) — so it's picked up again on the next
-   * sweep instead of being permanently stuck as `reminder_sent` despite
-   * never being delivered. Scoped to rows still in `reminder_sent` so a
-   * concurrent transition (e.g. marked `completed` in the meantime) is
-   * never clobbered.
+   * Records a failed send attempt on an already-claimed (`reminder_sent`)
+   * schedule (e.g. a real WhatsApp API error such as Meta 132001) and
+   * decides whether it gets another chance:
+   *
+   *   - attempts (attemptsSoFar + 1) < maxAttempts: rolled back to
+   *     `pending` (reminder_sent_at cleared) so it's picked up again on
+   *     the next sweep — never left stuck as `reminder_sent` despite
+   *     never being delivered.
+   *   - attempts >= maxAttempts: moved to the terminal `reminder_failed`
+   *     status instead — stops it from being retried forever against a
+   *     permanent failure (unapproved template, dead number, etc.) and
+   *     re-alerting on every single cron sweep.
+   *
+   * Either way this is a single atomic conditional UPDATE scoped to
+   * `eq("status", "reminder_sent")` — same never-read-then-write pattern
+   * as claimReminderSent, so a concurrent transition (e.g. marked
+   * `completed` from the dashboard in the meantime) is never clobbered.
+   * `attemptsSoFar` is read from the row already returned by
+   * claimReminderSent (the caller's own claim), not re-fetched here, so
+   * this stays a single write.
+   *
+   * @param {string} scheduleId
+   * @param {number} attemptsSoFar `reminder_attempts` from the claimed row, before this failure
+   * @param {number} maxAttempts
+   * @returns {Promise<{ row: object|null; exhausted: boolean; attempts: number }>}
+   */
+  async recordReminderFailure(scheduleId, attemptsSoFar, maxAttempts) {
+    const attempts = (attemptsSoFar ?? 0) + 1;
+    const exhausted = attempts >= maxAttempts;
+
+    const { data, error } = await this._db
+      .from(this._table)
+      .update(
+        exhausted
+          ? { status: VACCINATION_STATUS.REMINDER_FAILED, reminder_attempts: attempts }
+          : { status: VACCINATION_STATUS.PENDING, reminder_sent_at: null, reminder_attempts: attempts },
+      )
+      .eq("id", scheduleId)
+      .eq("status", VACCINATION_STATUS.REMINDER_SENT)
+      .select("*")
+      .single();
+
+    if (!error) return { row: data, exhausted, attempts };
+    if (error.code === NOT_FOUND_CODE) return { row: null, exhausted, attempts };
+
+    this._log.error("DB error during recordReminderFailure", {
+      scheduleId,
+      code: error.code,
+    });
+    throw new DatabaseError("recordReminderFailure", error);
+  }
+
+  /**
+   * Resets a stuck `reminder_sent` or `reminder_failed` schedule back to
+   * `pending` with a clean attempt counter — used by the one-off
+   * scripts/reset-vaccination-reminder-claim.mjs recovery script, never by
+   * the cron sweep itself. Scoped to those two statuses so it's a no-op
+   * (returns null) against a schedule that's already `pending`,
+   * `completed`, or `overdue`.
    *
    * @param {string} scheduleId
    * @returns {Promise<object|null>}
    */
-  async revertToPending(scheduleId) {
+  async resetClaim(scheduleId) {
     const { data, error } = await this._db
       .from(this._table)
-      .update({ status: VACCINATION_STATUS.PENDING, reminder_sent_at: null })
+      .update({ status: VACCINATION_STATUS.PENDING, reminder_sent_at: null, reminder_attempts: 0 })
       .eq("id", scheduleId)
-      .eq("status", VACCINATION_STATUS.REMINDER_SENT)
+      .in("status", [VACCINATION_STATUS.REMINDER_SENT, VACCINATION_STATUS.REMINDER_FAILED])
       .select("*")
       .single();
 
     if (!error) return data;
     if (error.code === NOT_FOUND_CODE) return null;
 
-    this._log.error("DB error during revertToPending", {
+    this._log.error("DB error during resetClaim", {
       scheduleId,
       code: error.code,
     });
-    throw new DatabaseError("revertToPending", error);
+    throw new DatabaseError("resetClaim", error);
   }
 
   /**

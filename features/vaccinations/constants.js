@@ -8,6 +8,13 @@ export const VACCINATION_STATUS = Object.freeze({
   REMINDER_SENT: "reminder_sent",
   COMPLETED: "completed",
   OVERDUE: "overdue",
+  // Terminal state (migration 033) — a claimed reminder whose WhatsApp send
+  // failed MAX_VACCINATION_REMINDER_ATTEMPTS times in a row. Never picked
+  // up again by findDueForReminder (which only selects `pending`), so it
+  // won't retry forever against a permanently broken template/number —
+  // surfaced here for manual follow-up instead. See
+  // VaccinationRepository.recordReminderFailure.
+  REMINDER_FAILED: "reminder_failed",
 });
 
 export const VACCINATION_STATUS_LABEL = Object.freeze({
@@ -15,10 +22,22 @@ export const VACCINATION_STATUS_LABEL = Object.freeze({
   [VACCINATION_STATUS.REMINDER_SENT]: "Reminder sent",
   [VACCINATION_STATUS.COMPLETED]: "Completed",
   [VACCINATION_STATUS.OVERDUE]: "Overdue",
+  [VACCINATION_STATUS.REMINDER_FAILED]: "Reminder failed",
 });
 
 /** How many days before due_date the reminder cron starts sending. */
 export const VACCINATION_REMINDER_LEAD_DAYS = 3;
+
+/**
+ * Max consecutive failed send attempts (post-claim WhatsApp API failures)
+ * before a schedule is given up on and moved to the terminal
+ * `reminder_failed` status instead of being rolled back to `pending` for
+ * yet another retry — see VaccinationRepository.recordReminderFailure and
+ * VaccinationReminderService._claimAndSend. Prevents an unrecoverable
+ * failure (e.g. an unapproved/misnamed template, permanently invalid
+ * number) from being retried every single cron sweep forever.
+ */
+export const MAX_VACCINATION_REMINDER_ATTEMPTS = 3;
 
 /**
  * Meta WhatsApp UTILITY template for vaccination due-date reminders —

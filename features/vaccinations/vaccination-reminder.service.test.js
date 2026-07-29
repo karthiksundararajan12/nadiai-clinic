@@ -5,7 +5,11 @@ import {
   sendVaccinationReminder,
   isTemplateLive,
 } from "./vaccination-reminder.service.js";
-import { VACCINATION_STATUS, VACCINATION_REMINDER_TEMPLATE_NAME } from "./constants.js";
+import {
+  VACCINATION_STATUS,
+  VACCINATION_REMINDER_TEMPLATE_NAME,
+  MAX_VACCINATION_REMINDER_ATTEMPTS,
+} from "./constants.js";
 import { BookingError } from "../booking/errors.js";
 
 const CLINIC = {
@@ -32,6 +36,7 @@ function schedule(overrides = {}) {
     due_date: "2026-08-01",
     status: VACCINATION_STATUS.PENDING,
     reminder_sent_at: null,
+    reminder_attempts: 0,
     completed_at: null,
     created_at: "2026-07-01T10:00:00.000Z",
     ...overrides,
@@ -44,7 +49,7 @@ function createFakeVaccinationRepo({ due = [], findByIdResult, claimResult } = {
   const calls = {
     findDueForReminder: [],
     claimReminderSent: [],
-    revertToPending: [],
+    recordReminderFailure: [],
     markOverdue: [],
     findById: [],
   };
@@ -67,13 +72,26 @@ function createFakeVaccinationRepo({ due = [], findByIdResult, claimResult } = {
       row.reminder_sent_at = new Date().toISOString();
       return { ...row };
     },
-    async revertToPending(scheduleId) {
-      calls.revertToPending.push(scheduleId);
+    // Mirrors VaccinationRepository.recordReminderFailure: rolls back to
+    // `pending` (incrementing reminder_attempts) unless this failure
+    // exhausts maxAttempts, in which case it moves to the terminal
+    // `reminder_failed` status instead.
+    async recordReminderFailure(scheduleId, attemptsSoFar, maxAttempts) {
+      calls.recordReminderFailure.push({ scheduleId, attemptsSoFar, maxAttempts });
       const row = rows.get(scheduleId);
-      if (!row || row.status !== VACCINATION_STATUS.REMINDER_SENT) return null;
-      row.status = VACCINATION_STATUS.PENDING;
-      row.reminder_sent_at = null;
-      return { ...row };
+      if (!row || row.status !== VACCINATION_STATUS.REMINDER_SENT) {
+        return { row: null, exhausted: false, attempts: (attemptsSoFar ?? 0) + 1 };
+      }
+      const attempts = (attemptsSoFar ?? 0) + 1;
+      const exhausted = attempts >= maxAttempts;
+      row.reminder_attempts = attempts;
+      if (exhausted) {
+        row.status = VACCINATION_STATUS.REMINDER_FAILED;
+      } else {
+        row.status = VACCINATION_STATUS.PENDING;
+        row.reminder_sent_at = null;
+      }
+      return { row: { ...row }, exhausted, attempts };
     },
     async markOverdue(todayDate) {
       calls.markOverdue.push(todayDate);
@@ -306,7 +324,7 @@ test("runReminderSweep skips due schedules with TEMPLATE_NOT_LIVE and leaves the
   assert.equal(wa.sendTemplateCalls.length, 0);
 });
 
-test("runReminderSweep rolls a schedule back to pending (not reminder_sent) when the WhatsApp send throws after being claimed", async () => {
+test("runReminderSweep releases the claim back to pending (not left stuck as reminder_sent) when the WhatsApp send throws after being claimed", async () => {
   const dueSoon = schedule({ id: "due-soon", due_date: "2026-07-18" });
   const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
   const wa = createFakeWhatsAppClient({
@@ -327,13 +345,83 @@ test("runReminderSweep rolls a schedule back to pending (not reminder_sent) when
   assert.equal(summary.remindersSent, 0);
   assert.equal(summary.remindersFailed, 1);
   assert.equal(summary.remindersSkippedTemplateNotLive, 0);
-  // Claimed (reminder_sent) then rolled back to pending — never left stuck
-  // as "sent" despite the send actually failing.
+  assert.equal(summary.remindersExhausted, 0);
+  // Claimed (reminder_sent) then released back to pending — never left
+  // stuck as "sent" despite the send actually failing, and this is only
+  // the first failed attempt so it's not exhausted yet.
   assert.equal(vaccinationRepo.calls.claimReminderSent.length, 1);
-  assert.equal(vaccinationRepo.calls.revertToPending.length, 1);
+  assert.equal(vaccinationRepo.calls.recordReminderFailure.length, 1);
   const row = vaccinationRepo.rows.get("due-soon");
   assert.equal(row.status, VACCINATION_STATUS.PENDING);
   assert.equal(row.reminder_sent_at, null);
+  assert.equal(row.reminder_attempts, 1);
+});
+
+test("a schedule keeps retrying across sweeps and is only given up on (reminder_failed) after MAX_VACCINATION_REMINDER_ATTEMPTS consecutive failures", async () => {
+  const dueSoon = schedule({ id: "due-soon", due_date: "2026-07-18" });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
+  const wa = createFakeWhatsAppClient({
+    sendTemplate: async () => {
+      throw new Error("Meta error 132001: template not found");
+    },
+  });
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(),
+    wa,
+    BOTH_LIVE,
+  );
+
+  let lastSummary;
+  for (let i = 1; i <= MAX_VACCINATION_REMINDER_ATTEMPTS; i += 1) {
+    lastSummary = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
+    const row = vaccinationRepo.rows.get("due-soon");
+    if (i < MAX_VACCINATION_REMINDER_ATTEMPTS) {
+      // Still under the cap — released back to pending, retried next sweep.
+      assert.equal(row.status, VACCINATION_STATUS.PENDING, `expected pending after attempt ${i}`);
+      assert.equal(row.reminder_attempts, i);
+      assert.equal(lastSummary.remindersExhausted, 0);
+    } else {
+      // Hit the cap on this attempt — given up on for good.
+      assert.equal(row.status, VACCINATION_STATUS.REMINDER_FAILED);
+      assert.equal(row.reminder_attempts, MAX_VACCINATION_REMINDER_ATTEMPTS);
+      assert.equal(lastSummary.remindersExhausted, 1);
+    }
+  }
+
+  // A schedule sitting in the terminal `reminder_failed` status is never
+  // picked up again — findDueForReminder only selects `pending` rows.
+  const finalSweep = await service.runReminderSweep(new Date("2026-07-16T00:00:00.000Z"));
+  assert.equal(finalSweep.scanned, 0);
+  assert.equal(wa.sendTemplateCalls.length, MAX_VACCINATION_REMINDER_ATTEMPTS);
+});
+
+test("_claimAndSend returns MAX_ATTEMPTS_EXCEEDED (not CLAIM_OR_SEND_FAILED) once the retry cap is hit", async () => {
+  const dueSoon = schedule({
+    id: "due-soon",
+    due_date: "2026-07-18",
+    reminder_attempts: MAX_VACCINATION_REMINDER_ATTEMPTS - 1,
+  });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
+  const wa = createFakeWhatsAppClient({
+    sendTemplate: async () => {
+      throw new Error("Meta error 132001: template not found");
+    },
+  });
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(),
+    wa,
+    BOTH_LIVE,
+  );
+
+  const result = await service._claimAndSend(dueSoon);
+
+  assert.equal(result.sent, false);
+  assert.equal(result.skippedReason, "MAX_ATTEMPTS_EXCEEDED");
+  assert.equal(vaccinationRepo.rows.get("due-soon").status, VACCINATION_STATUS.REMINDER_FAILED);
 });
 
 test("sendReminderNow force-sends a pending schedule regardless of due_date", async () => {

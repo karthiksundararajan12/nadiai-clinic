@@ -60,10 +60,26 @@ export const VACCINATION_REMINDER_TEMPLATE_NAME = "vaccination_reminder";
 export const VACCINATION_REMINDER_TEMPLATE_LANGUAGE_CODE = "en";
 
 /**
- * Proposed static body for the `vaccination_reminder` template (pending
- * Meta submission/approval) — docs + regression-test reference only, not
- * yet the real approved copy. Params in order: patient full_name,
- * vaccine_name, formatted due date (e.g. "3 Aug 2026").
+ * Approved body for the `vaccination_reminder` template — 4 placeholders,
+ * NOT 3 (see the post-incident fix note below). Params in order, exactly
+ * as built by VaccinationReminderService._claimAndSend:
+ *   1. Patient full_name
+ *   2. Patient full_name again — {{2}} is followed by literal "'s" in the
+ *      template body itself ("that {{2}}'s vaccination"), so this must be
+ *      the bare name, not a pre-formatted possessive (no extra "'s" here,
+ *      or the rendered message doubles up: "Rahul's's").
+ *   3. vaccine_name
+ *   4. Formatted due date (e.g. "3 Aug 2026")
+ *
+ * ── Param-count fix (post-incident, Meta error 132000) ──────────────────
+ * This constant/comment previously described a 3-param DRAFT body that
+ * was never actually what got approved — the real approved template has
+ * 4 placeholders (the {{2}} possessive-name slot was missing entirely).
+ * Sending only 3 params against this template is rejected by the Graph
+ * API with 132000 ("number of localizable_params does not match").
+ * Fixed in sendVaccinationReminder/_claimAndSend to always build a
+ * 4-element bodyParams array in this order — never touch the template
+ * text/name/param count on the Meta side, only the array built here.
  */
 export const VACCINATION_REMINDER_TEMPLATE_BODY =
-  "Hi {{1}}, this is a reminder that the {{2}} vaccination is due on {{3}}. Please contact us to schedule.";
+  "Hi {{1}}, this is a reminder that {{2}}'s vaccination ({{3}}) is due on {{4}}. Reply here to book an appointment.";

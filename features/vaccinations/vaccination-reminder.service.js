@@ -149,6 +149,12 @@ export function isTemplateLive(templateName, { globalLive, templateLive } = {}) 
  * @param {{
  *   whatsappClient?: import("../booking/services/whatsapp-client.service.js").WhatsAppClientService;
  *   bodyParams: string[];
+ *     Must have exactly 4 elements, matching the 4 placeholders in
+ *     VACCINATION_REMINDER_TEMPLATE_BODY (constants.js): [patientName,
+ *     patientName again (template appends the possessive "'s" itself),
+ *     vaccineName, formatted due date]. Sending 3 (a past bug — see
+ *     constants.js's param-count-fix note) is rejected by the Graph API
+ *     with error 132000 ("number of localizable_params does not match").
  *   templatesLive?: boolean;
  *   vaccinationReminderTemplateLive?: boolean;
  * }} opts
@@ -403,7 +409,18 @@ export class VaccinationReminderService {
 
       const patient = await this._patientRepo.findById(claimed.clinic_id, claimed.patient_id);
       const patientName = patient?.full_name ?? "there";
-      const bodyParams = [patientName, claimed.vaccine_name, formatDueDateLabel(claimed.due_date)];
+      // 4 params, matching VACCINATION_REMINDER_TEMPLATE_BODY's 4
+      // placeholders exactly — {{2}} is patientName again (the template
+      // text itself appends the possessive "'s"), NOT a 3rd distinct
+      // value. Sending only 3 here previously caused Meta error 132000
+      // (see constants.js's param-count-fix note) — do not drop back to
+      // 3 without also updating the approved template on Meta's side.
+      const bodyParams = [
+        patientName,
+        patientName,
+        claimed.vaccine_name,
+        formatDueDateLabel(claimed.due_date),
+      ];
 
       await sendVaccinationReminder(clinic.whatsapp_phone_number_id, patient?.contact_phone, {
         whatsappClient: this._wa,

@@ -162,7 +162,7 @@ test("sendVaccinationReminder skips with TEMPLATE_NOT_LIVE when WHATSAPP_TEMPLAT
 
   const result = await sendVaccinationReminder("phone-1", "919876543210", {
     whatsappClient: wa,
-    bodyParams: ["Asha", "MMR", "1 Aug 2026"],
+    bodyParams: ["Asha", "Asha", "MMR", "1 Aug 2026"],
     templatesLive: false,
     vaccinationReminderTemplateLive: true,
   });
@@ -180,7 +180,7 @@ test("sendVaccinationReminder skips with TEMPLATE_NOT_LIVE when the global flag 
 
   const result = await sendVaccinationReminder("phone-1", "919876543210", {
     whatsappClient: wa,
-    bodyParams: ["Asha", "MMR", "1 Aug 2026"],
+    bodyParams: ["Asha", "Asha", "MMR", "1 Aug 2026"],
     templatesLive: true,
     vaccinationReminderTemplateLive: false,
   });
@@ -198,7 +198,7 @@ test("sendVaccinationReminder calls the WhatsApp client when both templatesLive 
 
   const result = await sendVaccinationReminder("phone-1", "919876543210", {
     whatsappClient: wa,
-    bodyParams: ["Asha", "MMR", "1 Aug 2026"],
+    bodyParams: ["Asha", "Asha", "MMR", "1 Aug 2026"],
     templatesLive: true,
     vaccinationReminderTemplateLive: true,
   });
@@ -229,6 +229,40 @@ test("runReminderSweep sends a reminder for a schedule due within the lead windo
   assert.equal(vaccinationRepo.rows.get("due-soon").status, VACCINATION_STATUS.REMINDER_SENT);
   assert.equal(wa.sendTemplateCalls.length, 1);
   assert.equal(wa.sendTemplateCalls[0].toPhone, PATIENT.contact_phone);
+});
+
+test("_claimAndSend builds a 4-element bodyParams array (not 3) matching the approved template's 4 placeholders, in order", async () => {
+  // Regression test for Meta error 132000 ("number of localizable_params
+  // (3) does not match the expected number of params (4)") — the
+  // approved VACCINATION_REMINDER_TEMPLATE_BODY has 4 placeholders:
+  // patientName, patientName again (template appends "'s" itself),
+  // vaccineName, formatted due date.
+  const dueSoon = schedule({
+    id: "due-soon",
+    due_date: "2026-08-01",
+    vaccine_name: "MMR (2nd dose)",
+  });
+  const vaccinationRepo = createFakeVaccinationRepo({ due: [dueSoon] });
+  const wa = createFakeWhatsAppClient();
+  const service = new VaccinationReminderService(
+    vaccinationRepo,
+    createFakeClinicRepo(),
+    createFakePatientRepo(PATIENT),
+    wa,
+    BOTH_LIVE,
+  );
+
+  await service._claimAndSend(dueSoon);
+
+  assert.equal(wa.sendTemplateCalls.length, 1);
+  const { bodyParams } = wa.sendTemplateCalls[0].opts;
+  assert.equal(bodyParams.length, 4);
+  assert.deepEqual(bodyParams, [
+    PATIENT.full_name,
+    PATIENT.full_name,
+    "MMR (2nd dose)",
+    "1 Aug 2026",
+  ]);
 });
 
 test("runReminderSweep does not touch schedules outside the lead window", async () => {

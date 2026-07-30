@@ -371,13 +371,23 @@ export default function VaccinationsPage() {
   );
 }
 
+const DATE_ONLY_MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+// due_date is a date-only "YYYY-MM-DD" string (Postgres `date` column) — do
+// not round-trip it through `new Date(...)` + local formatting, since that
+// renders in whichever timezone the browser/runtime happens to be in and
+// can shift the calendar date by a day. Parse the digits directly instead.
 function formatDate(value) {
   if (!value) return "—";
-  try {
-    return format(new Date(`${value}T00:00:00+05:30`), "dd MMM yyyy");
-  } catch {
-    return value;
-  }
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  if (!match) return value;
+  const [, year, month, day] = match;
+  const monthLabel = DATE_ONLY_MONTH_LABELS[Number(month) - 1];
+  if (!monthLabel) return value;
+  return `${String(Number(day)).padStart(2, "0")} ${monthLabel} ${year}`;
 }
 
 function formatDateTime(iso) {

@@ -4,6 +4,7 @@ import {
   VaccinationReminderService,
   sendVaccinationReminder,
   isTemplateLive,
+  formatDueDateLabel,
 } from "./vaccination-reminder.service.js";
 import {
   VACCINATION_STATUS,
@@ -132,6 +133,31 @@ function createFakeWhatsAppClient({ sendTemplate } = {}) {
     },
   };
 }
+
+test("formatDueDateLabel renders a date-only due_date as its own calendar date, not shifted by a day", () => {
+  // Regression test: due_date is a Postgres `date` column, so Supabase
+  // returns a bare "YYYY-MM-DD" string with no time/timezone component.
+  // The buggy implementation ran that through `new Date(...)` + locale
+  // formatting with no explicit `timeZone`, which renders in whatever
+  // timezone the *process* happens to be in. On a UTC server (e.g. Vercel)
+  // "2026-08-01" was misrendered as "31 Jul 2026". This must hold
+  // regardless of due_date value, month/day width, and server timezone.
+  assert.equal(formatDueDateLabel("2026-08-01"), "1 Aug 2026");
+  assert.equal(formatDueDateLabel("2026-01-09"), "9 Jan 2026");
+  assert.equal(formatDueDateLabel("2026-12-31"), "31 Dec 2026");
+});
+
+test("formatDueDateLabel is correct regardless of the server's local timezone", () => {
+  const originalTz = process.env.TZ;
+  try {
+    for (const tz of ["UTC", "America/New_York", "Pacific/Kiritimati", "Asia/Kolkata"]) {
+      process.env.TZ = tz;
+      assert.equal(formatDueDateLabel("2026-08-01"), "1 Aug 2026", `expected no shift under TZ=${tz}`);
+    }
+  } finally {
+    process.env.TZ = originalTz;
+  }
+});
 
 test("isTemplateLive requires both the global and template-specific flags", () => {
   assert.equal(

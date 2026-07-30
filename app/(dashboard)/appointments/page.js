@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
@@ -35,7 +35,10 @@ import {
 } from "@/components/ui/dialog";
 import { formatPaymentStatusLabel } from "@/features/booking/lib/payment-list.js";
 import { formatPhoneForDisplay, normalizePhoneForWhatsApp } from "@/features/booking/lib/phone.js";
-import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
+import {
+  buildHighlightRedirectPath,
+  fetchAppointmentById,
+} from "@/features/appointments/appointments.client.js";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -119,6 +122,8 @@ function AppointmentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const detailIdFromUrl = searchParams.get("appointmentId");
+  const highlightId = searchParams.get("highlight");
+  const highlightRef = useRef(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -199,6 +204,14 @@ function AppointmentsPageContent() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!highlightId || loading || appointments.length === 0) return;
+    const el =
+      highlightRef.current ?? document.getElementById(`appointment-${highlightId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, loading, appointments]);
+
   const openDetail = useCallback(async (appointmentId) => {
     if (!appointmentId) return;
     setDetailOpen(true);
@@ -270,6 +283,10 @@ function AppointmentsPageContent() {
       setNewApt({ patientId: "", date: "", time: "" });
       setDialogOpen(false);
       await load();
+      const redirectPath = buildHighlightRedirectPath(payload.appointment?.id);
+      if (redirectPath) {
+        router.push(redirectPath);
+      }
     } catch (err) {
       setFormError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -505,8 +522,18 @@ function AppointmentsPageContent() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {appointments.map((appointment) => (
-                    <tr key={appointment.id} className="hover:bg-muted/30">
+                  {appointments.map((appointment) => {
+                    const highlighted = highlightId === appointment.id;
+                    return (
+                    <tr
+                      key={appointment.id}
+                      id={`appointment-${appointment.id}`}
+                      ref={highlighted ? highlightRef : null}
+                      className={cn(
+                        "hover:bg-muted/30",
+                        highlighted && "ring-2 ring-inset ring-primary",
+                      )}
+                    >
                       <td className="px-4 py-3 font-medium text-foreground">
                         <div>{appointment.patientName}</div>
                         {appointment.contactPhone ? (
@@ -579,7 +606,8 @@ function AppointmentsPageContent() {
                         </Button>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

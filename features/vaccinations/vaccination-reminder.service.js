@@ -88,17 +88,34 @@ function istDateKey(date) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-/** @param {string} dueDate YYYY-MM-DD @returns {string} e.g. "3 Aug 2026" */
-function formatDueDateLabel(dueDate) {
-  try {
-    return new Date(`${dueDate}T00:00:00+05:30`).toLocaleDateString("en-IN", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  } catch {
-    return dueDate;
-  }
+const DUE_DATE_MONTH_LABELS = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+/**
+ * `due_date` comes back from Supabase as a plain `date` column, i.e. a
+ * date-only string like "2026-08-01" with no time or timezone component.
+ * We must NOT round-trip that through `new Date(...)` + locale formatting:
+ * `new Date` treats a bare "YYYY-MM-DD" (or one with an explicit offset) as
+ * a specific instant, and `toLocaleDateString`/`Intl` without an explicit
+ * `timeZone` then renders that instant in the *server's* local timezone.
+ * Vercel functions run in UTC, so an IST calendar date constructed that way
+ * gets rendered a day early (e.g. "2026-08-01" -> "31 Jul 2026") — the
+ * conversion direction depends entirely on server TZ, which is exactly what
+ * we must not depend on. Instead, parse the string directly and build the
+ * label from its digits — no Date object, no timezone involved at all.
+ *
+ * @param {string} dueDate YYYY-MM-DD
+ * @returns {string} e.g. "3 Aug 2026"
+ */
+export function formatDueDateLabel(dueDate) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(dueDate ?? ""));
+  if (!match) return dueDate;
+  const [, year, month, day] = match;
+  const monthLabel = DUE_DATE_MONTH_LABELS[Number(month) - 1];
+  if (!monthLabel) return dueDate;
+  return `${Number(day)} ${monthLabel} ${year}`;
 }
 
 /**

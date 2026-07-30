@@ -39,4 +39,19 @@ test("mapGeminiPrescriptionToDraft maps drugs to medications", () => {
   assert.equal(draft.medications[0].dosage, "500mg");
   assert.equal(draft.followUpDays, 7);
   assert.equal(draft.advice[0], "rest");
+  assert.deepEqual(draft.diagnosis, ["Viral fever"]);
+});
+
+test("mapGeminiPrescriptionToDraft seeds advice from SOAP plan when AI advice is empty", () => {
+  const draft = mapGeminiPrescriptionToDraft(
+    {
+      drugs: [],
+      advice: "",
+      followup_days: 0,
+    },
+    "URI",
+    "- Rest at home\n- Plenty of fluids",
+  );
+
+  assert.deepEqual(draft.advice, ["Rest at home", "Plenty of fluids"]);
 });

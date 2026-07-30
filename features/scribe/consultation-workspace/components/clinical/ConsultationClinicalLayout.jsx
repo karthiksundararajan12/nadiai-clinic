@@ -133,7 +133,9 @@ export function ConsultationClinicalLayout({
           <PrescriptionDraftPanel
             draft={prescriptionPanel.draft}
             patient={patient}
+            doctor={prescriptionPanel.doctor}
             approving={prescriptionPanel.approving}
+            approvalError={prescriptionPanel.approvalError}
             onApprove={prescriptionPanel.onApprove}
             onDiscard={prescriptionPanel.onDiscard}
             onAddMedication={prescriptionPanel.onAddMedication}
@@ -141,6 +143,8 @@ export function ConsultationClinicalLayout({
             onRemoveMedication={prescriptionPanel.onRemoveMedication}
             onUpdateAdvice={prescriptionPanel.onUpdateAdvice}
             onUpdateFollowUpDays={prescriptionPanel.onUpdateFollowUpDays}
+            onUpdateDiagnosis={prescriptionPanel.onUpdateDiagnosis}
+            onUpdateInvestigations={prescriptionPanel.onUpdateInvestigations}
           />
         )}
       </div>

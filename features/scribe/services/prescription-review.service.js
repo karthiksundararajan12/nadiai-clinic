@@ -24,6 +24,7 @@ import {
 } from "../constants.js";
 import {
   InvalidStateTransitionError,
+  MissingDoctorRegistrationError,
   PrescriptionNotReadyError,
   PrescriptionReviewError,
   SessionNotFoundError,
@@ -36,6 +37,7 @@ import {
   UpdatePrescriptionDraftSchema,
 } from "../schemas.js";
 import { createLogger } from "../logger.js";
+import { hasDoctorRegistrationNumber } from "../lib/prescription-registration-gate.js";
 
 export class PrescriptionReviewService {
   /**
@@ -139,12 +141,13 @@ export class PrescriptionReviewService {
       });
     }
 
-    const [versions, events] = await Promise.all([
+    const [versions, events, doctor] = await Promise.all([
       this._prescriptions.getVersions(sessionId),
       this._prescriptions.getReviewEvents(sessionId),
+      this._prescriptions.getDoctorProfile(ctx.doctorId),
     ]);
 
-    return { session, draft, review, versions, events };
+    return { session, draft, review, versions, events, doctor };
   }
 
   /**
@@ -240,6 +243,11 @@ export class PrescriptionReviewService {
   async approve(sessionId, rawInput, ctx) {
     const parsed = ApprovePrescriptionSchema.safeParse(rawInput);
     if (!parsed.success) throw new SessionValidationError(parsed.error);
+
+    const doctor = await this._prescriptions.getDoctorProfile(ctx.doctorId);
+    if (!hasDoctorRegistrationNumber(doctor)) {
+      throw new MissingDoctorRegistrationError();
+    }
 
     const { session, draft, review } = await this._assertReviewing(sessionId, ctx);
 

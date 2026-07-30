@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { formatDateOnly } from "@/lib/date-only";
+import { SpecializationRouteGuard } from "@/components/layout/specialization-route-guard";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -59,6 +60,17 @@ const STATUS_PILL = {
 };
 
 export default function VaccinationsPage() {
+  return (
+    <SpecializationRouteGuard
+      title="Vaccinations"
+      description="Vaccination reminders are only available for pediatric practices."
+    >
+      <VaccinationsPageContent />
+    </SpecializationRouteGuard>
+  );
+}
+
+function VaccinationsPageContent() {
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("all");

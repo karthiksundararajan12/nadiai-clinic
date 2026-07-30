@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { ArrowLeft, Cake, Phone, Syringe } from "lucide-react";
+import { Activity, ArrowLeft, Cake, Phone, Syringe } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,7 @@ export default function PatientDetailPage() {
   const [patient, setPatient] = useState(null);
   const [appointmentHistory, setAppointmentHistory] = useState([]);
   const [vaccinations, setVaccinations] = useState([]);
+  const [vitals, setVitals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -54,6 +55,7 @@ export default function PatientDetailPage() {
           Array.isArray(payload.appointmentHistory) ? payload.appointmentHistory : [],
         );
         setVaccinations(Array.isArray(payload.vaccinations) ? payload.vaccinations : []);
+        setVitals(Array.isArray(payload.vitals) ? payload.vitals : []);
       } catch (loadError) {
         if (!cancelled) setError(loadError);
       } finally {
@@ -196,6 +198,128 @@ export default function PatientDetailPage() {
 
             <section className="space-y-3">
               <h2 className="flex items-center gap-1.5 font-display text-base font-semibold text-foreground">
+                <Activity className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                Vitals
+              </h2>
+              {vitals.length === 0 ? (
+                <EmptyState
+                  title="No vitals recorded"
+                  description="Vitals recorded from an appointment will appear here."
+                />
+              ) : (
+                <div className="space-y-3">
+                  {(() => {
+                    const [latest, ...history] = vitals;
+                    return (
+                      <>
+                        <div className="rounded-xl border border-border bg-white p-4">
+                          <div className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+                            <p className="text-sm font-medium text-foreground">
+                              Latest reading
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatRecordedAt(latest.recordedAt)}
+                            </p>
+                          </div>
+                          <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-4">
+                            <VitalStat
+                              label="Blood pressure"
+                              value={formatBloodPressure(
+                                latest.bloodPressureSystolic,
+                                latest.bloodPressureDiastolic,
+                              )}
+                            />
+                            <VitalStat
+                              label="Temperature"
+                              value={formatWithUnit(latest.temperatureCelsius, "°C")}
+                            />
+                            <VitalStat
+                              label="Pulse"
+                              value={formatWithUnit(latest.pulseBpm, "bpm")}
+                            />
+                            <VitalStat
+                              label="SpO2"
+                              value={formatWithUnit(latest.spo2Percent, "%")}
+                            />
+                            <VitalStat
+                              label="Weight"
+                              value={formatWithUnit(latest.weightKg, "kg")}
+                            />
+                            <VitalStat
+                              label="Height"
+                              value={formatWithUnit(latest.heightCm, "cm")}
+                            />
+                          </dl>
+                          {latest.notes ? (
+                            <p className="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
+                              {latest.notes}
+                            </p>
+                          ) : null}
+                        </div>
+
+                        {history.length > 0 ? (
+                          <div className="overflow-hidden rounded-xl border border-border bg-white">
+                            <div className="border-b border-border px-4 py-2.5">
+                              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                                Earlier readings
+                              </p>
+                            </div>
+                            <div className="overflow-x-auto">
+                              <table className="w-full min-w-[720px] text-left text-sm">
+                                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                                  <tr>
+                                    <th className="px-4 py-3 font-medium">Recorded</th>
+                                    <th className="px-4 py-3 font-medium">BP</th>
+                                    <th className="px-4 py-3 font-medium">Temp</th>
+                                    <th className="px-4 py-3 font-medium">Pulse</th>
+                                    <th className="px-4 py-3 font-medium">SpO2</th>
+                                    <th className="px-4 py-3 font-medium">Weight</th>
+                                    <th className="px-4 py-3 font-medium">Notes</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-border">
+                                  {history.map((reading) => (
+                                    <tr key={reading.id}>
+                                      <td className="px-4 py-3 text-muted-foreground">
+                                        {formatRecordedAt(reading.recordedAt)}
+                                      </td>
+                                      <td className="px-4 py-3 tabular-nums text-foreground">
+                                        {formatBloodPressure(
+                                          reading.bloodPressureSystolic,
+                                          reading.bloodPressureDiastolic,
+                                        )}
+                                      </td>
+                                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                                        {formatWithUnit(reading.temperatureCelsius, "°C")}
+                                      </td>
+                                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                                        {formatWithUnit(reading.pulseBpm, "bpm")}
+                                      </td>
+                                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                                        {formatWithUnit(reading.spo2Percent, "%")}
+                                      </td>
+                                      <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                                        {formatWithUnit(reading.weightKg, "kg")}
+                                      </td>
+                                      <td className="px-4 py-3 text-muted-foreground">
+                                        {reading.notes || "—"}
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="flex items-center gap-1.5 font-display text-base font-semibold text-foreground">
                 <Syringe className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                 Vaccination schedule
               </h2>
@@ -263,9 +387,9 @@ function formatAmount(amount) {
   return `₹${Number.isInteger(n) ? String(n) : n.toFixed(2)}`;
 }
 
-// created_at is a real timestamptz (unlike date_of_birth/due_date, which are
-// date-only columns formatted via @/lib/date-only), so round-tripping
-// through `new Date(...)` here is safe.
+// created_at / recorded_at are real timestamptz values (unlike date_of_birth /
+// due_date, which are date-only columns formatted via @/lib/date-only), so
+// round-tripping through `new Date(...)` here is safe.
 function formatRegisteredOn(iso) {
   if (!iso) return "—";
   try {
@@ -273,4 +397,32 @@ function formatRegisteredOn(iso) {
   } catch {
     return iso ?? "—";
   }
+}
+
+function formatRecordedAt(iso) {
+  if (!iso) return "—";
+  try {
+    return format(new Date(iso), "dd MMM yyyy, h:mm a");
+  } catch {
+    return iso ?? "—";
+  }
+}
+
+function formatWithUnit(value, unit) {
+  if (value == null || value === "") return "—";
+  return `${value} ${unit}`;
+}
+
+function formatBloodPressure(systolic, diastolic) {
+  if (systolic == null && diastolic == null) return "—";
+  return `${systolic ?? "—"}/${diastolic ?? "—"} mmHg`;
+}
+
+function VitalStat({ label, value }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 tabular-nums text-foreground">{value}</dd>
+    </div>
+  );
 }

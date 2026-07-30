@@ -116,17 +116,27 @@ export class PrescriptionRepository extends BaseRepository {
     );
   }
 
-  /** @param {string} doctorId */
+  /** @param {string} doctorId auth user id (doctor_profiles.user_id) */
   async _getDoctor(doctorId) {
     return this._runNullable(
       () =>
         this._db
           .from("doctor_profiles")
-          .select("user_id, full_name, specialization, clinic_name, clinic_address")
+          .select(
+            "user_id, full_name, specialization, clinic_name, clinic_address, license_number",
+          )
           .eq("user_id", doctorId)
           .single(),
       "getPrescriptionDoctor",
     );
+  }
+
+  /**
+   * Doctor identity for prescription export / review workspace.
+   * @param {string} doctorId auth user id
+   */
+  async getDoctorProfile(doctorId) {
+    return this._getDoctor(doctorId);
   }
 
   /**

@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
+import { filterNavItems } from "@/lib/specialization-nav";
 import { ICON_SIZE_NAV, ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
@@ -42,6 +43,7 @@ export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
   const router = useRouter();
   const { displayName, initials, specialization } = useUser();
+  const visibleNavItems = filterNavItems(NAV_ITEMS, specialization);
 
   const navigateIfAllowed = (href, event) => {
     if (!shouldBlockNavigation(pathname, href)) return true;
@@ -83,7 +85,7 @@ export function Sidebar({ collapsed, onToggle }) {
 
       <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin">
         <ul className="flex flex-col gap-1">
-          {NAV_ITEMS.map((item) => {
+          {visibleNavItems.map((item) => {
             const Icon = ICON_MAP[item.icon];
             const isActive =
               pathname === item.href ||

@@ -15,8 +15,10 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
+import { filterNavItems } from "@/lib/specialization-nav";
 import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
+import { useUser } from "@/hooks/use-user";
 
 const ICON_MAP = {
   LayoutDashboard,
@@ -30,6 +32,8 @@ const ICON_MAP = {
 
 export function MobileNav({ open, onClose }) {
   const pathname = usePathname();
+  const { specialization } = useUser();
+  const visibleNavItems = filterNavItems(NAV_ITEMS, specialization);
 
   if (!open) return null;
 
@@ -49,7 +53,7 @@ export function MobileNav({ open, onClose }) {
 
         <nav className="p-3">
           <ul className="flex flex-col gap-1">
-            {NAV_ITEMS.map((item) => {
+            {visibleNavItems.map((item) => {
               const Icon = ICON_MAP[item.icon];
               const isActive =
                 pathname === item.href ||

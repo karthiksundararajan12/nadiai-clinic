@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import {
+  Activity,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -39,7 +40,19 @@ import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
 } from "@/features/appointments/appointments.client.js";
+import { createVitals } from "@/features/vitals/vitals.client.js";
 import { cn } from "@/lib/utils";
+
+const EMPTY_VITALS_FORM = {
+  bloodPressureSystolic: "",
+  bloodPressureDiastolic: "",
+  temperatureCelsius: "",
+  weightKg: "",
+  heightCm: "",
+  pulseBpm: "",
+  spo2Percent: "",
+  notes: "",
+};
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -154,6 +167,11 @@ function AppointmentsPageContent() {
   const [rescheduleForm, setRescheduleForm] = useState({ date: "", time: "" });
   const [rescheduling, setRescheduling] = useState(false);
   const [rescheduleError, setRescheduleError] = useState("");
+
+  const [vitalsTarget, setVitalsTarget] = useState(null);
+  const [vitalsForm, setVitalsForm] = useState(EMPTY_VITALS_FORM);
+  const [savingVitals, setSavingVitals] = useState(false);
+  const [vitalsError, setVitalsError] = useState("");
 
   const today = clinicDateKey();
 
@@ -320,6 +338,43 @@ function AppointmentsPageContent() {
       time: "",
     });
     setRescheduleError("");
+  }
+
+  function openVitalsDialog({ appointmentId, patientName }) {
+    if (!appointmentId) return;
+    setVitalsTarget({ appointmentId, patientName: patientName ?? "Patient" });
+    setVitalsForm(EMPTY_VITALS_FORM);
+    setVitalsError("");
+  }
+
+  function closeVitalsDialog() {
+    setVitalsTarget(null);
+    setVitalsForm(EMPTY_VITALS_FORM);
+    setVitalsError("");
+  }
+
+  async function handleSaveVitals() {
+    if (!vitalsTarget?.appointmentId) return;
+    setSavingVitals(true);
+    setVitalsError("");
+    try {
+      await createVitals({
+        appointmentId: vitalsTarget.appointmentId,
+        bloodPressureSystolic: vitalsForm.bloodPressureSystolic,
+        bloodPressureDiastolic: vitalsForm.bloodPressureDiastolic,
+        temperatureCelsius: vitalsForm.temperatureCelsius,
+        weightKg: vitalsForm.weightKg,
+        heightCm: vitalsForm.heightCm,
+        pulseBpm: vitalsForm.pulseBpm,
+        spo2Percent: vitalsForm.spo2Percent,
+        notes: vitalsForm.notes,
+      });
+      closeVitalsDialog();
+    } catch (err) {
+      setVitalsError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSavingVitals(false);
+    }
   }
 
   async function handleRescheduleAppointment() {
@@ -591,19 +646,39 @@ function AppointmentsPageContent() {
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          className="gap-1 text-primary"
-                          onClick={() => openDetail(appointment.id)}
-                        >
-                          View
-                          <ExternalLink
-                            className={`${ICON_SIZE_SM} opacity-70`}
-                            strokeWidth={ICON_STROKE}
-                          />
-                        </Button>
+                        <div className="flex items-center gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="gap-1 text-primary"
+                            onClick={() => openDetail(appointment.id)}
+                          >
+                            View
+                            <ExternalLink
+                              className={`${ICON_SIZE_SM} opacity-70`}
+                              strokeWidth={ICON_STROKE}
+                            />
+                          </Button>
+                          {appointment.patientId ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-muted-foreground hover:text-primary"
+                              title="Record vitals"
+                              aria-label={`Record vitals for ${appointment.patientName}`}
+                              onClick={() =>
+                                openVitalsDialog({
+                                  appointmentId: appointment.id,
+                                  patientName: appointment.patientName,
+                                })
+                              }
+                            >
+                              <Activity className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                            </Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                     );
@@ -717,6 +792,22 @@ function AppointmentsPageContent() {
               ) : null}
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                {detail.patient_id ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() =>
+                      openVitalsDialog({
+                        appointmentId: detail.id,
+                        patientName: detail.patient_name,
+                      })
+                    }
+                  >
+                    <Activity className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                    Record Vitals
+                  </Button>
+                ) : null}
                 {CONSULTATION_STATUSES.has(detail.status) ? (
                   <Link href={`/scribe?appointment_id=${detail.id}`}>
                     <Button variant="outline" size="sm" className="gap-1">
@@ -907,6 +998,181 @@ function AppointmentsPageContent() {
               }
             >
               {rescheduling ? "Rescheduling…" : "Confirm Reschedule"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(vitalsTarget)}
+        onOpenChange={(open) => !open && closeVitalsDialog()}
+      >
+        <DialogContent onClose={closeVitalsDialog} className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Record Vitals</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            {vitalsTarget ? (
+              <p className="text-sm text-muted-foreground">
+                For {vitalsTarget.patientName} — linked to this appointment.
+              </p>
+            ) : null}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="vitals-sys">BP systolic (mmHg)</Label>
+                <Input
+                  id="vitals-sys"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="120"
+                  value={vitalsForm.bloodPressureSystolic}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      bloodPressureSystolic: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-dia">BP diastolic (mmHg)</Label>
+                <Input
+                  id="vitals-dia"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="80"
+                  value={vitalsForm.bloodPressureDiastolic}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      bloodPressureDiastolic: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-temp">Temperature (°C)</Label>
+                <Input
+                  id="vitals-temp"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  placeholder="36.8"
+                  value={vitalsForm.temperatureCelsius}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      temperatureCelsius: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-pulse">Pulse (bpm)</Label>
+                <Input
+                  id="vitals-pulse"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="72"
+                  value={vitalsForm.pulseBpm}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      pulseBpm: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-spo2">SpO2 (%)</Label>
+                <Input
+                  id="vitals-spo2"
+                  type="number"
+                  inputMode="numeric"
+                  placeholder="98"
+                  value={vitalsForm.spo2Percent}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      spo2Percent: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-weight">Weight (kg)</Label>
+                <Input
+                  id="vitals-weight"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  placeholder="62.5"
+                  value={vitalsForm.weightKg}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      weightKg: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="vitals-height">Height (cm)</Label>
+                <Input
+                  id="vitals-height"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.1"
+                  placeholder="165"
+                  value={vitalsForm.heightCm}
+                  disabled={savingVitals}
+                  onChange={(e) =>
+                    setVitalsForm((prev) => ({
+                      ...prev,
+                      heightCm: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="vitals-notes">Notes (optional)</Label>
+              <Input
+                id="vitals-notes"
+                placeholder="e.g. Taken after rest"
+                value={vitalsForm.notes}
+                disabled={savingVitals}
+                onChange={(e) =>
+                  setVitalsForm((prev) => ({
+                    ...prev,
+                    notes: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              All fields are optional — enter at least one reading or a note.
+            </p>
+            {vitalsError ? (
+              <p className="text-sm text-destructive">{vitalsError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={savingVitals}
+              onClick={closeVitalsDialog}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveVitals} disabled={savingVitals}>
+              {savingVitals ? "Saving…" : "Save vitals"}
             </Button>
           </DialogFooter>
         </DialogContent>

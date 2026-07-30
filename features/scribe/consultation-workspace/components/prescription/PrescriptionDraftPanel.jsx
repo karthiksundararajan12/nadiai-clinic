@@ -1,15 +1,45 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
 import { Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Combobox } from "@/components/ui/combobox";
+import { loadDrugNames } from "@/lib/drug-names";
+import {
+  hasDoctorRegistrationNumber,
+  MISSING_DOCTOR_REGISTRATION_MESSAGE,
+  SETTINGS_HREF,
+} from "@/features/scribe/lib/prescription-registration-gate.js";
+
+export const PRESCRIPTION_FREQUENCY_OPTIONS = Object.freeze([
+  "1-0-1",
+  "1-1-1",
+  "1-0-0",
+  "0-0-1",
+  "OD",
+  "BD",
+  "TDS",
+  "SOS",
+]);
+
+const FOOD_OPTIONS = [
+  { value: "before food", label: "Before food" },
+  { value: "after food", label: "After food" },
+];
+
+/** Session-scoped drug list cache is in lib/drug-names.js; this tracks load state for UI. */
+let drugNamesWarm = false;
 
 export function PrescriptionDraftPanel({
   draft,
   patient,
+  doctor,
   approving,
+  approvalError,
   onApprove,
   onDiscard,
   onAddMedication,
@@ -17,6 +47,8 @@ export function PrescriptionDraftPanel({
   onRemoveMedication,
   onUpdateAdvice,
   onUpdateFollowUpDays,
+  onUpdateDiagnosis,
+  onUpdateInvestigations,
 }) {
   const patientLabel = [
     patient?.name ?? "Patient",
@@ -25,6 +57,34 @@ export function PrescriptionDraftPanel({
   ].filter(Boolean).join(" · ");
 
   const adviceText = Array.isArray(draft.advice) ? draft.advice.join("\n") : "";
+  const diagnosisText = Array.isArray(draft.diagnosis) ? draft.diagnosis.join("\n") : "";
+  const investigationsText = Array.isArray(draft.investigations)
+    ? draft.investigations.join("\n")
+    : "";
+
+  const registrationMissing = !hasDoctorRegistrationNumber(doctor);
+  const gateMessage =
+    approvalError?.message ||
+    (doctor != null && registrationMissing
+      ? MISSING_DOCTOR_REGISTRATION_MESSAGE
+      : null);
+
+  const [drugNames, setDrugNames] = useState(/** @type {ReadonlyArray<string>} */ ([]));
+  const [drugNamesLoading, setDrugNamesLoading] = useState(false);
+
+  const ensureDrugNamesLoaded = () => {
+    if (drugNamesWarm || drugNamesLoading) return;
+    setDrugNamesLoading(true);
+    void loadDrugNames()
+      .then((names) => {
+        drugNamesWarm = true;
+        setDrugNames(names);
+      })
+      .catch(() => {
+        // Combobox still works as free-text without suggestions.
+      })
+      .finally(() => setDrugNamesLoading(false));
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col" data-testid="prescription-draft-panel">
@@ -51,67 +111,54 @@ export function PrescriptionDraftPanel({
         </button>
       </div>
 
+      {gateMessage ? (
+        <div
+          className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+          data-testid="prescription-registration-gate"
+          role="alert"
+        >
+          <p className="font-medium">{gateMessage}</p>
+          <Link
+            href={SETTINGS_HREF}
+            className={cn(
+              buttonVariants({ variant: "outline", size: "sm" }),
+              "mt-2 inline-flex border-amber-300 bg-white text-amber-950 hover:bg-amber-100",
+            )}
+          >
+            Open Settings
+          </Link>
+        </div>
+      ) : null}
+
       <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
         <div className="mx-auto max-w-2xl space-y-6">
+          <section>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Diagnosis / Chief Complaint
+            </label>
+            <Textarea
+              value={diagnosisText}
+              onChange={(e) => onUpdateDiagnosis?.(e.target.value)}
+              placeholder="From SOAP Assessment — edit if needed"
+              className="min-h-[72px] text-sm"
+              data-testid="prescription-diagnosis"
+            />
+          </section>
+
           <section>
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500">Rx</h3>
             <div className="space-y-3">
               {(draft.medications ?? []).map((med, index) => (
-                <div
+                <MedicationFields
                   key={index}
-                  className="relative rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
-                >
-                  <button
-                    type="button"
-                    aria-label="Remove medicine"
-                    onClick={() => onRemoveMedication(index)}
-                    className="absolute right-3 top-3 cursor-pointer text-red-500 hover:text-red-700"
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <div className="grid gap-3 pr-8 sm:grid-cols-2">
-                    <Field label="Drug name">
-                      <Input
-                        value={med.name}
-                        onChange={(e) => onUpdateMedication(index, { ...med, name: e.target.value })}
-                        placeholder="Brand name"
-                        className="text-sm"
-                      />
-                    </Field>
-                    <Field label="Dose">
-                      <Input
-                        value={med.dosage}
-                        onChange={(e) => onUpdateMedication(index, { ...med, dosage: e.target.value })}
-                        placeholder="500mg"
-                        className="text-sm"
-                      />
-                    </Field>
-                    <Field label="Frequency">
-                      <Input
-                        value={med.frequency}
-                        onChange={(e) => onUpdateMedication(index, { ...med, frequency: e.target.value })}
-                        placeholder="1-0-1"
-                        className="text-sm"
-                      />
-                    </Field>
-                    <Field label="Duration">
-                      <Input
-                        value={med.duration}
-                        onChange={(e) => onUpdateMedication(index, { ...med, duration: e.target.value })}
-                        placeholder="5 days"
-                        className="text-sm"
-                      />
-                    </Field>
-                    <Field label="Instructions (optional)" className="sm:col-span-2">
-                      <Input
-                        value={med.instructions ?? ""}
-                        onChange={(e) => onUpdateMedication(index, { ...med, instructions: e.target.value })}
-                        placeholder="after food"
-                        className="text-sm"
-                      />
-                    </Field>
-                  </div>
-                </div>
+                  med={med}
+                  index={index}
+                  drugNames={drugNames}
+                  drugNamesLoading={drugNamesLoading}
+                  onFocusDrugName={ensureDrugNamesLoaded}
+                  onUpdate={onUpdateMedication}
+                  onRemove={onRemoveMedication}
+                />
               ))}
             </div>
             <button
@@ -132,6 +179,21 @@ export function PrescriptionDraftPanel({
               onChange={(e) => onUpdateAdvice(e.target.value)}
               placeholder="Rest, fluids, dietary advice…"
               className="min-h-[100px] text-sm"
+              data-testid="prescription-advice"
+            />
+          </section>
+
+          <section>
+            <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-gray-500">
+              Investigations advised
+              <span className="ml-1 font-normal normal-case text-gray-400">(optional)</span>
+            </label>
+            <Textarea
+              value={investigationsText}
+              onChange={(e) => onUpdateInvestigations?.(e.target.value)}
+              placeholder="CBC, chest X-ray…"
+              className="min-h-[72px] text-sm"
+              data-testid="prescription-investigations"
             />
           </section>
 
@@ -176,6 +238,119 @@ export function PrescriptionDraftPanel({
         >
           Discard
         </button>
+      </div>
+    </div>
+  );
+}
+
+function MedicationFields({
+  med,
+  index,
+  drugNames,
+  drugNamesLoading,
+  onFocusDrugName,
+  onUpdate,
+  onRemove,
+}) {
+  const foodValue = FOOD_OPTIONS.some((opt) => opt.value === med.instructions)
+    ? med.instructions
+    : "";
+  const customInstructions =
+    med.instructions && !foodValue ? med.instructions : "";
+
+  return (
+    <div
+      className="relative rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+      data-testid="prescription-medication-card"
+    >
+      <button
+        type="button"
+        aria-label="Remove medicine"
+        onClick={() => onRemove(index)}
+        className="absolute right-3 top-3 cursor-pointer text-red-500 hover:text-red-700"
+      >
+        <X className="h-4 w-4" />
+      </button>
+      <div className="grid gap-3 pr-8 sm:grid-cols-2">
+        <Field label="Drug name" className="sm:col-span-2">
+          <Combobox
+            value={med.name}
+            onValueChange={(name) => onUpdate(index, { ...med, name })}
+            options={drugNames}
+            placeholder={drugNamesLoading ? "Loading suggestions…" : "Brand name"}
+            showAllOnEmpty={false}
+            maxSuggestions={75}
+            emptyQueryHint="Type to search medicines…"
+            emptyMessage="No matches — you can still use this as a custom entry."
+            onFocusField={onFocusDrugName}
+            inputClassName="text-sm"
+          />
+        </Field>
+        <Field label="Dose">
+          <Input
+            value={med.dosage}
+            onChange={(e) => onUpdate(index, { ...med, dosage: e.target.value })}
+            placeholder="500mg"
+            className="text-sm"
+          />
+        </Field>
+        <Field label="Frequency">
+          <Combobox
+            value={med.frequency}
+            onValueChange={(frequency) => onUpdate(index, { ...med, frequency })}
+            options={PRESCRIPTION_FREQUENCY_OPTIONS}
+            placeholder="1-0-1 / OD / BD…"
+            showAllOnEmpty
+            maxSuggestions={20}
+            emptyMessage="Use a custom frequency if needed."
+            inputClassName="text-sm"
+          />
+        </Field>
+        <Field label="Duration">
+          <Input
+            value={med.duration}
+            onChange={(e) => onUpdate(index, { ...med, duration: e.target.value })}
+            placeholder="5 days"
+            className="text-sm"
+          />
+        </Field>
+        <Field label="Timing" className="sm:col-span-2">
+          <div className="flex flex-wrap gap-2">
+            {FOOD_OPTIONS.map((opt) => {
+              const selected = foodValue === opt.value;
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() =>
+                    onUpdate(index, {
+                      ...med,
+                      instructions: selected ? "" : opt.value,
+                    })
+                  }
+                  className={cn(
+                    "rounded-md border px-3 py-1.5 text-xs font-medium transition-colors",
+                    selected
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {customInstructions ? (
+            <Input
+              className="mt-2 text-sm"
+              value={customInstructions}
+              onChange={(e) =>
+                onUpdate(index, { ...med, instructions: e.target.value })
+              }
+              placeholder="Other instructions"
+            />
+          ) : null}
+        </Field>
       </div>
     </div>
   );

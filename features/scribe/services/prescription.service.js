@@ -43,6 +43,7 @@ import {
 import { createSOAPAIProvider } from "./ai-providers/provider-factory.js";
 import { buildDoctorStyleContext } from "../lib/doctor-prescription-style.js";
 import {
+  buildEmptyManualDraft,
   isGeminiPrescriptionFormat,
   mapGeminiPrescriptionToDraft,
 } from "../lib/prescription-response-mapper.js";
@@ -187,7 +188,11 @@ export class PrescriptionService {
       // ── Call Claude ──────────────────────────────────────────────────────
       const prompt    = buildPrescriptionPrompt(generationContext);
       const generated = await this._generateWithRetry(prompt);
-      const draftObj  = parseAndValidateDraft(generated.text, soapNote.assessment ?? "");
+      const draftObj  = parseAndValidateDraft(
+        generated.text,
+        soapNote.assessment ?? "",
+        soapNote.plan ?? "",
+      );
       const generatedAt = new Date().toISOString();
 
       // Low-confidence medications get an extra warning automatically.
@@ -305,7 +310,10 @@ export class PrescriptionService {
       { error_message: null },
     );
 
-    const emptyDraft = buildEmptyManualDraft(generationContext.soapNote.assessment);
+    const emptyDraft = buildEmptyManualDraft(
+      generationContext.soapNote.assessment,
+      generationContext.soapNote.plan,
+    );
     const generatedAt = new Date().toISOString();
 
     const draft = await this._prescriptions.upsertDraft({
@@ -513,9 +521,11 @@ function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, ap
  * PrescriptionDraftSchema. Throws PrescriptionValidationError on failure.
  *
  * @param {string} text
+ * @param {string} [assessment]
+ * @param {string} [plan]
  * @returns {import('../schemas.js').PrescriptionDraft}
  */
-function parseAndValidateDraft(text, assessment = "") {
+function parseAndValidateDraft(text, assessment = "", plan = "") {
   let parsed;
   try {
     parsed = JSON.parse(text);
@@ -527,7 +537,7 @@ function parseAndValidateDraft(text, assessment = "") {
   }
 
   const normalized = isGeminiPrescriptionFormat(parsed)
-    ? mapGeminiPrescriptionToDraft(parsed, assessment)
+    ? mapGeminiPrescriptionToDraft(parsed, assessment, plan)
     : parsed;
 
   const result = PrescriptionDraftSchema.safeParse(normalized);
@@ -539,21 +549,6 @@ function parseAndValidateDraft(text, assessment = "") {
     });
   }
   return result.data;
-}
-
-/** @param {string} assessment */
-function buildEmptyManualDraft(assessment) {
-  const diagnosis = assessment
-    ? assessment.split(/[;\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 3)
-    : [];
-  return {
-    diagnosis,
-    medications: [],
-    investigations: [],
-    advice: [],
-    followUpInstructions: "",
-    warnings: [],
-  };
 }
 
 /**

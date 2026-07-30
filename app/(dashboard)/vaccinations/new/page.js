@@ -19,6 +19,7 @@ import { Combobox } from "@/components/ui/combobox";
 import { usePatients } from "@/hooks/use-patients";
 import { cn } from "@/lib/utils";
 import { IAP_VACCINE_NAMES } from "@/lib/iap-schedule";
+import { SpecializationRouteGuard } from "@/components/layout/specialization-route-guard";
 
 function todayDateKey() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -30,6 +31,17 @@ function todayDateKey() {
 }
 
 export default function NewVaccinationPage() {
+  return (
+    <SpecializationRouteGuard
+      title="Vaccinations"
+      description="Vaccination reminders are only available for pediatric practices."
+    >
+      <NewVaccinationPageContent />
+    </SpecializationRouteGuard>
+  );
+}
+
+function NewVaccinationPageContent() {
   const router = useRouter();
   const { patients, loading: patientsLoading } = usePatients();
   const [patientId, setPatientId] = useState("");

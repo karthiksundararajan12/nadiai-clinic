@@ -24,6 +24,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
+import { filterComboboxOptions } from "@/lib/combobox-options";
 
 /**
  * @param {{
@@ -34,8 +35,12 @@ import { Input } from "@/components/ui/input";
  *   placeholder?: string;
  *   disabled?: boolean;
  *   emptyMessage?: string;
+ *   emptyQueryHint?: string;
  *   className?: string;
  *   inputClassName?: string;
+ *   maxSuggestions?: number;
+ *   showAllOnEmpty?: boolean;
+ *   onFocusField?: () => void;
  * }} props
  */
 function Combobox({
@@ -46,8 +51,12 @@ function Combobox({
   placeholder,
   disabled,
   emptyMessage = "No matches — you can still use this as a custom entry.",
+  emptyQueryHint = "Type to search…",
   className,
   inputClassName,
+  maxSuggestions,
+  showAllOnEmpty = true,
+  onFocusField,
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
@@ -62,11 +71,20 @@ function Combobox({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const query = (value ?? "").trim().toLowerCase();
-  const filteredOptions = useMemo(() => {
-    if (!query) return options;
-    return options.filter((option) => option.toLowerCase().includes(query));
-  }, [options, query]);
+  const query = (value ?? "").trim();
+  const filteredOptions = useMemo(
+    () =>
+      filterComboboxOptions(options, query, {
+        maxSuggestions,
+        showAllOnEmpty,
+      }),
+    [options, query, maxSuggestions, showAllOnEmpty],
+  );
+
+  const showEmptyQueryHint = open && !query && !showAllOnEmpty;
+  const showNoMatches =
+    open && Boolean(query) && filteredOptions.length === 0;
+  const showOptions = open && filteredOptions.length > 0;
 
   return (
     <div ref={ref} className={cn("relative", open && "z-50", className)}>
@@ -83,17 +101,24 @@ function Combobox({
           aria-expanded={open}
           aria-autocomplete="list"
           onChange={(event) => onValueChange(event.target.value)}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            setOpen(true);
+            onFocusField?.();
+          }}
           onKeyDown={(event) => {
             if (event.key === "Escape") setOpen(false);
           }}
         />
       </div>
-      {open && (
+      {(showEmptyQueryHint || showNoMatches || showOptions) && (
         <div className="absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
-          {filteredOptions.length === 0 ? (
+          {showEmptyQueryHint && (
+            <p className="px-2 py-1.5 text-sm text-muted-foreground">{emptyQueryHint}</p>
+          )}
+          {showNoMatches && (
             <p className="px-2 py-1.5 text-sm text-muted-foreground">{emptyMessage}</p>
-          ) : (
+          )}
+          {showOptions &&
             filteredOptions.map((option) => (
               <button
                 key={option}
@@ -110,8 +135,7 @@ function Combobox({
                 <span className="flex-1 text-left">{option}</span>
                 {option === value && <Check className="h-4 w-4 text-primary" />}
               </button>
-            ))
-          )}
+            ))}
         </div>
       )}
     </div>

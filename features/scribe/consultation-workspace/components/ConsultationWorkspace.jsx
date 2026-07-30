@@ -381,6 +381,10 @@ export function ConsultationWorkspace({
       await statusPoll.refresh?.();
       onApproved?.(null, { prescriptionApproved: true });
     } catch (err) {
+      if (err?.code === "MISSING_DOCTOR_REGISTRATION") {
+        // Draft panel shows the actionable registration gate banner.
+        return;
+      }
       window.alert(err instanceof Error ? err.message : "Failed to approve prescription");
     }
   }, [onApproved, prescription, statusPoll]);
@@ -397,6 +401,22 @@ export function ConsultationWorkspace({
       followUpInstructions: prev.followUpDays
         ? `Follow up in ${prev.followUpDays} days`
         : prev.followUpInstructions,
+    }));
+  }, [prescription]);
+
+  const handleUpdateDiagnosis = useCallback((text) => {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    prescription.updateDraft((prev) => ({
+      ...prev,
+      diagnosis: lines,
+    }));
+  }, [prescription]);
+
+  const handleUpdateInvestigations = useCallback((text) => {
+    const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+    prescription.updateDraft((prev) => ({
+      ...prev,
+      investigations: lines,
     }));
   }, [prescription]);
 
@@ -957,6 +977,7 @@ export function ConsultationWorkspace({
           error: prescription.error,
           draft: prescription.draft,
           doctor: prescription.doctor,
+          approvalError: prescription.approvalError,
           onRetry: handlePrescriptionRetry,
           onEnterManually: handlePrescriptionEnterManual,
           onApprove: handlePrescriptionApprove,
@@ -966,6 +987,8 @@ export function ConsultationWorkspace({
           onRemoveMedication: prescription.removeMedication,
           onUpdateAdvice: handleUpdateAdvice,
           onUpdateFollowUpDays: handleUpdateFollowUpDays,
+          onUpdateDiagnosis: handleUpdateDiagnosis,
+          onUpdateInvestigations: handleUpdateInvestigations,
         }}
         soapProps={{
           ready: soapReady,

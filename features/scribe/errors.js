@@ -267,6 +267,17 @@ export class PrescriptionReviewError extends ScribeError {
   }
 }
 
+export class MissingDoctorRegistrationError extends ScribeError {
+  constructor() {
+    super(
+      "Add your medical registration number in Settings before approving prescriptions",
+      "MISSING_DOCTOR_REGISTRATION",
+      422,
+      { settingsHref: "/settings" },
+    );
+  }
+}
+
 export class PrescriptionValidationError extends ScribeError {
   /** @param {unknown} details */
   constructor(details) {

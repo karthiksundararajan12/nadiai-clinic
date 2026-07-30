@@ -68,6 +68,7 @@ export {
   PrescriptionNotReadyError,
   PrescriptionGenerationError,
   PrescriptionReviewError,
+  MissingDoctorRegistrationError,
   PrescriptionValidationError,
   isScribeError,
   toApiError,

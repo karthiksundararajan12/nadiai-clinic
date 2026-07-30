@@ -7,6 +7,11 @@ import {
   generatePrescription,
   updatePrescriptionDraft,
 } from "../services/prescription-review.client.js";
+import {
+  assertDoctorRegistrationForApproval,
+  hasDoctorRegistrationNumber,
+  MISSING_DOCTOR_REGISTRATION_CODE,
+} from "../../lib/prescription-registration-gate.js";
 
 const EMPTY_MEDICATION = {
   name: "",
@@ -37,13 +42,42 @@ export function usePrescriptionPanel(sessionId) {
   const [approving, setApproving] = useState(false);
   const [approved, setApproved] = useState(false);
   const [error, setError] = useState(null);
+  const [approvalError, setApprovalError] = useState(null);
   const [panelOpen, setPanelOpen] = useState(false);
+
+  const loadDoctorFallback = useCallback(async () => {
+    try {
+      const res = await fetch("/api/doctor-profile", { cache: "no-store" });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) return null;
+      const personal = payload.personalProfile;
+      if (!personal) return null;
+      const profile = {
+        full_name: personal.fullName || null,
+        specialization: personal.specialization || null,
+        clinic_name: payload.clinic?.name || null,
+        clinic_address: payload.clinic?.address || null,
+        license_number: personal.licenseNumber?.trim()
+          ? personal.licenseNumber.trim()
+          : null,
+      };
+      setDoctor(profile);
+      return profile;
+    } catch {
+      return null;
+    }
+  }, []);
 
   const loadWorkspace = useCallback(async () => {
     if (!sessionId) return null;
     const workspace = await fetchPrescriptionWorkspace(sessionId);
     if (workspace?.draft?.draft) {
       setDraft(workspace.draft.draft);
+    }
+    if (workspace?.doctor) {
+      setDoctor(workspace.doctor);
+    } else {
+      await loadDoctorFallback();
     }
     if (
       workspace?.draft?.status === "approved" ||
@@ -52,12 +86,13 @@ export function usePrescriptionPanel(sessionId) {
       setApproved(true);
     }
     return workspace;
-  }, [sessionId]);
+  }, [sessionId, loadDoctorFallback]);
 
   const generate = useCallback(async (options = {}) => {
     if (!sessionId) return;
     setGenerating(true);
     setError(null);
+    setApprovalError(null);
     setPanelOpen(true);
     setApproved(false);
 
@@ -76,6 +111,7 @@ export function usePrescriptionPanel(sessionId) {
     if (!sessionId) return;
     setGenerating(true);
     setError(null);
+    setApprovalError(null);
     setPanelOpen(true);
     setApproved(false);
 
@@ -85,10 +121,11 @@ export function usePrescriptionPanel(sessionId) {
     } catch (err) {
       setDraft({ ...EMPTY_PRESCRIPTION_DRAFT, medications: [{ ...EMPTY_MEDICATION }] });
       setError(null);
+      await loadDoctorFallback();
     } finally {
       setGenerating(false);
     }
-  }, [sessionId, loadWorkspace]);
+  }, [sessionId, loadWorkspace, loadDoctorFallback]);
 
   const updateDraft = useCallback((updater) => {
     setDraft((prev) => (typeof updater === "function" ? updater(prev) : updater));
@@ -102,23 +139,38 @@ export function usePrescriptionPanel(sessionId) {
   const approve = useCallback(async () => {
     if (!sessionId) return;
     setApproving(true);
-    setError(null);
+    setApprovalError(null);
     try {
+      let doctorForGate = doctor;
+      if (!hasDoctorRegistrationNumber(doctorForGate)) {
+        doctorForGate = (await loadDoctorFallback()) ?? doctorForGate;
+      }
+      assertDoctorRegistrationForApproval(doctorForGate);
+
       await saveDraft(draft);
       await approvePrescription(sessionId);
       setApproved(true);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
-      throw err;
+      const message = err instanceof Error ? err.message : String(err);
+      const isRegistrationGate =
+        err?.code === MISSING_DOCTOR_REGISTRATION_CODE ||
+        /registration number/i.test(message);
+      if (isRegistrationGate) {
+        const gateError = err instanceof Error ? err : new Error(message);
+        gateError.code = MISSING_DOCTOR_REGISTRATION_CODE;
+        setApprovalError(gateError);
+      }
+      throw err instanceof Error ? err : new Error(message);
     } finally {
       setApproving(false);
     }
-  }, [sessionId, draft, saveDraft]);
+  }, [sessionId, draft, doctor, saveDraft, loadDoctorFallback]);
 
   const discard = useCallback(() => {
     setPanelOpen(false);
     setApproved(false);
     setError(null);
+    setApprovalError(null);
     setDraft(EMPTY_PRESCRIPTION_DRAFT);
   }, []);
 
@@ -147,6 +199,7 @@ export function usePrescriptionPanel(sessionId) {
     setPanelOpen(false);
     setApproved(false);
     setError(null);
+    setApprovalError(null);
     setGenerating(false);
     setApproving(false);
     setDraft(EMPTY_PRESCRIPTION_DRAFT);
@@ -161,6 +214,7 @@ export function usePrescriptionPanel(sessionId) {
     approving,
     approved,
     error,
+    approvalError,
     panelOpen,
     setPanelOpen,
     generate,
@@ -173,5 +227,6 @@ export function usePrescriptionPanel(sessionId) {
     updateMedication,
     removeMedication,
     reset,
+    registrationComplete: hasDoctorRegistrationNumber(doctor),
   };
 }

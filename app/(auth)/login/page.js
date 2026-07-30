@@ -84,6 +84,7 @@ export default function LoginPage() {
         <div className="relative z-10">
           <BrandLogo
             size="xl"
+            onDark
             textClassName="text-white text-2xl"
             priority
           />
@@ -93,9 +94,9 @@ export default function LoginPage() {
           <h2 className="text-4xl font-bold leading-[1.15] tracking-tight mb-6">
             The AI assistant
             <br />
-            <span className="text-accent">doctors trust</span>
+            <span className="text-[#c5c3f0]">doctors trust</span>
           </h2>
-          <p className="text-base text-white/60 leading-relaxed mb-10">
+          <p className="text-base text-white/75 leading-relaxed mb-10">
             Transform your practice with AI-powered clinical documentation
             and seamless patient management — all in Hinglish.
           </p>
@@ -103,22 +104,22 @@ export default function LoginPage() {
           <div className="space-y-5">
             {FEATURES.map((f, i) => (
               <div key={i} className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] border border-white/[0.08]">
-                  <f.icon className="h-5 w-5 text-accent" />
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/30 border border-white/60">
+                  <f.icon className="h-5 w-5 text-white" strokeWidth={2.25} />
                 </div>
                 <div>
-                  <p className="text-sm font-semibold text-white/90">
+                  <p className="text-sm font-semibold text-white">
                     {f.title}
                   </p>
-                  <p className="text-sm text-white/40 mt-0.5">{f.desc}</p>
+                  <p className="text-sm text-white/75 mt-0.5">{f.desc}</p>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div className="relative z-10 border-t border-white/10 pt-6">
-          <p className="text-xs font-medium text-white/50">
+        <div className="relative z-10 border-t border-white/20 pt-6">
+          <p className="text-xs font-medium text-white/65">
             Built for Indian outpatient clinics
           </p>
         </div>
@@ -150,7 +151,7 @@ export default function LoginPage() {
           <button
             onClick={handleGoogleLogin}
             disabled={loading}
-            className="group flex w-full items-center justify-center gap-3 rounded-xl border border-border bg-card px-4 py-3.5 text-sm font-medium text-foreground shadow-sm transition-all hover:bg-muted hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            className="group flex w-full items-center justify-center gap-3 rounded-xl border-2 border-gray-400 bg-white px-4 py-3.5 text-sm font-medium text-foreground shadow-sm transition-all hover:border-gray-500 hover:bg-gray-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? (
               <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />

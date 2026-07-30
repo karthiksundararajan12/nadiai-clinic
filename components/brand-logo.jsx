@@ -14,6 +14,8 @@ export function BrandLogo({
   layout = "horizontal",
   className,
   textClassName,
+  /** White plate + soft ring so the indigo logo disc stays visible on dark panels. */
+  onDark = false,
   priority = false,
 }) {
   const styles = SIZE_STYLES[size] ?? SIZE_STYLES.md;
@@ -29,24 +31,43 @@ export function BrandLogo({
           : isIconOnly
             ? "justify-center"
             : "w-full flex-row justify-start",
-        className
+        className,
       )}
     >
-      <Image
-        src="/logo.png"
-        alt="Nadi AI"
-        width={512}
-        height={512}
-        priority={priority}
-        unoptimized
-        className={cn("shrink-0 object-contain", styles.image)}
-      />
+      {onDark ? (
+        <span
+          className={cn(
+            "inline-flex shrink-0 items-center justify-center rounded-full bg-white p-0.5",
+            "shadow-[0_0_0_3px_rgba(255,255,255,0.18)] ring-1 ring-white/90",
+          )}
+        >
+          <Image
+            src="/logo.png"
+            alt={showText ? "" : "Nadi AI"}
+            width={512}
+            height={512}
+            priority={priority}
+            unoptimized
+            className={cn("shrink-0 rounded-full object-contain", styles.image)}
+          />
+        </span>
+      ) : (
+        <Image
+          src="/logo.png"
+          alt="Nadi AI"
+          width={512}
+          height={512}
+          priority={priority}
+          unoptimized
+          className={cn("shrink-0 object-contain", styles.image)}
+        />
+      )}
       {showText && (
         <span
           className={cn(
             "font-display font-semibold text-foreground",
             styles.text,
-            textClassName
+            textClassName,
           )}
         >
           Nadi AI

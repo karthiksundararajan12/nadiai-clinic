@@ -1,5 +1,7 @@
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://github.com/vercel/next.js/tree/canary/packages/create-next-app).
 
+Before every doctor-facing demo: `node scripts/e2e-smoke-test.mjs` (see [docs/pre-demo-checklist.md](docs/pre-demo-checklist.md)).
+
 ## Getting Started
 
 First, run the development server:

@@ -10,6 +10,7 @@
     "test": "npm run test:unit",
     "test:unit": "node --test --test-reporter spec 'features/**/*.test.js' 'lib/**/*.test.js' 'scripts/**/*.test.js'",
     "backfill:vaccination-schedules": "node scripts/backfill-vaccination-schedules.mjs",
+    "test:e2e:smoke-booking": "node scripts/e2e-smoke-test.mjs",
     "e2e:fixtures": "node e2e/scripts/ensure-fixtures.mjs",
     "test:e2e": "playwright test --project=smoke",
     "test:e2e:full": "npm run e2e:fixtures && playwright test --project=setup --project=scribe-full",

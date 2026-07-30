@@ -3,8 +3,12 @@ import {
   formatPhoneForDisplay,
   normalizePhoneForWhatsApp,
 } from "../booking/lib/phone.js";
+import { formatAppointmentStatusLabel } from "../booking/lib/appointment-list.js";
+import { formatPaymentStatusLabel } from "../booking/lib/payment-list.js";
+import { formatSlotLabel } from "../booking/lib/slot-engine.js";
 import { createLogger } from "../booking/logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../booking/lib/alerting.js";
+import { resolvePatientRegisteredDateRange } from "./lib/patient-list.js";
 
 const log = createLogger({ component: "PatientsService" });
 
@@ -129,6 +133,68 @@ function formatPatientRow(patient, visitIndex) {
   };
 }
 
+/**
+ * Same VISIT_STATUSES semantics as buildVisitIndex, but scoped to a single
+ * page/batch of appointments and computing a count (total visits) rather
+ * than an upcoming-visit lookahead — used by listPaginated, which only
+ * needs "last appointment" + "total visits" per row, not the full
+ * last/upcoming split the clinic-wide list() view uses.
+ */
+function buildVisitStatsByPatient(appointments, nowMs) {
+  const lastAppointmentByPatient = new Map();
+  const totalVisitsByPatient = new Map();
+
+  for (const appointment of appointments) {
+    if (!appointment.patient_id || !VISIT_STATUSES.has(appointment.status)) {
+      continue;
+    }
+    const slotMs = Date.parse(appointment.slot_start);
+    if (!Number.isFinite(slotMs) || slotMs > nowMs) continue;
+
+    const patientId = appointment.patient_id;
+    totalVisitsByPatient.set(patientId, (totalVisitsByPatient.get(patientId) ?? 0) + 1);
+
+    const current = lastAppointmentByPatient.get(patientId);
+    if (!current || slotMs > Date.parse(current)) {
+      lastAppointmentByPatient.set(patientId, appointment.slot_start);
+    }
+  }
+
+  return { lastAppointmentByPatient, totalVisitsByPatient };
+}
+
+/**
+ * Same IST-aware slot formatting appointments/payments already use for
+ * their "Slot"/"Appointment" columns (formatSlotLabel) — reused here rather
+ * than a new date-only formatter, so "Last Appointment" reads consistently
+ * with the rest of the dashboard.
+ */
+function formatVisitSlotLabel(iso) {
+  if (!iso) return null;
+  const slotStart = new Date(iso);
+  return Number.isNaN(slotStart.getTime()) ? null : formatSlotLabel(slotStart);
+}
+
+function formatAppointmentHistoryRow(row) {
+  const slotStart = row.slot_start ? new Date(row.slot_start) : null;
+  return {
+    id: row.id,
+    slotStart: row.slot_start,
+    slotLabel: slotStart && !Number.isNaN(slotStart.getTime())
+      ? formatSlotLabel(slotStart)
+      : null,
+    status: row.status,
+    statusLabel: formatAppointmentStatusLabel(row.status),
+    paymentStatus: row.payment_status,
+    paymentStatusLabel:
+      !row.payment_status || row.payment_status === "not_required"
+        ? "—"
+        : formatPaymentStatusLabel(row.payment_status),
+    amount: row.payment_amount,
+    createdAt: row.created_at,
+  };
+}
+
 function buildStats(patients, visitIndex) {
   let withUpcomingVisit = 0;
   let noAppointmentsYet = 0;
@@ -204,6 +270,123 @@ export class PatientsService {
       id: patient.id,
       name: patient.full_name,
     }));
+  }
+
+  /**
+   * Paginated, searchable, filterable clinic patient list for the dashboard
+   * table — same shape/approach as AppointmentsService.listPaginated /
+   * PaymentsService.list (server-side search + date range + limit/offset,
+   * with an exact total for pagination).
+   *
+   * @param {string} clinicId
+   * @param {{
+   *   search?: string|null;
+   *   range?: string|null;
+   *   from?: string|null;
+   *   to?: string|null;
+   *   limit?: number;
+   *   offset?: number;
+   * }} [filters]
+   * @param {Date} [now]
+   */
+  async listPaginated(clinicId, {
+    search = null,
+    range = "all",
+    from = null,
+    to = null,
+    limit = 20,
+    offset = 0,
+  } = {}, now = new Date()) {
+    const { fromIso, toIso } = resolvePatientRegisteredDateRange(range, { from, to });
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+
+    const { rows, total } = await this._patients.listForClinic(clinicId, {
+      search,
+      fromIso,
+      toIso,
+      limit: safeLimit,
+      offset: safeOffset,
+    });
+
+    const patientIds = rows.map((row) => row.id);
+    let visitAppointments = [];
+    try {
+      visitAppointments = patientIds.length > 0
+        ? await this._appointments.findForPatients(clinicId, patientIds)
+        : [];
+    } catch {
+      // Visit metadata is best-effort — patient rows must still load if the
+      // appointments query fails (same trade-off as list()).
+    }
+    const { lastAppointmentByPatient, totalVisitsByPatient } =
+      buildVisitStatsByPatient(visitAppointments, now.getTime());
+
+    const patients = rows.map((row) => {
+      const lastAppointment = lastAppointmentByPatient.get(row.id) ?? null;
+      return {
+        id: row.id,
+        name: row.full_name,
+        phone: formatPhoneForDisplay(row.contact_phone),
+        age: row.age_years ?? null,
+        gender: row.gender ?? null,
+        dateOfBirth: row.date_of_birth ?? null,
+        dateOfBirthIsApproximate: row.date_of_birth_is_approximate ?? false,
+        lastAppointment,
+        lastAppointmentLabel: formatVisitSlotLabel(lastAppointment),
+        totalVisits: totalVisitsByPatient.get(row.id) ?? 0,
+        createdAt: row.created_at ?? null,
+      };
+    });
+
+    return {
+      patients,
+      total,
+      limit: safeLimit,
+      offset: safeOffset,
+      hasMore: safeOffset + patients.length < total,
+    };
+  }
+
+  /**
+   * Single clinic-scoped patient plus their full appointment history, for
+   * the /patients/[id] detail page. Vaccination schedule is fetched
+   * separately by VaccinationsService (features/vaccinations) — kept out of
+   * this feature the same way PatientsService.create only *triggers*
+   * vaccination seeding via an injected service, never queries vaccination
+   * data itself.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   */
+  async getDetail(clinicId, patientId) {
+    const patient = await this._patients.findById(clinicId, patientId);
+    if (!patient) {
+      throw new PatientRequestError("Patient not found", 404);
+    }
+
+    const appointments = await this._appointments.findForPatient(clinicId, patientId);
+    const appointmentHistory = appointments.map((row) => formatAppointmentHistoryRow(row));
+    const { lastAppointmentByPatient, totalVisitsByPatient } =
+      buildVisitStatsByPatient(appointments, Date.now());
+    const lastAppointment = lastAppointmentByPatient.get(patient.id) ?? null;
+
+    return {
+      patient: {
+        id: patient.id,
+        name: patient.full_name,
+        age: patient.age_years ?? null,
+        gender: patient.gender ?? null,
+        dateOfBirth: patient.date_of_birth ?? null,
+        dateOfBirthIsApproximate: patient.date_of_birth_is_approximate ?? false,
+        phone: formatPhoneForDisplay(patient.contact_phone),
+        lastAppointment,
+        lastAppointmentLabel: formatVisitSlotLabel(lastAppointment),
+        totalVisits: totalVisitsByPatient.get(patient.id) ?? 0,
+        createdAt: patient.created_at ?? null,
+      },
+      appointmentHistory,
+    };
   }
 
   /**

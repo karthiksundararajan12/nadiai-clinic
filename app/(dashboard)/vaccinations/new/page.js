@@ -15,8 +15,10 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { usePatients } from "@/hooks/use-patients";
 import { cn } from "@/lib/utils";
+import { IAP_VACCINE_NAMES } from "@/lib/iap-schedule";
 
 function todayDateKey() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -127,12 +129,14 @@ export default function NewVaccinationPage() {
 
             <div className="space-y-2">
               <Label htmlFor="vaccination-name">Vaccine name</Label>
-              <Input
+              <Combobox
                 id="vaccination-name"
-                placeholder="e.g. MMR (2nd dose)"
+                placeholder="e.g. MMR - 2 or a custom entry"
                 value={vaccineName}
+                onValueChange={setVaccineName}
+                options={IAP_VACCINE_NAMES}
                 disabled={saving}
-                onChange={(e) => setVaccineName(e.target.value)}
+                emptyMessage="No IAP vaccine matches — this will be saved as a custom entry."
               />
             </div>
 

@@ -14,13 +14,17 @@ const PATIENT = {
   date_of_birth_is_approximate: true,
 };
 
-function createService({ patient = PATIENT, listResult, createResult } = {}) {
-  const calls = { listForClinic: [], create: [], findById: [] };
+function createService({ patient = PATIENT, listResult, createResult, listForPatientResult } = {}) {
+  const calls = { listForClinic: [], create: [], findById: [], listForPatient: [] };
 
   const vaccinationRepository = {
     async listForClinic(clinicId, filters) {
       calls.listForClinic.push({ clinicId, filters });
       return listResult ?? { rows: [], total: 0 };
+    },
+    async listForPatient(clinicId, patientId) {
+      calls.listForPatient.push({ clinicId, patientId });
+      return listForPatientResult ?? [];
     },
     async create(data) {
       calls.create.push(data);
@@ -198,4 +202,42 @@ test("create writes a validated vaccination row and returns the formatted result
   // date_of_birth_is_approximate: true), since the freshly-inserted
   // vaccination_schedules row has no patient join of its own.
   assert.equal(result.vaccination.patientDateOfBirthIsApproximate, true);
+});
+
+test("listForPatient returns the clinic-scoped patient's schedule with patient fields overlaid", async () => {
+  const { service, calls } = createService({
+    listForPatientResult: [
+      {
+        id: "vacc-1",
+        patient_id: "patient-1",
+        vaccine_name: "BCG",
+        due_date: "2026-01-15",
+        status: "completed",
+        reminder_sent_at: null,
+        completed_at: "2026-01-16T00:00:00.000Z",
+        created_at: "2025-12-01T10:00:00.000Z",
+      },
+    ],
+  });
+
+  const result = await service.listForPatient(CLINIC_A, "patient-1");
+
+  assert.equal(calls.findById[0].clinicId, CLINIC_A);
+  assert.equal(calls.findById[0].patientId, "patient-1");
+  assert.equal(calls.listForPatient[0].clinicId, CLINIC_A);
+  assert.equal(calls.listForPatient[0].patientId, "patient-1");
+  assert.equal(result.length, 1);
+  assert.equal(result[0].vaccineName, "BCG");
+  assert.equal(result[0].statusLabel, "Completed");
+  assert.equal(result[0].patientName, "Asha Kumar");
+  assert.equal(result[0].patientDateOfBirthIsApproximate, true);
+});
+
+test("listForPatient is scoped to the clinic — a patient from another clinic 404s", async () => {
+  const { service } = createService();
+
+  await assert.rejects(
+    () => service.listForPatient(CLINIC_B, "patient-1"),
+    (error) => error instanceof VaccinationRequestError && error.statusCode === 404,
+  );
 });

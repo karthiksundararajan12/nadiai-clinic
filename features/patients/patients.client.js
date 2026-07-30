@@ -22,6 +22,17 @@ export async function fetchPatients({ signal, query } = {}) {
   );
 }
 
+/**
+ * @param {string} patientId
+ */
+export async function fetchPatientDetail(patientId) {
+  return readResponse(
+    await fetch(`/api/patients/${encodeURIComponent(patientId)}`, {
+      cache: "no-store",
+    }),
+  );
+}
+
 export async function createPatient(input) {
   return readResponse(
     await fetch("/api/patients", {

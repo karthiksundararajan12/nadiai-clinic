@@ -172,6 +172,27 @@ export class VaccinationRepository extends BaseRepository {
   }
 
   /**
+   * Full vaccination schedule for one patient (detail page), soonest due
+   * date first — no pagination needed at per-patient scale.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<object[]>}
+   */
+  async listForPatient(clinicId, patientId) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("id, patient_id, vaccine_name, due_date, status, reminder_sent_at, completed_at, created_at")
+          .eq("clinic_id", clinicId)
+          .eq("patient_id", patientId)
+          .order("due_date", { ascending: true }),
+      "listForPatient",
+    );
+  }
+
+  /**
    * Bulk-inserts one row per entry, all status='pending' (DB default) —
    * used by VaccinationSeedingService (IAP auto-seed on patient creation,
    * and the one-time backfill script) to write a whole immunization

@@ -1,16 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { format, formatDistanceToNow } from "date-fns";
+import { Users, ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
 import { ApproximateDobBadge } from "@/components/shared/approximate-dob-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -18,57 +25,35 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { usePatients } from "@/hooks/use-patients";
-import {
-  Plus,
-  Users,
-  Phone,
-  Calendar,
-  CalendarClock,
-  Cake,
-  Loader2,
-} from "lucide-react";
+import { createPatient } from "@/features/patients/patients.client";
 
-function patientInitials(name) {
-  return String(name ?? "")
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((part) => part[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase() || "?";
-}
+const PAGE_SIZE = 20;
+const DEBOUNCE_MS = 300;
 
-function formatVisitDate(isoValue) {
-  if (!isoValue) return "No visits yet";
-  return new Date(isoValue).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
-
-function formatGenderAge(patient) {
-  const parts = [];
-  if (patient.age != null) parts.push(`${patient.age} yrs`);
-  if (patient.gender) parts.push(patient.gender);
-  return parts.length > 0 ? parts.join(" · ") : "Details not recorded";
-}
-
-function formatDob(isoValue) {
-  if (!isoValue) return null;
-  return new Date(isoValue).toLocaleDateString("en-IN", {
-    day: "numeric",
-    month: "short",
-    year: "numeric",
-  });
-}
+const RANGE_OPTIONS = [
+  { value: "all", label: "All time" },
+  { value: "today", label: "Today" },
+  { value: "week", label: "This week" },
+  { value: "month", label: "This month" },
+  { value: "custom", label: "Custom range" },
+];
 
 export default function PatientsPage() {
-  const { patients, stats, loading, error, addPatient } = usePatients();
+  const router = useRouter();
+
+  const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
+  const [range, setRange] = useState("all");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [offset, setOffset] = useState(0);
+  const [patients, setPatients] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [hasMore, setHasMore] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [viewMode, setViewMode] = useState("grid");
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [newPatient, setNewPatient] = useState({
@@ -79,34 +64,76 @@ export default function PatientsPage() {
     phone: "",
   });
 
-  const filteredPatients = patients.filter((patient) => {
-    const query = search.trim().toLowerCase();
-    if (!query) return true;
-    return (
-      patient.name.toLowerCase().includes(query) ||
-      patient.phone.replace(/\s+/g, "").includes(query.replace(/\s+/g, ""))
-    );
-  });
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+      setOffset(0);
+    }, DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
 
-  const handleAddPatient = async () => {
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const params = new URLSearchParams();
+      params.set("limit", String(PAGE_SIZE));
+      params.set("offset", String(offset));
+      params.set("range", range);
+      if (search) params.set("search", search);
+      if (range === "custom") {
+        if (from) params.set("from", from);
+        if (to) params.set("to", to);
+      }
+
+      const response = await fetch(`/api/patients?${params.toString()}`, {
+        cache: "no-store",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to load patients");
+      }
+      setPatients(Array.isArray(payload.patients) ? payload.patients : []);
+      setTotal(Number(payload.total) || 0);
+      setHasMore(Boolean(payload.hasMore));
+    } catch (loadError) {
+      setError(loadError);
+      setPatients([]);
+      setTotal(0);
+      setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [offset, range, search, from, to]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  function updateRange(next) {
+    setRange(next);
+    setOffset(0);
+  }
+
+  async function handleAddPatient() {
     setSaveError("");
     setSaving(true);
     try {
-      await addPatient(newPatient);
-      setNewPatient({
-        name: "",
-        age: "",
-        gender: "Male",
-        dateOfBirth: "",
-        phone: "",
-      });
+      await createPatient(newPatient);
+      setNewPatient({ name: "", age: "", gender: "Male", dateOfBirth: "", phone: "" });
       setDialogOpen(false);
-    } catch (saveErr) {
-      setSaveError(saveErr.message);
+      await load();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
-  };
+  }
+
+  const pageStart = total === 0 ? 0 : offset + 1;
+  const pageEnd = Math.min(offset + patients.length, total);
+  const canPrev = offset > 0;
+  const canNext = hasMore;
 
   return (
     <>
@@ -115,46 +142,82 @@ export default function PatientsPage() {
         subtitle="Manage your clinic's patient records"
       />
 
-      <div className="flex-1 p-6 space-y-6">
-        {(error || saveError) && (
-          <p className="text-sm text-destructive">{saveError || error?.message}</p>
-        )}
-
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
+      <div className="flex-1 space-y-4 p-6">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end">
             <SearchInput
-              value={search}
-              onChange={setSearch}
-              placeholder="Search by name or phone..."
-              className="w-64"
+              value={searchInput}
+              onChange={setSearchInput}
+              placeholder="Search by name or phone…"
+              className="w-full sm:w-72"
             />
-            <Badge variant="secondary" className="hidden sm:flex">
-              {loading ? "Loading…" : `${filteredPatients.length} patients`}
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <div className="flex rounded-lg border border-border overflow-hidden">
-              <button
-                onClick={() => setViewMode("grid")}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  viewMode === "grid"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                Grid
-              </button>
-              <button
-                onClick={() => setViewMode("list")}
-                className={`px-3 py-1.5 text-xs font-medium transition-colors ${
-                  viewMode === "list"
-                    ? "bg-primary text-primary-foreground"
-                    : "bg-background text-muted-foreground hover:bg-muted"
-                }`}
-              >
-                List
-              </button>
+
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Registered</Label>
+              <Select value={range} onValueChange={updateRange}>
+                {({ open, setOpen, value, onValueChange }) => (
+                  <>
+                    <SelectTrigger
+                      open={open}
+                      onClick={() => setOpen(!open)}
+                      className="w-[160px]"
+                    >
+                      {RANGE_OPTIONS.find((o) => o.value === value)?.label ?? "Date"}
+                    </SelectTrigger>
+                    <SelectContent open={open}>
+                      {RANGE_OPTIONS.map((option) => (
+                        <SelectItem
+                          key={option.value}
+                          value={option.value}
+                          selected={option.value === value}
+                          onSelect={() => {
+                            onValueChange(option.value);
+                            setOpen(false);
+                          }}
+                        >
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </>
+                )}
+              </Select>
             </div>
+
+            {range === "custom" && (
+              <div className="flex flex-wrap items-end gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Input
+                    type="date"
+                    value={from}
+                    onChange={(e) => {
+                      setFrom(e.target.value);
+                      setOffset(0);
+                    }}
+                    className="w-[150px]"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Input
+                    type="date"
+                    value={to}
+                    onChange={(e) => {
+                      setTo(e.target.value);
+                      setOffset(0);
+                    }}
+                    className="w-[150px]"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {loading ? "Loading…" : `${total} patient${total === 1 ? "" : "s"}`}
+            </p>
             <Button
               size="sm"
               className="gap-1.5"
@@ -163,293 +226,263 @@ export default function PatientsPage() {
                 setDialogOpen(true);
               }}
             >
-              <Plus className="h-3.5 w-3.5" />
+              <Plus className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
               Add Patient
             </Button>
           </div>
         </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-primary/10 p-2">
-                <Users className="h-4 w-4 text-primary" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {loading ? "—" : stats.totalPatients}
-                </p>
-                <p className="text-xs text-muted-foreground">Total Patients</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg bg-success/10 p-2">
-                <CalendarClock className="h-4 w-4 text-success" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {loading ? "—" : stats.withUpcomingVisit}
-                </p>
-                <p className="text-xs text-muted-foreground">Upcoming Visits</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="rounded-lg border border-gray-200 bg-white p-2">
-                <Calendar className="h-4 w-4 text-muted-foreground" />
-              </div>
-              <div>
-                <p className="text-2xl font-bold">
-                  {loading ? "—" : stats.noAppointmentsYet}
-                </p>
-                <p className="text-xs text-muted-foreground">No Appointments Yet</p>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center py-16 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading patients…
-          </div>
-        ) : filteredPatients.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title={patients.length === 0 ? "No patients yet" : "No patients found"}
-            description={
-              patients.length === 0
-                ? "Add your first patient or wait for bookings to create records automatically."
-                : "Try adjusting your search."
-            }
-            action={
-              patients.length === 0 ? (
-                <Button size="sm" onClick={() => setDialogOpen(true)}>
-                  <Plus className="h-3.5 w-3.5 mr-1.5" />
-                  Add Patient
-                </Button>
-              ) : null
-            }
-          />
-        ) : viewMode === "grid" ? (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {filteredPatients.map((patient) => (
-              <Card
-                key={patient.id}
-                className="group transition-shadow hover:shadow-md"
-              >
-                <CardContent className="p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="h-11 w-11">
-                        <AvatarFallback>{patientInitials(patient.name)}</AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <p className="text-sm font-semibold">{patient.name}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatGenderAge(patient)}
-                        </p>
-                      </div>
-                    </div>
-                    {patient.upcomingVisit && (
-                      <Badge variant="success" className="text-[10px]">
-                        Upcoming
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="mt-4 space-y-2">
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Phone className="h-3 w-3" />
-                      <span>{patient.phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <Calendar className="h-3 w-3" />
-                      <span>Last visit: {formatVisitDate(patient.lastVisit)}</span>
-                    </div>
-                    {patient.dateOfBirth && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <Cake className="h-3 w-3" />
-                        <span>DOB: {formatDob(patient.dateOfBirth)}</span>
-                        {patient.dateOfBirthIsApproximate && <ApproximateDobBadge />}
-                      </div>
-                    )}
-                    {patient.upcomingVisit && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <CalendarClock className="h-3 w-3" />
-                        <span>
-                          Next visit: {formatVisitDate(patient.upcomingVisit)}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        ) : (
-          <Card>
-            <div className="divide-y divide-border">
-              {filteredPatients.map((patient) => (
-                <div
-                  key={patient.id}
-                  className="flex items-center gap-4 p-4 transition-colors hover:bg-muted/50"
-                >
-                  <Avatar className="h-10 w-10">
-                    <AvatarFallback>{patientInitials(patient.name)}</AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium truncate">{patient.name}</p>
-                      {patient.upcomingVisit && (
-                        <Badge variant="success" className="text-[10px]">
-                          Upcoming
-                        </Badge>
-                      )}
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      {formatGenderAge(patient)}
-                    </p>
-                  </div>
-                  <div className="hidden sm:flex items-center gap-4 text-xs text-muted-foreground">
-                    <span className="flex items-center gap-1">
-                      <Phone className="h-3 w-3" />
-                      {patient.phone}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatVisitDate(patient.lastVisit)}
-                    </span>
-                    {patient.dateOfBirth && (
-                      <span className="flex items-center gap-1.5">
-                        <Cake className="h-3 w-3" />
-                        {formatDob(patient.dateOfBirth)}
-                        {patient.dateOfBirthIsApproximate && <ApproximateDobBadge />}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
+        {error && (
+          <p className="text-sm text-destructive">{error.message}</p>
         )}
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogContent onClose={() => setDialogOpen(false)}>
-            <DialogHeader>
-              <DialogTitle>Add New Patient</DialogTitle>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="patient-name">Full Name</Label>
-                <Input
-                  id="patient-name"
-                  placeholder="Enter patient's full name"
-                  value={newPatient.name}
-                  disabled={saving}
-                  onChange={(e) =>
-                    setNewPatient((prev) => ({ ...prev, name: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label htmlFor="patient-age">Age (optional)</Label>
-                  <Input
-                    id="patient-age"
-                    type="number"
-                    min={0}
-                    max={150}
-                    placeholder="Age"
-                    value={newPatient.age}
-                    disabled={saving}
-                    onChange={(e) =>
-                      setNewPatient((prev) => ({
-                        ...prev,
-                        age: e.target.value,
-                      }))
-                    }
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Gender (optional)</Label>
-                  <div className="flex gap-2">
-                    {["Male", "Female", "Other"].map((g) => (
-                      <button
-                        key={g}
-                        type="button"
-                        disabled={saving}
-                        onClick={() =>
-                          setNewPatient((prev) => ({ ...prev, gender: g }))
-                        }
-                        className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
-                          newPatient.gender === g
-                            ? "border-primary bg-primary/10 text-primary"
-                            : "border-border text-muted-foreground hover:bg-muted"
-                        }`}
-                      >
-                        {g}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="patient-dob">Date of Birth (optional)</Label>
-                <Input
-                  id="patient-dob"
-                  type="date"
-                  max={new Date().toISOString().slice(0, 10)}
-                  value={newPatient.dateOfBirth}
-                  disabled={saving}
-                  onChange={(e) =>
-                    setNewPatient((prev) => ({
-                      ...prev,
-                      dateOfBirth: e.target.value,
-                    }))
-                  }
-                />
-                <p className="text-xs text-muted-foreground">
-                  For pediatric clinics, this automatically schedules the standard IAP vaccination reminders.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="patient-phone">Phone Number</Label>
-                <Input
-                  id="patient-phone"
-                  placeholder="+91 98765 43210"
-                  value={newPatient.phone}
-                  disabled={saving}
-                  onChange={(e) =>
-                    setNewPatient((prev) => ({
-                      ...prev,
-                      phone: e.target.value,
-                    }))
-                  }
-                />
+        {loading ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            Loading patients…
+          </p>
+        ) : patients.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title="No patients found"
+            description="Try adjusting search or filters. Add your first patient or wait for bookings to create records automatically."
+            action={
+              <Button size="sm" onClick={() => setDialogOpen(true)}>
+                <Plus className={`${ICON_SIZE_SM} mr-1.5`} strokeWidth={ICON_STROKE} />
+                Add Patient
+              </Button>
+            }
+          />
+        ) : (
+          <div className="overflow-hidden rounded-xl border border-border bg-white">
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] text-left text-sm">
+                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Phone</th>
+                    <th className="px-4 py-3 font-medium">Age / DOB</th>
+                    <th className="px-4 py-3 font-medium">Last Appointment</th>
+                    <th className="px-4 py-3 font-medium">Total Visits</th>
+                    <th className="px-4 py-3 font-medium">Registered On</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {patients.map((patient) => (
+                    <tr
+                      key={patient.id}
+                      className="cursor-pointer hover:bg-muted/30"
+                      onClick={() => router.push(`/patients/${patient.id}`)}
+                    >
+                      <td className="px-4 py-3 font-medium text-foreground">
+                        {patient.name}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {patient.phone || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        <span>{formatAgeDob(patient)}</span>
+                        {patient.dateOfBirthIsApproximate && (
+                          <ApproximateDobBadge className="ml-1.5" />
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-muted-foreground">
+                        {patient.lastAppointmentLabel ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-foreground">
+                        {patient.totalVisits}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <div title={formatAbsolute(patient.createdAt)}>
+                          {formatRelative(patient.createdAt)}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border px-4 py-3">
+              <p className="text-xs text-muted-foreground">
+                Showing {pageStart}–{pageEnd} of {total}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canPrev || loading}
+                  onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
+                  className="gap-1"
+                >
+                  <ChevronLeft className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
+                  Prev
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={!canNext || loading}
+                  onClick={() => setOffset(offset + PAGE_SIZE)}
+                  className="gap-1"
+                >
+                  Next
+                  <ChevronRight className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
+                </Button>
               </div>
             </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                disabled={saving}
-                onClick={() => setDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={handleAddPatient}
-                disabled={saving || !newPatient.name.trim() || !newPatient.phone.trim()}
-              >
-                {saving ? "Saving…" : "Add Patient"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          </div>
+        )}
       </div>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent onClose={() => setDialogOpen(false)}>
+          <DialogHeader>
+            <DialogTitle>Add New Patient</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="patient-name">Full Name</Label>
+              <Input
+                id="patient-name"
+                placeholder="Enter patient's full name"
+                value={newPatient.name}
+                disabled={saving}
+                onChange={(e) =>
+                  setNewPatient((prev) => ({ ...prev, name: e.target.value }))
+                }
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="patient-age">Age (optional)</Label>
+                <Input
+                  id="patient-age"
+                  type="number"
+                  min={0}
+                  max={150}
+                  placeholder="Age"
+                  value={newPatient.age}
+                  disabled={saving}
+                  onChange={(e) =>
+                    setNewPatient((prev) => ({
+                      ...prev,
+                      age: e.target.value,
+                    }))
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Gender (optional)</Label>
+                <div className="flex gap-2">
+                  {["Male", "Female", "Other"].map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      disabled={saving}
+                      onClick={() =>
+                        setNewPatient((prev) => ({ ...prev, gender: g }))
+                      }
+                      className={`flex-1 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
+                        newPatient.gender === g
+                          ? "border-primary bg-primary/10 text-primary"
+                          : "border-border text-muted-foreground hover:bg-muted"
+                      }`}
+                    >
+                      {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patient-dob">Date of Birth (optional)</Label>
+              <Input
+                id="patient-dob"
+                type="date"
+                max={new Date().toISOString().slice(0, 10)}
+                value={newPatient.dateOfBirth}
+                disabled={saving}
+                onChange={(e) =>
+                  setNewPatient((prev) => ({
+                    ...prev,
+                    dateOfBirth: e.target.value,
+                  }))
+                }
+              />
+              <p className="text-xs text-muted-foreground">
+                For pediatric clinics, this automatically schedules the standard IAP vaccination reminders.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="patient-phone">Phone Number</Label>
+              <Input
+                id="patient-phone"
+                placeholder="+91 98765 43210"
+                value={newPatient.phone}
+                disabled={saving}
+                onChange={(e) =>
+                  setNewPatient((prev) => ({
+                    ...prev,
+                    phone: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            {saveError && (
+              <p className="text-sm text-destructive">{saveError}</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={saving}
+              onClick={() => setDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleAddPatient}
+              disabled={saving || !newPatient.name.trim() || !newPatient.phone.trim()}
+            >
+              {saving ? "Saving…" : "Add Patient"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
+}
+
+function formatAgeDob(patient) {
+  const parts = [];
+  if (patient.age != null) parts.push(`${patient.age} yrs`);
+  if (patient.dateOfBirth) parts.push(formatDateOnly(patient.dateOfBirth));
+  return parts.length > 0 ? parts.join(" · ") : "—";
+}
+
+function formatDateOnly(isoDate) {
+  try {
+    return format(new Date(isoDate), "dd MMM yyyy");
+  } catch {
+    return isoDate ?? "";
+  }
+}
+
+function formatRelative(iso) {
+  if (!iso) return "—";
+  try {
+    return formatDistanceToNow(new Date(iso), { addSuffix: true });
+  } catch {
+    return "";
+  }
+}
+
+function formatAbsolute(iso) {
+  if (!iso) return "";
+  try {
+    return format(new Date(iso), "dd MMM yyyy, h:mm a");
+  } catch {
+    return iso ?? "";
+  }
 }

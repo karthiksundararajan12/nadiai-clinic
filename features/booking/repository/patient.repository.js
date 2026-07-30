@@ -10,6 +10,7 @@
 
 import { BaseRepository } from "./base.repository.js";
 import { DatabaseError } from "../errors.js";
+import { escapeIlikePattern } from "../lib/payment-list.js";
 
 /**
  * @typedef {Object} BookingPatient
@@ -144,6 +145,70 @@ export class PatientRepository extends BaseRepository {
     }
 
     return all;
+  }
+
+  /**
+   * Paginated, searchable clinic patient list for the dashboard table
+   * (same shape/approach as PaymentRepository.listForClinic /
+   * AppointmentRepository.listForClinicDashboard) — search matches name or
+   * phone, optional registered-on (`created_at`) date range, limit/offset
+   * with an exact count for pagination.
+   *
+   * @param {string} clinicId
+   * @param {{
+   *   search?: string|null;
+   *   fromIso?: string|null;
+   *   toIso?: string|null;
+   *   limit?: number;
+   *   offset?: number;
+   * }} [filters]
+   * @returns {Promise<{ rows: object[]; total: number }>}
+   */
+  async listForClinic(clinicId, {
+    search = null,
+    fromIso = null,
+    toIso = null,
+    limit = 20,
+    offset = 0,
+  } = {}) {
+    const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
+    const safeOffset = Math.max(Number(offset) || 0, 0);
+    const q = typeof search === "string" ? search.trim() : "";
+
+    let query = this._db
+      .from(this._table)
+      .select(
+        "id, full_name, contact_phone, age_years, date_of_birth, date_of_birth_is_approximate, gender, created_at",
+        { count: "exact" },
+      )
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .range(safeOffset, safeOffset + safeLimit - 1);
+
+    if (fromIso) query = query.gte("created_at", fromIso);
+    if (toIso) query = query.lte("created_at", toIso);
+
+    if (q) {
+      const pattern = `%${escapeIlikePattern(q)}%`;
+      const digits = q.replace(/\D/g, "");
+      const phonePattern = digits.length >= 3 ? `%${escapeIlikePattern(digits)}%` : pattern;
+      query = query.or(`full_name.ilike.${pattern},contact_phone.ilike.${phonePattern}`);
+    }
+
+    const { data, error, count } = await query;
+
+    if (error) {
+      this._log.error("DB error during listForClinic", {
+        operation: "listForClinic",
+        table: this._table,
+        code: error.code,
+        details: error.details,
+      });
+      throw new DatabaseError("listForClinic", error);
+    }
+
+    return { rows: data ?? [], total: count ?? (data ?? []).length };
   }
 
   /**

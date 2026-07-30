@@ -46,6 +46,21 @@ async function resolvePatientsService() {
   );
 }
 
+/**
+ * GET /api/patients — clinic patients.
+ *
+ * Two response shapes, kept side by side for backward compatibility with
+ * existing callers (Scribe's PatientSelector, the dashboard's Add Patient
+ * autocomplete):
+ *
+ *   - No params, or `?q=` only → legacy `{ patients, stats }` (unpaginated,
+ *     in-memory search over the whole clinic — see PatientsService.list /
+ *     .search).
+ *   - Any of `search` / `range` / `from` / `to` / `limit` / `offset` →
+ *     paginated dashboard-table shape `{ patients, total, limit, offset,
+ *     hasMore }` (same pattern as GET /api/payments and
+ *     GET /api/appointments) — see PatientsService.listPaginated.
+ */
 export async function GET(request) {
   try {
     const ctx = await resolveRequestContext(request);
@@ -55,8 +70,30 @@ export async function GET(request) {
 
     const service = await resolvePatientsService();
     const params = new URL(request.url).searchParams;
-    const query = params.get("q");
 
+    const hasListParams =
+      params.has("search") ||
+      params.has("range") ||
+      params.has("from") ||
+      params.has("to") ||
+      params.has("limit") ||
+      params.has("offset");
+
+    if (hasListParams) {
+      const limitParam = Number(params.get("limit"));
+      const offsetParam = Number(params.get("offset"));
+      const result = await service.listPaginated(ctx.clinicId, {
+        search: params.get("search"),
+        range: params.get("range") ?? "all",
+        from: params.get("from"),
+        to: params.get("to"),
+        limit: Number.isFinite(limitParam) ? limitParam : 20,
+        offset: Number.isFinite(offsetParam) ? offsetParam : 0,
+      });
+      return NextResponse.json(result, { status: 200 });
+    }
+
+    const query = params.get("q");
     const result = query
       ? await service.search(ctx.clinicId, query)
       : await service.list(ctx.clinicId);

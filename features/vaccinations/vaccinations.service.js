@@ -129,6 +129,27 @@ export class VaccinationsService {
   }
 
   /**
+   * Full vaccination schedule for one patient (patients/[id] detail page).
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   */
+  async listForPatient(clinicId, patientId) {
+    const patient = await this._patients.findById(clinicId, patientId);
+    if (!patient) {
+      throw new VaccinationRequestError("Patient not found", 404);
+    }
+
+    const rows = await this._vaccinations.listForPatient(clinicId, patientId);
+    return rows.map((row) =>
+      formatVaccinationRow(row, {
+        patientName: patient.full_name,
+        patientDateOfBirthIsApproximate: patient.date_of_birth_is_approximate,
+      }),
+    );
+  }
+
+  /**
    * @param {string} clinicId
    * @param {{ patientId: string; vaccineName: string; dueDate: string }} input
    */

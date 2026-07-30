@@ -190,6 +190,53 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * Full appointment history for one patient (detail page) — newest slot
+   * first. Bounded to 200 rows, which is generous for a per-patient history
+   * view without needing pagination there yet.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<object[]>}
+   */
+  async findForPatient(clinicId, patientId) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("id, patient_id, slot_start, slot_end, status, payment_status, payment_amount, created_at")
+          .eq("clinic_id", clinicId)
+          .eq("patient_id", patientId)
+          .is("deleted_at", null)
+          .order("slot_start", { ascending: false })
+          .limit(200),
+      "findForPatient",
+    );
+  }
+
+  /**
+   * Lightweight visit-stats source (status + slot_start only) for a batch of
+   * patient ids — used by PatientsService.listPaginated to compute each
+   * page row's last-appointment/total-visits in one query instead of N+1.
+   *
+   * @param {string} clinicId
+   * @param {string[]} patientIds
+   * @returns {Promise<Array<{ patient_id: string; slot_start: string; status: string }>>}
+   */
+  async findForPatients(clinicId, patientIds) {
+    if (!patientIds || patientIds.length === 0) return [];
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("patient_id, slot_start, status")
+          .eq("clinic_id", clinicId)
+          .in("patient_id", patientIds)
+          .is("deleted_at", null),
+      "findForPatients",
+    );
+  }
+
+  /**
    * Paginated clinic appointment list for the dashboard table
    * (search / status / slot date range / limit / offset).
    *

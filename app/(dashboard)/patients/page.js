@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { format, formatDistanceToNow } from "date-fns";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { formatDistanceToNow, format } from "date-fns";
 import { Users, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
@@ -25,7 +25,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
-import { createPatient } from "@/features/patients/patients.client";
+import { createPatient, buildHighlightRedirectPath } from "@/features/patients/patients.client";
+import { formatDateOnly } from "@/lib/date-only";
+import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -39,7 +41,28 @@ const RANGE_OPTIONS = [
 ];
 
 export default function PatientsPage() {
+  return (
+    <Suspense
+      fallback={
+        <>
+          <Header
+            title="Patients"
+            subtitle="Manage your clinic's patient records"
+          />
+          <p className="p-6 text-sm text-muted-foreground">Loading patients…</p>
+        </>
+      }
+    >
+      <PatientsPageContent />
+    </Suspense>
+  );
+}
+
+function PatientsPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const highlightId = searchParams.get("highlight");
+  const highlightRef = useRef(null);
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
@@ -110,6 +133,13 @@ export default function PatientsPage() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!highlightId || loading || patients.length === 0) return;
+    const el = highlightRef.current ?? document.getElementById(`patient-${highlightId}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [highlightId, loading, patients]);
+
   function updateRange(next) {
     setRange(next);
     setOffset(0);
@@ -119,10 +149,14 @@ export default function PatientsPage() {
     setSaveError("");
     setSaving(true);
     try {
-      await createPatient(newPatient);
+      const result = await createPatient(newPatient);
       setNewPatient({ name: "", age: "", gender: "Male", dateOfBirth: "", phone: "" });
       setDialogOpen(false);
       await load();
+      const redirectPath = buildHighlightRedirectPath(result.patient?.id);
+      if (redirectPath) {
+        router.push(redirectPath);
+      }
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -267,10 +301,17 @@ export default function PatientsPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {patients.map((patient) => (
+                  {patients.map((patient) => {
+                    const highlighted = highlightId === patient.id;
+                    return (
                     <tr
                       key={patient.id}
-                      className="cursor-pointer hover:bg-muted/30"
+                      id={`patient-${patient.id}`}
+                      ref={highlighted ? highlightRef : null}
+                      className={cn(
+                        "cursor-pointer hover:bg-muted/30",
+                        highlighted && "ring-2 ring-inset ring-primary",
+                      )}
                       onClick={() => router.push(`/patients/${patient.id}`)}
                     >
                       <td className="px-4 py-3 font-medium text-foreground">
@@ -297,7 +338,8 @@ export default function PatientsPage() {
                         </div>
                       </td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -457,16 +499,12 @@ export default function PatientsPage() {
 function formatAgeDob(patient) {
   const parts = [];
   if (patient.age != null) parts.push(`${patient.age} yrs`);
+  // date_of_birth is a date-only "YYYY-MM-DD" column — use the
+  // timezone-safe manual-parse formatter (@/lib/date-only), not date-fns'
+  // `format(new Date(...))`, which round-trips through local-timezone
+  // conversion and can shift the displayed calendar date by a day.
   if (patient.dateOfBirth) parts.push(formatDateOnly(patient.dateOfBirth));
   return parts.length > 0 ? parts.join(" · ") : "—";
-}
-
-function formatDateOnly(isoDate) {
-  try {
-    return format(new Date(isoDate), "dd MMM yyyy");
-  } catch {
-    return isoDate ?? "";
-  }
 }
 
 function formatRelative(iso) {

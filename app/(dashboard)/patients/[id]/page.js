@@ -11,6 +11,7 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ApproximateDobBadge } from "@/components/shared/approximate-dob-badge";
 import { fetchPatientDetail } from "@/features/patients/patients.client";
+import { formatDateOnly } from "@/lib/date-only";
 import { cn } from "@/lib/utils";
 
 const PAYMENT_STATUS_PILL = {
@@ -112,7 +113,7 @@ export default function PatientDetailPage() {
                   <span className="tabular-nums">
                     {patient.totalVisits} visit{patient.totalVisits === 1 ? "" : "s"}
                   </span>
-                  <span>Registered {formatDateOnly(patient.createdAt, true)}</span>
+                  <span>Registered {formatRegisteredOn(patient.createdAt)}</span>
                 </div>
               </div>
 
@@ -262,11 +263,13 @@ function formatAmount(amount) {
   return `₹${Number.isInteger(n) ? String(n) : n.toFixed(2)}`;
 }
 
-function formatDateOnly(iso, relativeToNow = false) {
+// created_at is a real timestamptz (unlike date_of_birth/due_date, which are
+// date-only columns formatted via @/lib/date-only), so round-tripping
+// through `new Date(...)` here is safe.
+function formatRegisteredOn(iso) {
   if (!iso) return "—";
   try {
-    const formatted = format(new Date(iso), "dd MMM yyyy");
-    return relativeToNow ? `on ${formatted}` : formatted;
+    return `on ${format(new Date(iso), "dd MMM yyyy")}`;
   } catch {
     return iso ?? "—";
   }

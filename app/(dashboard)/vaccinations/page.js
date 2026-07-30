@@ -24,6 +24,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { formatDateOnly } from "@/lib/date-only";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -306,7 +307,7 @@ export default function VaccinationsPage() {
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
                         <div className="flex items-center gap-1.5">
-                          <span>{formatDate(vaccination.dueDate)}</span>
+                          <span>{formatDateOnly(vaccination.dueDate)}</span>
                           {vaccination.patientDateOfBirthIsApproximate && <ApproximateDobBadge />}
                         </div>
                       </td>
@@ -369,25 +370,6 @@ export default function VaccinationsPage() {
       </div>
     </>
   );
-}
-
-const DATE_ONLY_MONTH_LABELS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
-// due_date is a date-only "YYYY-MM-DD" string (Postgres `date` column) — do
-// not round-trip it through `new Date(...)` + local formatting, since that
-// renders in whichever timezone the browser/runtime happens to be in and
-// can shift the calendar date by a day. Parse the digits directly instead.
-function formatDate(value) {
-  if (!value) return "—";
-  const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
-  if (!match) return value;
-  const [, year, month, day] = match;
-  const monthLabel = DATE_ONLY_MONTH_LABELS[Number(month) - 1];
-  if (!monthLabel) return value;
-  return `${String(Number(day)).padStart(2, "0")} ${monthLabel} ${year}`;
 }
 
 function formatDateTime(iso) {

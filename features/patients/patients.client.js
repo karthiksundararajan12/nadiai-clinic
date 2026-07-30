@@ -43,6 +43,24 @@ export async function createPatient(input) {
   );
 }
 
+/**
+ * Builds the `/patients?highlight=…` path used to land back on the list
+ * with a newly created patient's row highlighted (same `?highlight=`
+ * mechanism as /appointments — see
+ * features/appointments/appointments.client.js#buildHighlightRedirectPath).
+ * Returns null when there's no id to highlight, so callers can fall back
+ * to a plain refresh.
+ *
+ * @param {string|null|undefined} patientId
+ * @returns {string|null}
+ */
+export function buildHighlightRedirectPath(patientId) {
+  if (typeof patientId !== "string" || patientId.length === 0) {
+    return null;
+  }
+  return `/patients?highlight=${encodeURIComponent(patientId)}`;
+}
+
 /** Normalizes API camelCase fields for Scribe components expecting last_visit. */
 export function toScribePatient(patient) {
   return {

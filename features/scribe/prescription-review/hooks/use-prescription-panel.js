@@ -13,13 +13,17 @@ import {
   MISSING_DOCTOR_REGISTRATION_CODE,
 } from "../../lib/prescription-registration-gate.js";
 
+import {
+  MANUAL_MEDICATION_CONFIDENCE,
+} from "../../lib/prescription-medication-suggestions.js";
+
 const EMPTY_MEDICATION = {
   name: "",
   dosage: "",
   frequency: "1-0-1",
   duration: "",
   instructions: "",
-  confidence: 1,
+  confidence: MANUAL_MEDICATION_CONFIDENCE,
 };
 
 export const EMPTY_PRESCRIPTION_DRAFT = {

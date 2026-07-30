@@ -28,7 +28,7 @@ test("buildDoctorStyleContext summarizes prescribing patterns", () => {
 test("mapGeminiPrescriptionToDraft maps drugs to medications", () => {
   const draft = mapGeminiPrescriptionToDraft(
     {
-      drugs: [{ name: "Azithral", dose: "500mg", frequency: "1-0-0", duration: "3 days", instructions: "after food" }],
+      drugs: [{ name: "Azithral", dose: "500mg", frequency: "1-0-0", duration: "3 days", instructions: "after food", confidence: 0.88 }],
       advice: "rest",
       followup_days: 7,
     },
@@ -37,6 +37,7 @@ test("mapGeminiPrescriptionToDraft maps drugs to medications", () => {
 
   assert.equal(draft.medications[0].name, "Azithral");
   assert.equal(draft.medications[0].dosage, "500mg");
+  assert.equal(draft.medications[0].confidence, 0.88);
   assert.equal(draft.followUpDays, 7);
   assert.equal(draft.advice[0], "rest");
   assert.deepEqual(draft.diagnosis, ["Viral fever"]);

@@ -98,6 +98,7 @@ test("mapGeminiPrescriptionToDraft medicine fields stay plain strings (no schema
           frequency: "OD",
           duration: "3 days",
           instructions: "after food",
+          confidence: 0.8,
         },
       ],
       advice: "rest",
@@ -112,5 +113,6 @@ test("mapGeminiPrescriptionToDraft medicine fields stay plain strings (no schema
   assert.equal(typeof med.frequency, "string");
   assert.equal(typeof med.duration, "string");
   assert.equal(med.instructions, "after food");
+  assert.equal(typeof med.confidence, "number");
   assert.equal(draft.advice[0], "rest");
 });

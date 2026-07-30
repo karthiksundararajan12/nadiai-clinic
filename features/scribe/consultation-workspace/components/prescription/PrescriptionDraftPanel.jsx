@@ -14,6 +14,7 @@ import {
   MISSING_DOCTOR_REGISTRATION_MESSAGE,
   SETTINGS_HREF,
 } from "@/features/scribe/lib/prescription-registration-gate.js";
+import { isAiSuggestedMedication } from "@/features/scribe/lib/prescription-medication-suggestions.js";
 
 export const PRESCRIPTION_FREQUENCY_OPTIONS = Object.freeze([
   "1-0-1",
@@ -257,11 +258,13 @@ function MedicationFields({
     : "";
   const customInstructions =
     med.instructions && !foodValue ? med.instructions : "";
+  const aiSuggested = isAiSuggestedMedication(med);
 
   return (
     <div
       className="relative rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
       data-testid="prescription-medication-card"
+      data-ai-suggested={aiSuggested ? "true" : "false"}
     >
       <button
         type="button"
@@ -271,6 +274,25 @@ function MedicationFields({
       >
         <X className="h-4 w-4" />
       </button>
+      <div className="mb-2 flex flex-wrap items-center gap-2 pr-8">
+        <span className="text-xs font-medium text-gray-500">Medicine {index + 1}</span>
+        {aiSuggested ? (
+          <span
+            className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-primary"
+            data-testid="ai-suggested-badge"
+            title={
+              typeof med.confidence === "number"
+                ? `AI confidence ${Math.round(med.confidence * 100)}%`
+                : "Suggested by AI — review before approving"
+            }
+          >
+            AI suggested
+            {typeof med.confidence === "number"
+              ? ` · ${Math.round(med.confidence * 100)}%`
+              : ""}
+          </span>
+        ) : null}
+      </div>
       <div className="grid gap-3 pr-8 sm:grid-cols-2">
         <Field label="Drug name" className="sm:col-span-2">
           <Combobox

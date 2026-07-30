@@ -3,6 +3,10 @@
  */
 
 import { applySoapSeedsToDraftFields } from "./prescription-soap-seed.js";
+import {
+  isUsableSoapAssessment,
+  mapGeminiDrugToMedication,
+} from "./prescription-medication-suggestions.js";
 
 /**
  * @param {Record<string, unknown>} raw
@@ -28,16 +32,14 @@ export function mapGeminiPrescriptionToDraft(raw, assessment = "", plan = "") {
     existingInvestigations: aiInvestigations,
   });
 
+  // No clear diagnosis → leave Rx empty for manual entry (never invent meds).
+  const medications = isUsableSoapAssessment(assessment)
+    ? drugs.map((drug) => mapGeminiDrugToMedication(drug))
+    : [];
+
   return {
     diagnosis: seeded.diagnosis,
-    medications: drugs.map((drug) => ({
-      name: String(drug.name ?? "").trim() || "Medicine",
-      dosage: String(drug.dose ?? drug.dosage ?? "").trim() || "Not specified",
-      frequency: String(drug.frequency ?? "").trim() || "Not specified",
-      duration: String(drug.duration ?? "").trim() || "Not specified",
-      instructions: String(drug.instructions ?? "").trim(),
-      confidence: 0.85,
-    })),
+    medications,
     investigations: seeded.investigations,
     advice: seeded.advice,
     followUpInstructions: hasFollowup ? `Follow up in ${followupDays} days` : "",

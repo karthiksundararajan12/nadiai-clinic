@@ -19,8 +19,8 @@ const FEATURES = [
   },
   {
     icon: Shield,
-    title: "HIPAA Ready",
-    desc: "Enterprise-grade security for patient data",
+    title: "DPDP Aligned",
+    desc: "Built to align with India's DPDP Act 2023",
   },
 ];
 
@@ -117,27 +117,10 @@ export default function LoginPage() {
           </div>
         </div>
 
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 border-t border-white/10 pt-6">
-            <div className="flex -space-x-2">
-              {["AM", "RK", "PS"].map((initials, i) => (
-                <div
-                  key={i}
-                  className="flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#2a1f5c] bg-primary/20 text-[10px] font-semibold text-accent"
-                >
-                  {initials}
-                </div>
-              ))}
-            </div>
-            <div>
-              <p className="text-xs font-medium text-white/70">
-                Trusted by 500+ doctors
-              </p>
-              <p className="text-[11px] text-white/40">
-                Across 50+ clinics in India
-              </p>
-            </div>
-          </div>
+        <div className="relative z-10 border-t border-white/10 pt-6">
+          <p className="text-xs font-medium text-white/50">
+            Built for Indian outpatient clinics
+          </p>
         </div>
       </div>
 
@@ -199,8 +182,8 @@ export default function LoginPage() {
                   Your data is secure
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  We use enterprise-grade encryption and never share your
-                  patient data. HIPAA-compliant infrastructure.
+                  Patient data is encrypted and never sold. Built to align with
+                  India&apos;s DPDP Act 2023.
                 </p>
               </div>
             </div>

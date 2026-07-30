@@ -89,7 +89,7 @@ function NewVaccinationPageContent() {
       <div className="flex-1 space-y-4 p-6">
         <Link
           href="/vaccinations"
-          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
           Back to vaccinations
@@ -97,7 +97,7 @@ function NewVaccinationPageContent() {
 
         <Card className="max-w-xl p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <p className="text-sm text-destructive">{error}</p>}
+            {error && <p className="text-sm font-medium text-destructive">{error}</p>}
 
             <div className="space-y-2">
               <Label htmlFor="vaccination-patient">Patient</Label>
@@ -114,7 +114,7 @@ function NewVaccinationPageContent() {
                     </SelectTrigger>
                     <SelectContent open={open} className="max-h-64 overflow-y-auto">
                       {patients.length === 0 ? (
-                        <p className="px-2 py-1.5 text-sm text-muted-foreground">
+                        <p className="px-2 py-1.5 text-sm font-medium text-muted-foreground">
                           No patients yet — add a patient first.
                         </p>
                       ) : (
@@ -162,7 +162,7 @@ function NewVaccinationPageContent() {
                 disabled={saving}
                 onChange={(e) => setDueDate(e.target.value)}
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 A WhatsApp reminder is sent automatically starting 3 days before this date.
               </p>
             </div>

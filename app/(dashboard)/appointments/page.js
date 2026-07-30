@@ -122,7 +122,7 @@ export default function AppointmentsPage() {
             title="Appointments"
             subtitle="Clinic schedule, payment, and refund status"
           />
-          <p className="p-6 text-sm text-muted-foreground">Loading appointments…</p>
+          <p className="p-6 text-sm font-medium text-muted-foreground">Loading appointments…</p>
         </>
       }
     >
@@ -430,7 +430,7 @@ function AppointmentsPageContent() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Status</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
               <Select value={status} onValueChange={updateStatus}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -462,7 +462,7 @@ function AppointmentsPageContent() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Slot date</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Slot date</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -496,7 +496,7 @@ function AppointmentsPageContent() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -508,7 +508,7 @@ function AppointmentsPageContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -524,7 +524,7 @@ function AppointmentsPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               {loading ? "Loading…" : `${total} appointment${total === 1 ? "" : "s"}`}
             </p>
             <Button
@@ -547,11 +547,11 @@ function AppointmentsPageContent() {
         </div>
 
         {error && (
-          <p className="text-sm text-destructive">{error.message}</p>
+          <p className="text-sm font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading appointments…
           </p>
         ) : appointments.length === 0 ? (
@@ -563,17 +563,17 @@ function AppointmentsPageContent() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-sm">
-                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[1100px] text-left text-base">
+                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Patient</th>
-                    <th className="px-4 py-3 font-medium">Slot</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Payment</th>
-                    <th className="px-4 py-3 font-medium">Amount</th>
-                    <th className="px-4 py-3 font-medium">Refund</th>
-                    <th className="px-4 py-3 font-medium">Created</th>
-                    <th className="px-4 py-3 font-medium"> </th>
+                    <th className="px-4 py-3 font-semibold">Patient</th>
+                    <th className="px-4 py-3 font-semibold">Slot</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Payment</th>
+                    <th className="px-4 py-3 font-semibold">Amount</th>
+                    <th className="px-4 py-3 font-semibold">Refund</th>
+                    <th className="px-4 py-3 font-semibold">Created</th>
+                    <th className="px-4 py-3 font-semibold"> </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -592,7 +592,7 @@ function AppointmentsPageContent() {
                       <td className="px-4 py-3 font-medium text-foreground">
                         <div>{appointment.patientName}</div>
                         {appointment.contactPhone ? (
-                          <div className="mt-0.5 text-xs font-normal text-muted-foreground">
+                          <div className="mt-0.5 text-xs font-medium text-muted-foreground">
                             {formatPhoneForDisplay(appointment.contactPhone)}
                           </div>
                         ) : null}
@@ -640,7 +640,7 @@ function AppointmentsPageContent() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
                         <div title={formatAbsolute(appointment.createdAt)}>
                           {formatRelative(appointment.createdAt)}
                         </div>
@@ -688,7 +688,7 @@ function AppointmentsPageContent() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">
@@ -726,11 +726,11 @@ function AppointmentsPageContent() {
             <DialogTitle>Appointment detail</DialogTitle>
           </DialogHeader>
           {detailLoading ? (
-            <p className="py-8 text-center text-sm text-muted-foreground">
+            <p className="py-8 text-center text-sm font-medium text-muted-foreground">
               Loading…
             </p>
           ) : detailError ? (
-            <p className="text-sm text-destructive">{detailError}</p>
+            <p className="text-sm font-medium text-destructive">{detailError}</p>
           ) : detail ? (
             <div className="space-y-4 py-2">
               <div>
@@ -740,7 +740,7 @@ function AppointmentsPageContent() {
                 {detail.contact_phone ? (
                   <a
                     href={`tel:+${normalizePhoneForWhatsApp(detail.contact_phone)}`}
-                    className="text-sm text-muted-foreground hover:underline"
+                    className="text-sm font-medium text-muted-foreground hover:underline"
                   >
                     {formatPhoneForDisplay(detail.contact_phone)}
                   </a>
@@ -749,23 +749,23 @@ function AppointmentsPageContent() {
 
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div>
-                  <dt className="text-xs text-muted-foreground">Slot</dt>
+                  <dt className="text-xs font-medium text-muted-foreground">Slot</dt>
                   <dd className="mt-0.5 text-foreground">
                     {detail.date} · {detail.time}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Duration</dt>
+                  <dt className="text-xs font-medium text-muted-foreground">Duration</dt>
                   <dd className="mt-0.5 text-foreground">{detail.duration} min</dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Status</dt>
+                  <dt className="text-xs font-medium text-muted-foreground">Status</dt>
                   <dd className="mt-1">
                     <StatusBadge status={detail.status} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs text-muted-foreground">Payment</dt>
+                  <dt className="text-xs font-medium text-muted-foreground">Payment</dt>
                   <dd className="mt-0.5 text-foreground">
                     {detail.payment_status &&
                     detail.payment_status !== "not_required"
@@ -778,7 +778,7 @@ function AppointmentsPageContent() {
                 </div>
                 {detail.status === "cancelled" ? (
                   <div className="col-span-2">
-                    <dt className="text-xs text-muted-foreground">Refund</dt>
+                    <dt className="text-xs font-medium text-muted-foreground">Refund</dt>
                     <dd className="mt-0.5 text-foreground">
                       {detail.refund_status ?? "—"}
                       {detail.refund_id ? ` · ${detail.refund_id}` : ""}
@@ -788,7 +788,7 @@ function AppointmentsPageContent() {
               </dl>
 
               {actionError ? (
-                <p className="text-sm text-destructive">{actionError}</p>
+                <p className="text-sm font-medium text-destructive">{actionError}</p>
               ) : null}
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
@@ -888,7 +888,7 @@ function AppointmentsPageContent() {
                 )}
               </Select>
               {patients.length === 0 && (
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs font-medium text-muted-foreground">
                   Add a patient before creating an appointment.
                 </p>
               )}
@@ -917,7 +917,7 @@ function AppointmentsPageContent() {
               </div>
             </div>
             {formError && (
-              <p className="text-sm text-destructive">{formError}</p>
+              <p className="text-sm font-medium text-destructive">{formError}</p>
             )}
           </div>
           <DialogFooter>
@@ -946,7 +946,7 @@ function AppointmentsPageContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {rescheduleTarget && (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm font-medium text-muted-foreground">
                 {rescheduleTarget.patient_name} — currently {rescheduleTarget.date}{" "}
                 at {rescheduleTarget.time}
               </p>
@@ -981,7 +981,7 @@ function AppointmentsPageContent() {
               </div>
             </div>
             {rescheduleError && (
-              <p className="text-sm text-destructive">{rescheduleError}</p>
+              <p className="text-sm font-medium text-destructive">{rescheduleError}</p>
             )}
           </div>
           <DialogFooter>
@@ -1013,7 +1013,7 @@ function AppointmentsPageContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {vitalsTarget ? (
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm font-medium text-muted-foreground">
                 For {vitalsTarget.patientName} — linked to this appointment.
               </p>
             ) : null}
@@ -1156,11 +1156,11 @@ function AppointmentsPageContent() {
                 }
               />
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs font-medium text-muted-foreground">
               All fields are optional — enter at least one reading or a note.
             </p>
             {vitalsError ? (
-              <p className="text-sm text-destructive">{vitalsError}</p>
+              <p className="text-sm font-medium text-destructive">{vitalsError}</p>
             ) : null}
           </div>
           <DialogFooter>

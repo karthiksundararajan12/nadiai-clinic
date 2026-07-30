@@ -121,13 +121,13 @@ export function NotificationBell() {
         className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
       >
         <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-          <p className="text-sm font-semibold text-foreground">Notifications</p>
+          <p className="text-base font-semibold text-foreground">Notifications</p>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
               <button
                 type="button"
                 onClick={handleMarkAll}
-                className="text-xs font-medium text-primary hover:underline"
+                className="text-xs font-semibold text-primary hover:underline"
               >
                 Mark all read
               </button>
@@ -138,7 +138,7 @@ export function NotificationBell() {
                 setOpen(false);
                 router.push("/notifications");
               }}
-              className="text-xs font-medium text-muted-foreground hover:text-foreground hover:underline"
+              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline"
             >
               View all
             </button>
@@ -147,7 +147,7 @@ export function NotificationBell() {
 
         <ul className="max-h-80 overflow-y-auto">
           {notifications.length === 0 ? (
-            <li className="px-3 py-8 text-center text-sm text-muted-foreground">
+            <li className="px-3 py-8 text-center text-sm font-medium text-muted-foreground">
               No notifications yet
             </li>
           ) : (
@@ -169,14 +169,14 @@ export function NotificationBell() {
                     <div className="flex items-start justify-between gap-2">
                       <p
                         className={cn(
-                          "text-sm text-foreground",
+                          "text-base text-foreground",
                           unread ? "font-semibold" : "font-medium",
                         )}
                       >
                         {notification.title}
                       </p>
                       <time
-                        className="shrink-0 text-[11px] text-muted-foreground"
+                        className="shrink-0 text-[11px] font-medium text-muted-foreground"
                         dateTime={notification.created_at}
                       >
                         {formatRelative(notification.created_at)}
@@ -185,7 +185,7 @@ export function NotificationBell() {
                     {notification.message ? (
                       <p
                         className={cn(
-                          "mt-0.5 text-xs leading-snug text-muted-foreground",
+                          "mt-0.5 text-xs font-medium leading-snug text-muted-foreground",
                           unread && "text-foreground/80",
                         )}
                       >

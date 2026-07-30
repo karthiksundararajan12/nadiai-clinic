@@ -873,7 +873,7 @@ export function PrescriptionReviewWorkspace({ sessionId, onApproved }) {
           <CardTitle className="text-sm flex items-center gap-2">
             Medications
             {(draft.medications?.length ?? 0) > 0 && (
-              <span className="text-xs font-normal text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 ({draft.medications.length})
               </span>
             )}

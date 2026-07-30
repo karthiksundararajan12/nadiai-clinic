@@ -81,12 +81,12 @@ export default function NotificationDetailPage() {
         </div>
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading notification…
           </p>
         ) : error ? (
           <div className="mx-auto max-w-xl rounded-xl border border-border bg-white px-6 py-12 text-center">
-            <p className="text-sm text-destructive">
+            <p className="text-sm font-medium text-destructive">
               {error.message || "Notification not found"}
             </p>
             <Button
@@ -99,7 +99,7 @@ export default function NotificationDetailPage() {
             </Button>
           </div>
         ) : !notification ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Notification not found
           </p>
         ) : (
@@ -131,7 +131,7 @@ export default function NotificationDetailPage() {
             </div>
 
             <time
-              className="mt-2 block text-xs text-muted-foreground"
+              className="mt-2 block text-xs font-medium text-muted-foreground"
               dateTime={notification.created_at}
             >
               {formatAbsolute(notification.created_at)}
@@ -172,7 +172,7 @@ export default function NotificationDetailPage() {
                 </Link>
                 <Link
                   href="/notifications"
-                  className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
                 >
                   Back to list
                 </Link>
@@ -181,7 +181,7 @@ export default function NotificationDetailPage() {
               <div className="mt-6 border-t border-border pt-5">
                 <Link
                   href="/notifications"
-                  className="text-sm text-muted-foreground hover:text-foreground hover:underline"
+                  className="text-sm font-medium text-muted-foreground hover:text-foreground hover:underline"
                 >
                   Back to list
                 </Link>

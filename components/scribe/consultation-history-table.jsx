@@ -173,7 +173,7 @@ function ConsultationHistoryRow({
 
 function StatusPill({ label }) {
   return (
-    <Badge variant="outline" className="text-xs font-normal capitalize">
+    <Badge variant="outline" className="text-xs font-medium capitalize">
       {String(label ?? "—").replace(/_/g, " ")}
     </Badge>
   );

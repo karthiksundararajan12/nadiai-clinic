@@ -34,7 +34,7 @@ export function Toast({
       )}
     >
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 opacity-80" />
-      <p className="flex-1 text-sm leading-snug">{message}</p>
+      <p className="flex-1 text-sm font-medium leading-snug">{message}</p>
       <button
         type="button"
         onClick={onDismiss}

@@ -32,7 +32,7 @@ function SelectTrigger({ className, children, open, onClick, ...props }) {
     <button
       type="button"
       className={cn(
-        "flex h-9 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 py-2 text-base font-medium placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       onClick={onClick}
@@ -69,7 +69,7 @@ function SelectItem({ className, value, selected, onSelect, children, ...props }
     <button
       type="button"
       className={cn(
-        "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 px-2 text-sm outline-none hover:bg-accent/10 focus:bg-accent/10",
+        "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 px-2 text-base font-medium outline-none hover:bg-accent/10 focus:bg-accent/10",
         selected && "bg-primary/5 text-primary",
         className
       )}

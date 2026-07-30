@@ -15,7 +15,7 @@ export function ActivityChart({ activity = [], loading = false }) {
       </CardHeader>
       <CardContent>
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading activity…
           </p>
         ) : total === 0 ? (
@@ -35,7 +35,7 @@ export function ActivityChart({ activity = [], loading = false }) {
                     key={day.date}
                     className="flex flex-1 flex-col items-center gap-2"
                   >
-                    <span className="text-xs font-medium text-muted-foreground">
+                    <span className="text-xs font-semibold text-muted-foreground">
                       {day.count}
                     </span>
                     <div className="w-full max-w-[40px] relative">
@@ -47,7 +47,7 @@ export function ActivityChart({ activity = [], loading = false }) {
                       />
                     </div>
                     <span
-                      className={`text-xs ${
+                      className={`text-xs font-medium ${
                         day.isToday
                           ? "font-semibold text-primary"
                           : "text-muted-foreground"
@@ -59,7 +59,7 @@ export function ActivityChart({ activity = [], loading = false }) {
                 );
               })}
             </div>
-            <div className="mt-4 text-xs text-muted-foreground">
+            <div className="mt-4 text-xs font-medium text-muted-foreground">
               Past seven days: {total} appointment{total === 1 ? "" : "s"}
             </div>
           </>

@@ -20,7 +20,7 @@ export function ApproximateDobBadge({ className }) {
     >
       <Badge
         variant="secondary"
-        className={cn("cursor-help text-[10px] font-normal text-muted-foreground", className)}
+        className={cn("cursor-help text-[10px] font-medium text-muted-foreground", className)}
       >
         Approximate
       </Badge>

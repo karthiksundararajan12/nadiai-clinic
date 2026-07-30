@@ -38,12 +38,12 @@ export function Header({ title, subtitle, onMenuClick }) {
           <Menu className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
         </button>
         <div>
-          <h1 className="font-display text-lg font-semibold text-foreground">{title}</h1>
+          <h1 className="font-display text-lg font-bold text-foreground">{title}</h1>
           {subtitle && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               {subtitle}
               {currentTime && (
-                <span className="ml-2 text-xs text-muted-foreground/70">
+                <span className="ml-2 text-xs font-medium text-muted-foreground/70">
                   {currentTime}
                 </span>
               )}

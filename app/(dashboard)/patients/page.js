@@ -49,7 +49,7 @@ export default function PatientsPage() {
             title="Patients"
             subtitle="Manage your clinic's patient records"
           />
-          <p className="p-6 text-sm text-muted-foreground">Loading patients…</p>
+          <p className="p-6 text-sm font-medium text-muted-foreground">Loading patients…</p>
         </>
       }
     >
@@ -187,7 +187,7 @@ function PatientsPageContent() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Registered</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Registered</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -221,7 +221,7 @@ function PatientsPageContent() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -233,7 +233,7 @@ function PatientsPageContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -249,7 +249,7 @@ function PatientsPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               {loading ? "Loading…" : `${total} patient${total === 1 ? "" : "s"}`}
             </p>
             <Button
@@ -267,11 +267,11 @@ function PatientsPageContent() {
         </div>
 
         {error && (
-          <p className="text-sm text-destructive">{error.message}</p>
+          <p className="text-sm font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading patients…
           </p>
         ) : patients.length === 0 ? (
@@ -289,15 +289,15 @@ function PatientsPageContent() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-left text-sm">
-                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[960px] text-left text-base">
+                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Name</th>
-                    <th className="px-4 py-3 font-medium">Phone</th>
-                    <th className="px-4 py-3 font-medium">Age / DOB</th>
-                    <th className="px-4 py-3 font-medium">Last Appointment</th>
-                    <th className="px-4 py-3 font-medium">Total Visits</th>
-                    <th className="px-4 py-3 font-medium">Registered On</th>
+                    <th className="px-4 py-3 font-semibold">Name</th>
+                    <th className="px-4 py-3 font-semibold">Phone</th>
+                    <th className="px-4 py-3 font-semibold">Age / DOB</th>
+                    <th className="px-4 py-3 font-semibold">Last Appointment</th>
+                    <th className="px-4 py-3 font-semibold">Total Visits</th>
+                    <th className="px-4 py-3 font-semibold">Registered On</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -332,7 +332,7 @@ function PatientsPageContent() {
                       <td className="px-4 py-3 tabular-nums text-foreground">
                         {patient.totalVisits}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
                         <div title={formatAbsolute(patient.createdAt)}>
                           {formatRelative(patient.createdAt)}
                         </div>
@@ -345,7 +345,7 @@ function PatientsPageContent() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">
@@ -452,7 +452,7 @@ function PatientsPageContent() {
                   }))
                 }
               />
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 For pediatric clinics, this automatically schedules the standard IAP vaccination reminders.
               </p>
             </div>
@@ -472,7 +472,7 @@ function PatientsPageContent() {
               />
             </div>
             {saveError && (
-              <p className="text-sm text-destructive">{saveError}</p>
+              <p className="text-sm font-medium text-destructive">{saveError}</p>
             )}
           </div>
           <DialogFooter>

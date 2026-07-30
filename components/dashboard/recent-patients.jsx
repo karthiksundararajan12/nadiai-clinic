@@ -23,14 +23,14 @@ export function RecentPatients({ patients = [], loading = false }) {
         <CardTitle className="text-base font-display">Recent Patients</CardTitle>
         <Link
           href="/patients"
-          className="flex items-center gap-1 text-xs font-medium text-primary transition-colors duration-150 hover:text-primary/80"
+          className="flex items-center gap-1 text-xs font-semibold text-primary transition-colors duration-150 hover:text-primary/80"
         >
           View all <ArrowRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
         </Link>
       </CardHeader>
       <CardContent className="p-0">
         {loading ? (
-          <p className="px-6 py-10 text-center text-sm text-muted-foreground">
+          <p className="px-6 py-10 text-center text-sm font-medium text-muted-foreground">
             Loading patients…
           </p>
         ) : patients.length === 0 ? (
@@ -56,10 +56,10 @@ export function RecentPatients({ patients = [], loading = false }) {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">
+                  <p className="text-base font-medium text-foreground truncate">
                     {patient.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-xs font-medium text-muted-foreground truncate">
                     {formatActivityDate(patient.lastActivityAt)}
                   </p>
                 </div>

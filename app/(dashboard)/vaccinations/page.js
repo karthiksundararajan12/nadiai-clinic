@@ -164,7 +164,7 @@ function VaccinationsPageContent() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Status</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
               <Select value={status} onValueChange={updateStatus}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -196,7 +196,7 @@ function VaccinationsPageContent() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs text-muted-foreground">Due date</Label>
+              <Label className="text-xs font-medium text-muted-foreground">Due date</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -230,7 +230,7 @@ function VaccinationsPageContent() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">From</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -242,7 +242,7 @@ function VaccinationsPageContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">To</Label>
+                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -258,7 +258,7 @@ function VaccinationsPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <p className="text-sm text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               {loading ? "Loading…" : `${total} vaccination${total === 1 ? "" : "s"}`}
             </p>
             <Link
@@ -272,11 +272,11 @@ function VaccinationsPageContent() {
         </div>
 
         {error && (
-          <p className="text-sm text-destructive">{error.message}</p>
+          <p className="text-sm font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading vaccinations…
           </p>
         ) : vaccinations.length === 0 ? (
@@ -297,15 +297,15 @@ function VaccinationsPageContent() {
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-white">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] text-left text-sm">
-                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[840px] text-left text-base">
+                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 font-medium">Patient</th>
-                    <th className="px-4 py-3 font-medium">Vaccine</th>
-                    <th className="px-4 py-3 font-medium">Due date</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                    <th className="px-4 py-3 font-medium">Reminder sent</th>
-                    <th className="px-4 py-3 font-medium">Added</th>
+                    <th className="px-4 py-3 font-semibold">Patient</th>
+                    <th className="px-4 py-3 font-semibold">Vaccine</th>
+                    <th className="px-4 py-3 font-semibold">Due date</th>
+                    <th className="px-4 py-3 font-semibold">Status</th>
+                    <th className="px-4 py-3 font-semibold">Reminder sent</th>
+                    <th className="px-4 py-3 font-semibold">Added</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -334,12 +334,12 @@ function VaccinationsPageContent() {
                           {vaccination.statusLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
                         {vaccination.reminderSentAt
                           ? formatDateTime(vaccination.reminderSentAt)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
                         {formatDateTime(vaccination.createdAt)}
                       </td>
                     </tr>
@@ -349,7 +349,7 @@ function VaccinationsPageContent() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs text-muted-foreground">
+              <p className="text-xs font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">

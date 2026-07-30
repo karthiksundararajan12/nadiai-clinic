@@ -98,7 +98,7 @@ export function Sidebar({ collapsed, onToggle }) {
                   navigateIfAllowed(item.href, event);
                 }}
                 className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                  "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
                   isActive
                     ? "bg-primary/10 text-primary dark:bg-primary/15"
                     : "text-gray-500 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary",
@@ -160,11 +160,11 @@ export function Sidebar({ collapsed, onToggle }) {
           </div>
           {!collapsed && (
             <div className="flex flex-1 flex-col min-w-0">
-              <span className="text-sm font-medium text-gray-900 truncate dark:text-gray-100">
+              <span className="text-base font-medium text-gray-900 truncate dark:text-gray-100">
                 {displayName}
               </span>
               {specialization && (
-                <span className="text-[11px] text-gray-500 truncate dark:text-gray-400">
+                <span className="text-xs font-medium text-gray-500 truncate dark:text-gray-400">
                   {specialization}
                 </span>
               )}

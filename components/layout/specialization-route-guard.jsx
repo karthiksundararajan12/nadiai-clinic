@@ -28,7 +28,7 @@ export function SpecializationRouteGuard({
     return (
       <>
         <Header title={title} />
-        <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+        <div className="flex flex-1 items-center justify-center p-6 text-sm font-medium text-muted-foreground">
           Loading…
         </div>
       </>

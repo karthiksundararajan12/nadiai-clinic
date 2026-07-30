@@ -7,14 +7,14 @@ export function StatsCard({ title, value, change, changeType, icon: Icon, classN
     <Card className={cn("p-5 transition-shadow duration-150 hover:shadow-clinical", className)}>
       <div className="flex items-start justify-between">
         <div className="flex flex-col gap-1">
-          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             {title}
           </span>
-          <span className="text-2xl font-semibold tracking-tight text-foreground">
+          <span className="text-2xl font-bold tracking-tight text-foreground">
             {value}
           </span>
           {change && (
-            <div className="flex items-center gap-1 text-xs">
+            <div className="flex items-center gap-1 text-xs font-medium">
               <span
                 className={cn(
                   "font-medium",

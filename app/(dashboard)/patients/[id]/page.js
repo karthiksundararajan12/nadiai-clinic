@@ -88,15 +88,15 @@ export default function PatientDetailPage() {
         </Button>
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading patient…
           </p>
         ) : error ? (
-          <p className="py-16 text-center text-sm text-destructive">
+          <p className="py-16 text-center text-sm font-medium text-destructive">
             {error.message || "Failed to load patient"}
           </p>
         ) : !patient ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Patient not found
           </p>
         ) : (
@@ -107,11 +107,11 @@ export default function PatientDetailPage() {
                   <h1 className="font-display text-xl font-semibold text-foreground">
                     {patient.name}
                   </h1>
-                  <p className="mt-1 text-sm text-muted-foreground">
+                  <p className="mt-1 text-sm font-medium text-muted-foreground">
                     {formatGenderAge(patient)}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-sm text-muted-foreground">
+                <div className="flex flex-col items-end gap-1 text-sm font-medium text-muted-foreground">
                   <span className="tabular-nums">
                     {patient.totalVisits} visit{patient.totalVisits === 1 ? "" : "s"}
                   </span>
@@ -120,20 +120,20 @@ export default function PatientDetailPage() {
               </div>
 
               <div className="mt-5 grid grid-cols-1 gap-4 border-t border-border pt-5 sm:grid-cols-3">
-                <div className="flex items-center gap-2 text-sm text-foreground">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <Phone className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                   <a href={`tel:+${patient.phone?.replace(/\D/g, "")}`} className="hover:underline">
                     {patient.phone || "—"}
                   </a>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-foreground">
+                <div className="flex items-center gap-2 text-sm font-medium text-foreground">
                   <Cake className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                   <span>
                     {patient.dateOfBirth ? formatDateOnly(patient.dateOfBirth) : "DOB not recorded"}
                   </span>
                   {patient.dateOfBirthIsApproximate && <ApproximateDobBadge />}
                 </div>
-                <div className="text-sm text-muted-foreground">
+                <div className="text-sm font-medium text-muted-foreground">
                   Last appointment: {patient.lastAppointmentLabel ?? "—"}
                 </div>
               </div>
@@ -151,13 +151,13 @@ export default function PatientDetailPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[640px] text-left text-sm">
-                      <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                    <table className="w-full min-w-[640px] text-left text-base">
+                      <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         <tr>
-                          <th className="px-4 py-3 font-medium">Slot</th>
-                          <th className="px-4 py-3 font-medium">Status</th>
-                          <th className="px-4 py-3 font-medium">Payment</th>
-                          <th className="px-4 py-3 font-medium">Amount</th>
+                          <th className="px-4 py-3 font-semibold">Slot</th>
+                          <th className="px-4 py-3 font-semibold">Status</th>
+                          <th className="px-4 py-3 font-semibold">Payment</th>
+                          <th className="px-4 py-3 font-semibold">Amount</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -217,7 +217,7 @@ export default function PatientDetailPage() {
                             <p className="text-sm font-medium text-foreground">
                               Latest reading
                             </p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-xs font-medium text-muted-foreground">
                               {formatRecordedAt(latest.recordedAt)}
                             </p>
                           </div>
@@ -251,7 +251,7 @@ export default function PatientDetailPage() {
                             />
                           </dl>
                           {latest.notes ? (
-                            <p className="mt-3 border-t border-border pt-3 text-sm text-muted-foreground">
+                            <p className="mt-3 border-t border-border pt-3 text-sm font-medium text-muted-foreground">
                               {latest.notes}
                             </p>
                           ) : null}
@@ -265,16 +265,16 @@ export default function PatientDetailPage() {
                               </p>
                             </div>
                             <div className="overflow-x-auto">
-                              <table className="w-full min-w-[720px] text-left text-sm">
-                                <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                              <table className="w-full min-w-[720px] text-left text-base">
+                                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                                   <tr>
-                                    <th className="px-4 py-3 font-medium">Recorded</th>
-                                    <th className="px-4 py-3 font-medium">BP</th>
-                                    <th className="px-4 py-3 font-medium">Temp</th>
-                                    <th className="px-4 py-3 font-medium">Pulse</th>
-                                    <th className="px-4 py-3 font-medium">SpO2</th>
-                                    <th className="px-4 py-3 font-medium">Weight</th>
-                                    <th className="px-4 py-3 font-medium">Notes</th>
+                                    <th className="px-4 py-3 font-semibold">Recorded</th>
+                                    <th className="px-4 py-3 font-semibold">BP</th>
+                                    <th className="px-4 py-3 font-semibold">Temp</th>
+                                    <th className="px-4 py-3 font-semibold">Pulse</th>
+                                    <th className="px-4 py-3 font-semibold">SpO2</th>
+                                    <th className="px-4 py-3 font-semibold">Weight</th>
+                                    <th className="px-4 py-3 font-semibold">Notes</th>
                                   </tr>
                                 </thead>
                                 <tbody className="divide-y divide-border">
@@ -331,12 +331,12 @@ export default function PatientDetailPage() {
               ) : (
                 <div className="overflow-hidden rounded-xl border border-border bg-white">
                   <div className="overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-left text-sm">
-                      <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                    <table className="w-full min-w-[560px] text-left text-base">
+                      <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                         <tr>
-                          <th className="px-4 py-3 font-medium">Vaccine</th>
-                          <th className="px-4 py-3 font-medium">Due Date</th>
-                          <th className="px-4 py-3 font-medium">Status</th>
+                          <th className="px-4 py-3 font-semibold">Vaccine</th>
+                          <th className="px-4 py-3 font-semibold">Due Date</th>
+                          <th className="px-4 py-3 font-semibold">Status</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border">
@@ -421,7 +421,7 @@ function formatBloodPressure(systolic, diastolic) {
 function VitalStat({ label, value }) {
   return (
     <div>
-      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
       <dd className="mt-0.5 tabular-nums text-foreground">{value}</dd>
     </div>
   );

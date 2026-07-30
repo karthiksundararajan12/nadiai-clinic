@@ -78,7 +78,7 @@ function DialogTitle({ className, ...props }) {
 
 function DialogDescription({ className, ...props }) {
   return (
-    <p className={cn("text-sm text-muted-foreground", className)} {...props} />
+    <p className={cn("text-sm font-medium text-muted-foreground", className)} {...props} />
   );
 }
 

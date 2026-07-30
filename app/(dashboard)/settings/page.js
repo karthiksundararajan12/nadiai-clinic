@@ -268,12 +268,12 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || profileError) && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-sm font-medium text-destructive">
                       {profileError || profileSettingsLoadError?.message}
                     </p>
                   )}
                   {profileSuccess && (
-                    <p className="text-sm text-emerald-700">{profileSuccess}</p>
+                    <p className="text-sm font-medium text-emerald-700">{profileSuccess}</p>
                   )}
                   <div className="flex items-center gap-4 mb-6">
                     <Avatar className="h-20 w-20">
@@ -286,7 +286,7 @@ export default function SettingsPage() {
                         <Camera className="h-3.5 w-3.5" />
                         Change Photo
                       </Button>
-                      <p className="text-xs text-muted-foreground mt-1.5">
+                      <p className="text-xs font-medium text-muted-foreground mt-1.5">
                         JPG, PNG. Max 2MB. Photo upload coming soon.
                       </p>
                     </div>
@@ -396,24 +396,24 @@ export default function SettingsPage() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm font-medium text-muted-foreground">
                         Plan
                       </span>
                       <Badge>Professional</Badge>
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm font-medium text-muted-foreground">
                         Status
                       </span>
                       <StatusBadge status="active" />
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
-                      <span className="text-sm text-muted-foreground">
+                      <span className="text-sm font-medium text-muted-foreground">
                         Joined
                       </span>
-                      <span className="text-sm">Jan 2026</span>
+                      <span className="text-sm font-medium">Jan 2026</span>
                     </div>
                   </CardContent>
                 </Card>
@@ -447,12 +447,12 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || feeError) && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-sm font-medium text-destructive">
                       {feeError || profileSettingsLoadError.message}
                     </p>
                   )}
                   {feeSuccess && (
-                    <p className="text-sm text-emerald-700">{feeSuccess}</p>
+                    <p className="text-sm font-medium text-emerald-700">{feeSuccess}</p>
                   )}
                   <div className="max-w-xs space-y-2">
                     <Label htmlFor="consultation-fee">Fee per consultation</Label>
@@ -476,7 +476,7 @@ export default function SettingsPage() {
                         }}
                       />
                     </div>
-                    <p className="text-xs text-muted-foreground">
+                    <p className="text-xs font-medium text-muted-foreground">
                       Set to ₹0 for free consultations. Whole rupees only.
                     </p>
                   </div>
@@ -503,12 +503,12 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {(profileSettingsLoadError || clinicError) && (
-                  <p className="text-sm text-destructive">
+                  <p className="text-sm font-medium text-destructive">
                     {clinicError || profileSettingsLoadError?.message}
                   </p>
                 )}
                 {clinicSuccess && (
-                  <p className="text-sm text-emerald-700">{clinicSuccess}</p>
+                  <p className="text-sm font-medium text-emerald-700">{clinicSuccess}</p>
                 )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -556,8 +556,8 @@ export default function SettingsPage() {
                 <Separator />
 
                 <div>
-                  <h4 className="text-sm font-medium mb-1">Working Hours</h4>
-                  <p className="mb-3 text-xs text-muted-foreground">
+                  <h4 className="text-sm font-semibold mb-1">Working Hours</h4>
+                  <p className="mb-3 text-xs font-medium text-muted-foreground">
                     Used for WhatsApp booking slot generation. The same hours apply every day — per-day schedules (e.g. closed Sundays) are not supported yet.
                   </p>
                   <div className="flex items-center gap-4 rounded-lg border border-border p-3">
@@ -577,7 +577,7 @@ export default function SettingsPage() {
                           setClinicError("");
                         }}
                       />
-                      <span className="text-sm text-muted-foreground">to</span>
+                      <span className="text-sm font-medium text-muted-foreground">to</span>
                       <Input
                         type="time"
                         value={clinicForm.workingHoursEnd}
@@ -622,19 +622,19 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {(profileSettingsLoadError || remindersError) && (
-                  <p className="text-sm text-destructive">
+                  <p className="text-sm font-medium text-destructive">
                     {remindersError || profileSettingsLoadError?.message}
                   </p>
                 )}
                 {remindersSuccess && (
-                  <p className="text-sm text-emerald-700">{remindersSuccess}</p>
+                  <p className="text-sm font-medium text-emerald-700">{remindersSuccess}</p>
                 )}
 
                 <div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Appointment Reminders</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Appointment Reminders</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         Send WhatsApp reminders to patients T-24h and T-2h before their visit
                       </p>
                     </div>
@@ -650,8 +650,8 @@ export default function SettingsPage() {
                 <div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Scribe Completion</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Scribe Completion</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         Notify when AI clinical notes are ready
                       </p>
                     </div>
@@ -673,19 +673,19 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || scribeLanguageError) && (
-                    <p className="text-sm text-destructive">
+                    <p className="text-sm font-medium text-destructive">
                       {scribeLanguageError || profileSettingsLoadError?.message}
                     </p>
                   )}
                   {scribeLanguageSuccess && (
-                    <p className="text-sm text-emerald-700">{scribeLanguageSuccess}</p>
+                    <p className="text-sm font-medium text-emerald-700">{scribeLanguageSuccess}</p>
                   )}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <Globe className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-medium">Default Scribe Language</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm font-semibold">Default Scribe Language</p>
+                        <p className="text-xs font-medium text-muted-foreground">
                           Pre-selected on the Scribe page — you can still change it per session
                         </p>
                       </div>
@@ -699,8 +699,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Date Format</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Date Format</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         How dates are displayed
                       </p>
                     </div>
@@ -709,8 +709,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Time Zone</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Time Zone</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         Your local time zone
                       </p>
                     </div>
@@ -728,8 +728,8 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-3">
                       <Palette className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-medium">Theme</p>
-                        <p className="text-xs text-muted-foreground">
+                        <p className="text-sm font-semibold">Theme</p>
+                        <p className="text-xs font-medium text-muted-foreground">
                           Use the sun/moon icon in the top bar to switch between light and dark mode
                         </p>
                       </div>
@@ -741,8 +741,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Compact Mode</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Compact Mode</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         Reduce spacing for more content
                       </p>
                     </div>
@@ -751,8 +751,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-medium">Sidebar Collapsed</p>
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-sm font-semibold">Sidebar Collapsed</p>
+                      <p className="text-xs font-medium text-muted-foreground">
                         Start with collapsed sidebar
                       </p>
                     </div>

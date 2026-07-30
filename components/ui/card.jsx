@@ -27,7 +27,7 @@ function CardTitle({ className, ...props }) {
   return (
     <h3
       data-slot="card-title"
-      className={cn("text-lg font-semibold leading-none tracking-tight", className)}
+      className={cn("text-lg font-bold leading-none tracking-tight", className)}
       {...props}
     />
   );
@@ -37,7 +37,7 @@ function CardDescription({ className, ...props }) {
   return (
     <p
       data-slot="card-description"
-      className={cn("text-sm text-muted-foreground", className)}
+      className={cn("text-sm font-medium text-muted-foreground", className)}
       {...props}
     />
   );

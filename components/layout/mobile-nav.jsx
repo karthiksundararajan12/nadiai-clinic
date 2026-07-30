@@ -65,7 +65,7 @@ export function MobileNav({ open, onClose }) {
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
                       isActive
                         ? "bg-primary/10 text-primary dark:bg-primary/15"
                         : "text-gray-500 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary"

@@ -19,7 +19,7 @@ export default function NotificationsPage() {
       fallback={
         <>
           <Header title="Notifications" subtitle="Payment and clinic alerts" />
-          <p className="p-6 text-sm text-muted-foreground">Loading notifications…</p>
+          <p className="p-6 text-sm font-medium text-muted-foreground">Loading notifications…</p>
         </>
       }
     >
@@ -100,7 +100,7 @@ function NotificationsPageContent() {
       />
       <div className="flex-1 space-y-4 p-6">
         <div className="flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">
+          <p className="text-sm font-medium text-muted-foreground">
             Full history of in-app alerts for your clinic.
           </p>
           {unreadCount > 0 && (
@@ -111,11 +111,11 @@ function NotificationsPageContent() {
         </div>
 
         {loading ? (
-          <p className="py-16 text-center text-sm text-muted-foreground">
+          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
             Loading notifications…
           </p>
         ) : error ? (
-          <p className="py-16 text-center text-sm text-destructive">
+          <p className="py-16 text-center text-sm font-medium text-destructive">
             {error.message || "Failed to load notifications"}
           </p>
         ) : notifications.length === 0 ? (
@@ -153,25 +153,25 @@ function NotificationsPageContent() {
                       <div className="flex items-start justify-between gap-3">
                         <p
                           className={cn(
-                            "text-sm text-foreground",
+                            "text-base text-foreground",
                             unread ? "font-semibold" : "font-medium",
                           )}
                         >
                           {notification.title}
                         </p>
                         <time
-                          className="shrink-0 text-[11px] text-muted-foreground"
+                          className="shrink-0 text-[11px] font-medium text-muted-foreground"
                           dateTime={notification.created_at}
                           title={formatAbsolute(notification.created_at)}
                         >
                           {formatRelative(notification.created_at)}
                         </time>
                       </div>
-                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-foreground/80">
+                      <p className="mt-1 whitespace-pre-wrap text-sm font-medium leading-relaxed text-foreground/80">
                         {notification.message}
                       </p>
                       {notification.related_appointment_id ? (
-                        <p className="mt-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <p className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-muted-foreground">
                           <CalendarDays className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                           Related appointment on file
                         </p>

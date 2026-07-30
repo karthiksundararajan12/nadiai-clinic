@@ -105,14 +105,14 @@ export default function ConsultationHistoryPage() {
                   {auditTrail.map((entry) => (
                     <li key={entry.id} className="rounded border p-2">
                       <span className="font-medium">{entry.action}</span>
-                      <span className="text-muted-foreground ml-2 text-xs">
+                      <span className="text-muted-foreground ml-2 text-xs font-medium">
                         {new Date(entry.created_at).toLocaleString()}
                       </span>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-muted-foreground text-sm">No audit events recorded.</p>
+                <p className="text-muted-foreground text-sm font-medium">No audit events recorded.</p>
               )}
             </CardContent>
           </Card>
@@ -137,9 +137,9 @@ export default function ConsultationHistoryPage() {
           </CardHeader>
           <CardContent>
             {loading ? (
-              <p className="text-sm text-muted-foreground">Loading history…</p>
+              <p className="text-sm font-medium text-muted-foreground">Loading history…</p>
             ) : error ? (
-              <p className="text-sm text-destructive">
+              <p className="text-sm font-medium text-destructive">
                 {error instanceof Error ? error.message : String(error)}
               </p>
             ) : (

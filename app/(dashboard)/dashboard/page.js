@@ -65,7 +65,7 @@ export default function DashboardPage() {
 
       <div className="flex-1 space-y-6 p-6">
         {error && (
-          <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm font-medium text-destructive">
             Dashboard data could not be loaded. Please refresh to try again.
           </div>
         )}
@@ -118,10 +118,10 @@ export default function DashboardPage() {
                     <Mic className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
                   </div>
                   <div className="flex-1">
-                    <h3 className="font-display text-sm font-semibold text-foreground">
+                    <h3 className="font-display text-base font-semibold text-foreground">
                       AI Scribe Ready
                     </h3>
-                    <p className="mt-1 text-xs text-muted-foreground">
+                    <p className="mt-1 text-xs font-medium text-muted-foreground">
                       Start a new consultation with Hinglish voice transcription
                       and auto-generated clinical notes.
                     </p>
@@ -145,25 +145,25 @@ export default function DashboardPage() {
                 <Link href="/scribe">
                   <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <Mic className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
-                    <span className="text-xs font-medium text-foreground">New Scribe</span>
+                    <span className="text-sm font-semibold text-foreground">New Scribe</span>
                   </button>
                 </Link>
                 <Link href="/appointments">
                   <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <CalendarDays className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
-                    <span className="text-xs font-medium text-foreground">Book Slot</span>
+                    <span className="text-sm font-semibold text-foreground">Book Slot</span>
                   </button>
                 </Link>
                 <Link href="/patients">
                   <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <Users className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
-                    <span className="text-xs font-medium text-foreground">Add Patient</span>
+                    <span className="text-sm font-semibold text-foreground">Add Patient</span>
                   </button>
                 </Link>
                 <Link href="/payments">
                   <button className="flex w-full flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 text-center text-primary transition-colors duration-150 hover:border-primary/20 hover:bg-muted/50">
                     <CreditCard className={ICON_SIZE_LG} strokeWidth={ICON_STROKE} />
-                    <span className="text-xs font-medium text-foreground">Payments</span>
+                    <span className="text-sm font-semibold text-foreground">Payments</span>
                   </button>
                 </Link>
               </CardContent>

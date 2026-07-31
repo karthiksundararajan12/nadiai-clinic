@@ -208,6 +208,40 @@ test("cancelFromDoctorDashboard: Razorpay failure still cancels and skips refund
   assert.equal(inApp.createAppointmentCancelledCalls.length, 1);
 });
 
+test("cancelFromPatientMenu: cancels with patient_cancelled_menu and runs refund+ack pipeline", async () => {
+  const appointmentRepo = createFakeAppointmentRepo({
+    cancelViaDoctorDashboardImpl: null,
+  });
+  appointmentRepo.cancelViaMenu = async (clinicId, appointmentId) => {
+    appointmentRepo.calls.cancelViaMenu = appointmentRepo.calls.cancelViaMenu ?? [];
+    appointmentRepo.calls.cancelViaMenu.push({ clinicId, appointmentId });
+    return buildAppointment({
+      id: appointmentId,
+      cancellation_reason: "patient_cancelled_menu",
+    });
+  };
+  const razorpay = createFakeRazorpay();
+  const wa = createFakeWhatsApp();
+  const inApp = createFakeInApp();
+  const service = new AppointmentCancelRefundService(appointmentRepo, {
+    razorpayClient: razorpay,
+    whatsappClient: wa,
+    inAppNotificationService: inApp,
+  });
+
+  const result = await service.cancelFromPatientMenu({
+    clinic: CLINIC,
+    appointmentId: "appt-1",
+    contactPhone: "919876543210",
+  });
+
+  assert.equal(result.cancellation_reason, "patient_cancelled_menu");
+  assert.equal(result.refund_status, REFUND_STATUS.COMPLETED);
+  assert.equal(razorpay.createRefundCalls[0].notes.reason, "patient_cancelled_menu");
+  assert.equal(wa.sendTextCalls.length, 1);
+  assert.equal(inApp.createAppointmentCancelledCalls.length, 1);
+});
+
 test("finalizeAfterCancel: WhatsApp ack failure does not roll back a completed refund", async () => {
   const appointmentRepo = createFakeAppointmentRepo();
   const razorpay = createFakeRazorpay();

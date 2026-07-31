@@ -114,6 +114,28 @@ export const START_MENU_COPY = Object.freeze({
     "I'll connect you with our clinic staff — they'll be with you shortly.",
   UNSUPPORTED_INTENT:
     "That feature is coming soon. Please call the clinic directly for now, or choose \"Talk to clinic staff\".",
+  /**
+   * Menu Reschedule / Cancel — no CONFIRMED appointments for this contact.
+   * Placeholders: none. Offer Book via the main menu.
+   */
+  NO_CONFIRMED_TO_RESCHEDULE:
+    "You don't have an upcoming appointment to reschedule. Choose \"Book an appointment\" from the menu if you'd like to schedule one.",
+  NO_CONFIRMED_TO_CANCEL:
+    "You don't have an upcoming appointment to cancel. Choose \"Book an appointment\" from the menu if you'd like to schedule one.",
+  /** Prompt when the contact has multiple CONFIRMED appointments. */
+  PICK_APPOINTMENT_TO_RESCHEDULE: "Which appointment would you like to reschedule?",
+  PICK_APPOINTMENT_TO_CANCEL: "Which appointment would you like to cancel?",
+  PICK_APPOINTMENT_BUTTON_LABEL: "Choose appointment",
+  PICK_APPOINTMENT_REPROMPT: "Sorry, please choose one of the appointments from the list.",
+});
+
+/** Prefix for START-menu appointment picker row ids — `${PREFIX}${appointment.id}`. */
+export const MENU_APPOINTMENT_ROW_ID_PREFIX = "booking_menu_appt:";
+
+/** conversation_state.context.menuAppointmentAction values while picking among CONFIRMED rows. */
+export const MENU_APPOINTMENT_ACTION = Object.freeze({
+  RESCHEDULE: "reschedule",
+  CANCEL: "cancel",
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -282,6 +304,14 @@ export const PATIENT_NO_SHOW_CANCELLATION_REASON = "patient_no_show";
  * (`cancelled_by_doctor`).
  */
 export const DOCTOR_CANCELLED_DASHBOARD_REASON = "doctor_cancelled_dashboard";
+
+/**
+ * appointments.cancellation_reason when the patient cancels via the START
+ * menu "Cancel appointment" option (with Razorpay refund). Distinct from
+ * reminder-button cancel (`patient_cancelled_via_reminder`) and free-text
+ * "cancel" (`patient_requested`).
+ */
+export const PATIENT_CANCELLED_MENU_REASON = "patient_cancelled_menu";
 
 /**
  * Plain-text fallback when a contact messages while already booked

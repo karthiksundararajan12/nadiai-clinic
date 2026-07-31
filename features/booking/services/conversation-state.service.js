@@ -34,6 +34,11 @@
  *     WhatsApp alert to the clinic's doctor(s)).
  *   - "Book" transitions to COLLECTING_PATIENT, handing off immediately to
  *     PatientCollectionService.enterState to render the first screen.
+ *   - "Reschedule" / "Cancel appointment" resolve CONFIRMED appointments for
+ *     the contact (0 / 1 / many). Zero → inform + re-show menu; one →
+ *     enterRescheduleFlow or AppointmentCancelRefundService.cancelFromPatientMenu;
+ *     many → interactive list picker then the same paths.
+ *   - "Talk to clinic" is still acknowledged with a coming-soon reply.
  *
  * Every method is scoped by `clinic.id`, resolved once by the webhook
  * route via ClinicRepository.findByWhatsAppPhoneNumberId — never by
@@ -56,10 +61,15 @@ import {
   CONFIRMED_INBOUND_COPY,
   CONFIRMED_INBOUND_FALLBACK_STATES,
   APPOINTMENT_STATUS,
+  MENU_APPOINTMENT_ACTION,
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { isConversationExpired } from "../lib/conversation-expiry.js";
 import { formatSlotDateTimeParts, formatSlotLabel } from "../lib/slot-engine.js";
+import {
+  buildMenuAppointmentSelectionRows,
+  parseMenuAppointmentRowId,
+} from "../lib/menu-appointment-list.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
@@ -77,6 +87,7 @@ export class ConversationStateService {
    * @param {import("./slot-selection.service.js").SlotSelectionService} slotSelectionService
    * @param {import("../repository/appointment.repository.js").AppointmentRepository|null} [appointmentRepo]
    * @param {import("./in-app-notification.service.js").InAppNotificationService|null} [inAppNotificationService]
+   * @param {import("./appointment-cancel-refund.service.js").AppointmentCancelRefundService|null} [cancelRefundService]
    */
   constructor(
     conversationRepo,
@@ -86,6 +97,7 @@ export class ConversationStateService {
     slotSelectionService,
     appointmentRepo = null,
     inAppNotificationService = null,
+    cancelRefundService = null,
   ) {
     this._repo         = conversationRepo;
     this._wa           = whatsappClient;
@@ -94,6 +106,7 @@ export class ConversationStateService {
     this._slotSvc      = slotSelectionService;
     this._appointmentRepo = appointmentRepo;
     this._inAppNotificationService = inAppNotificationService;
+    this._cancelRefund = cancelRefundService;
     this._log          = createLogger({ component: "ConversationStateService" });
   }
 
@@ -130,6 +143,9 @@ export class ConversationStateService {
     }
     if (row.context?.awaitingResetConfirmation) {
       return this._handleResetConfirmationReply({ clinic, message, row, log });
+    }
+    if (row.context?.menuAppointmentAction && row.current_state === CONVERSATION_STATE.START) {
+      return this._handleMenuAppointmentPick({ clinic, message, row, log });
     }
     if (this._isCancelKeyword(message)) {
       return this._handleCancelKeyword({ clinic, message, row, log });
@@ -608,6 +624,25 @@ export class ConversationStateService {
     if (intent === START_MENU_INTENT.BOOK) {
       return this._transitionToCollectingPatient({ clinic, message, row, log });
     }
+    if (intent === START_MENU_INTENT.RESCHEDULE) {
+      return this._handleMenuRescheduleOrCancel({
+        clinic,
+        message,
+        row,
+        log,
+        action: MENU_APPOINTMENT_ACTION.RESCHEDULE,
+      });
+    }
+    if (intent === START_MENU_INTENT.CANCEL) {
+      return this._handleMenuRescheduleOrCancel({
+        clinic,
+        message,
+        row,
+        log,
+        action: MENU_APPOINTMENT_ACTION.CANCEL,
+      });
+    }
+    // Talk to clinic (and any other recognized-but-unimplemented intents).
     return this._acknowledgeUnsupportedIntent({ clinic, message, row, log });
   }
 
@@ -685,7 +720,344 @@ export class ConversationStateService {
     return this._patientSvc.enterState({ clinic, message, row: updated, log });
   }
 
-  /** Reschedule / Cancel / Talk-to-clinic are recognized but not built yet — stay in START. */
+  /**
+   * START-menu Reschedule / Cancel: resolve CONFIRMED appointments for this
+   * contact (0 / 1 / many), then enterRescheduleFlow or menu cancel+refund.
+   */
+  async _handleMenuRescheduleOrCancel({ clinic, message, row, log, action }) {
+    if (!this._appointmentRepo?.findConfirmedByContact) {
+      log.error("AppointmentRepository not wired — cannot resolve menu Reschedule/Cancel");
+      return this._acknowledgeUnsupportedIntent({ clinic, message, row, log });
+    }
+
+    let appointments;
+    try {
+      appointments = await this._appointmentRepo.findConfirmedByContact(
+        clinic.id,
+        message.contactPhone,
+      );
+    } catch (err) {
+      log.error("Failed to load CONFIRMED appointments for menu Reschedule/Cancel", {
+        error: err instanceof Error ? err.message : String(err),
+        action,
+      });
+      await alertOps({
+        title: "Failed to load CONFIRMED appointments for START menu Reschedule/Cancel",
+        step: OPS_ALERT_STEP.APPOINTMENT_LOOKUP,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { action },
+      });
+      await this._wa.sendText(
+        clinic.whatsapp_phone_number_id,
+        message.contactPhone,
+        START_MENU_COPY.REPROMPT,
+      );
+      return { handled: true, action: "MENU_APPOINTMENT_LOOKUP_FAILED", currentState: row.current_state };
+    }
+
+    const list = appointments ?? [];
+    if (list.length === 0) {
+      const body =
+        action === MENU_APPOINTMENT_ACTION.RESCHEDULE
+          ? START_MENU_COPY.NO_CONFIRMED_TO_RESCHEDULE
+          : START_MENU_COPY.NO_CONFIRMED_TO_CANCEL;
+      await this._repo.update(row.id, {
+        context: {
+          ...row.context,
+          last_wa_message_id: message.waMessageId,
+          menuAppointmentAction: undefined,
+          menuAppointmentIds: undefined,
+        },
+        last_message_at: new Date().toISOString(),
+      });
+      await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
+        bodyText: body,
+        buttonLabel: START_MENU_COPY.BUTTON_LABEL,
+        rows: START_MENU_ROWS,
+      });
+      await this._repo.update(row.id, {
+        context: {
+          ...row.context,
+          last_wa_message_id: message.waMessageId,
+          menu_sent_at: new Date().toISOString(),
+        },
+        last_message_at: new Date().toISOString(),
+      });
+      log.info("START menu Reschedule/Cancel — no CONFIRMED appointments", {
+        contactPhone: message.contactPhone,
+        action,
+      });
+      return {
+        handled: true,
+        action:
+          action === MENU_APPOINTMENT_ACTION.RESCHEDULE
+            ? "MENU_RESCHEDULE_NO_APPOINTMENTS"
+            : "MENU_CANCEL_NO_APPOINTMENTS",
+        currentState: CONVERSATION_STATE.START,
+      };
+    }
+
+    if (list.length === 1) {
+      return this._continueMenuActionWithAppointment({
+        clinic,
+        message,
+        row,
+        log,
+        action,
+        appointment: list[0],
+      });
+    }
+
+    const pickBody =
+      action === MENU_APPOINTMENT_ACTION.RESCHEDULE
+        ? START_MENU_COPY.PICK_APPOINTMENT_TO_RESCHEDULE
+        : START_MENU_COPY.PICK_APPOINTMENT_TO_CANCEL;
+    await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
+      bodyText: pickBody,
+      buttonLabel: START_MENU_COPY.PICK_APPOINTMENT_BUTTON_LABEL,
+      rows: buildMenuAppointmentSelectionRows(list),
+    });
+    await this._repo.update(row.id, {
+      context: {
+        ...row.context,
+        last_wa_message_id: message.waMessageId,
+        menuAppointmentAction: action,
+        menuAppointmentIds: list.map((a) => a.id),
+        menu_sent_at: undefined,
+      },
+      last_message_at: new Date().toISOString(),
+    });
+    log.info("START menu Reschedule/Cancel — prompted to pick among CONFIRMED appointments", {
+      contactPhone: message.contactPhone,
+      action,
+      count: list.length,
+    });
+    return {
+      handled: true,
+      action: "MENU_APPOINTMENT_PICK_PROMPTED",
+      currentState: CONVERSATION_STATE.START,
+      appointmentCount: list.length,
+    };
+  }
+
+  async _handleMenuAppointmentPick({ clinic, message, row, log }) {
+    const action = row.context?.menuAppointmentAction;
+    const allowedIds = new Set(row.context?.menuAppointmentIds ?? []);
+    const appointmentId =
+      (message.type === "list_reply" || message.type === "button_reply")
+        ? parseMenuAppointmentRowId(message.replyId)
+        : null;
+
+    if (!appointmentId || !allowedIds.has(appointmentId) || !this._appointmentRepo) {
+      let pickRows = [];
+      try {
+        const current = await this._appointmentRepo.findConfirmedByContact(
+          clinic.id,
+          message.contactPhone,
+        );
+        pickRows = buildMenuAppointmentSelectionRows(
+          (current ?? []).filter((a) => allowedIds.has(a.id)),
+        );
+      } catch (err) {
+        log.error("Failed to reload appointments for menu pick re-prompt", {
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+      if (pickRows.length === 0) {
+        await this._wa.sendText(
+          clinic.whatsapp_phone_number_id,
+          message.contactPhone,
+          action === MENU_APPOINTMENT_ACTION.RESCHEDULE
+            ? START_MENU_COPY.NO_CONFIRMED_TO_RESCHEDULE
+            : START_MENU_COPY.NO_CONFIRMED_TO_CANCEL,
+        );
+        return this._resetConversationToStart({ clinic, message, row, log });
+      }
+      await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
+        bodyText: START_MENU_COPY.PICK_APPOINTMENT_REPROMPT,
+        buttonLabel: START_MENU_COPY.PICK_APPOINTMENT_BUTTON_LABEL,
+        rows: pickRows,
+      });
+      await this._repo.update(row.id, {
+        context: { ...row.context, last_wa_message_id: message.waMessageId },
+        last_message_at: new Date().toISOString(),
+      });
+      return {
+        handled: true,
+        action: "MENU_APPOINTMENT_PICK_REPROMPTED",
+        currentState: CONVERSATION_STATE.START,
+      };
+    }
+
+    let appointment;
+    try {
+      appointment = await this._appointmentRepo.findByIdForClinic(clinic.id, appointmentId);
+    } catch (err) {
+      log.error("Failed to load picked menu appointment", {
+        appointmentId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Failed to load picked START-menu appointment",
+        step: OPS_ALERT_STEP.APPOINTMENT_LOOKUP,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { appointmentId, action },
+      });
+      return this._resetConversationToStart({ clinic, message, row, log });
+    }
+
+    if (!appointment || appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
+      await this._wa.sendText(
+        clinic.whatsapp_phone_number_id,
+        message.contactPhone,
+        START_MENU_COPY.PICK_APPOINTMENT_REPROMPT,
+      );
+      return this._handleMenuRescheduleOrCancel({ clinic, message, row, log, action });
+    }
+
+    return this._continueMenuActionWithAppointment({
+      clinic,
+      message,
+      row,
+      log,
+      action,
+      appointment,
+    });
+  }
+
+  async _continueMenuActionWithAppointment({ clinic, message, row, log, action, appointment }) {
+    if (action === MENU_APPOINTMENT_ACTION.RESCHEDULE) {
+      return this._enterMenuReschedule({ clinic, message, row, log, appointment });
+    }
+    return this._cancelFromMenu({ clinic, message, row, log, appointment });
+  }
+
+  async _enterMenuReschedule({ clinic, message, row, log, appointment }) {
+    if (!this._slotSvc?.enterRescheduleFlow) {
+      log.error("SlotSelectionService.enterRescheduleFlow not wired — cannot menu-reschedule", {
+        appointmentId: appointment.id,
+      });
+      return this._acknowledgeUnsupportedIntent({ clinic, message, row, log });
+    }
+
+    const patient = Array.isArray(appointment.patients)
+      ? appointment.patients[0]
+      : appointment.patients;
+    const patientName = patient?.full_name ?? null;
+
+    // Clear menu-pick context before entering SLOT_SELECTION.
+    await this._repo.update(row.id, {
+      context: {
+        ...row.context,
+        last_wa_message_id: message.waMessageId,
+        menuAppointmentAction: undefined,
+        menuAppointmentIds: undefined,
+      },
+      last_message_at: new Date().toISOString(),
+    });
+
+    const result = await this._slotSvc.enterRescheduleFlow({
+      clinic,
+      message,
+      appointment,
+      patientName,
+      log,
+    });
+    log.info("START menu Reschedule — entered SLOT_SELECTION self-serve flow", {
+      appointmentId: appointment.id,
+      action: result?.action,
+    });
+    return {
+      handled: true,
+      action: result?.action === "HUMAN_HANDOFF" ? "MENU_RESCHEDULE_HANDOFF" : "MENU_RESCHEDULE_SLOT_SELECTION",
+      currentState: result?.currentState ?? CONVERSATION_STATE.SLOT_SELECTION,
+      appointmentId: appointment.id,
+    };
+  }
+
+  async _cancelFromMenu({ clinic, message, row, log, appointment }) {
+    if (!this._cancelRefund?.cancelFromPatientMenu) {
+      log.error("AppointmentCancelRefundService not wired — cannot menu-cancel", {
+        appointmentId: appointment.id,
+      });
+      return this._acknowledgeUnsupportedIntent({ clinic, message, row, log });
+    }
+
+    let cancelled;
+    try {
+      cancelled = await this._cancelRefund.cancelFromPatientMenu({
+        clinic,
+        appointmentId: appointment.id,
+        contactPhone: message.contactPhone,
+        log,
+      });
+    } catch (err) {
+      log.error("START menu Cancel failed", {
+        appointmentId: appointment.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "START menu Cancel failed",
+        step: OPS_ALERT_STEP.APPOINTMENT_CANCEL,
+        error: err,
+        clinicId: clinic.id,
+        contactPhone: message.contactPhone,
+        extra: { appointmentId: appointment.id },
+      });
+      return this._resetConversationToStart({ clinic, message, row, log });
+    }
+
+    if (!cancelled) {
+      log.info("START menu Cancel — appointment no longer CONFIRMED", {
+        appointmentId: appointment.id,
+      });
+      await this._wa.sendText(
+        clinic.whatsapp_phone_number_id,
+        message.contactPhone,
+        START_MENU_COPY.NO_CONFIRMED_TO_CANCEL,
+      );
+      return this._resetConversationToStart({ clinic, message, row, log });
+    }
+
+    this._assertCanResetToStart(row.current_state);
+    const updated = await this._repo.update(row.id, {
+      current_state: CONVERSATION_STATE.START,
+      retry_count: 0,
+      context: { last_wa_message_id: message.waMessageId },
+      last_message_at: new Date().toISOString(),
+    });
+    await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
+      bodyText: CANCEL_COPY.MENU_AFTER_CANCEL,
+      buttonLabel: START_MENU_COPY.BUTTON_LABEL,
+      rows: START_MENU_ROWS,
+    });
+    await this._repo.update(updated.id, {
+      context: {
+        ...updated.context,
+        menu_sent_at: new Date().toISOString(),
+      },
+      last_message_at: new Date().toISOString(),
+    });
+
+    log.info("START menu Cancel completed; conversation reset to START", {
+      contactPhone: message.contactPhone,
+      appointmentId: cancelled.id,
+      refundStatus: cancelled.refund_status,
+    });
+    return {
+      handled: true,
+      action: "MENU_APPOINTMENT_CANCELLED",
+      currentState: CONVERSATION_STATE.START,
+      appointmentId: cancelled.id,
+      refundStatus: cancelled.refund_status ?? null,
+    };
+  }
+
+  /** Talk-to-clinic is recognized but not built yet — stay in START. */
   async _acknowledgeUnsupportedIntent({ clinic, message, row, log }) {
     await this._repo.update(row.id, {
       context: { ...row.context, last_wa_message_id: message.waMessageId },

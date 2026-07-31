@@ -29,6 +29,7 @@ class FakeQueryBuilder {
   lt(...args) { return this._record("lt", args); }
   gt(...args) { return this._record("gt", args); }
   lte(...args) { return this._record("lte", args); }
+  order(...args) { return this._record("order", args); }
   insert(data) {
     this.insertedData = data;
     return this._record("insert", [data]);
@@ -707,6 +708,37 @@ test("cancelViaDoctorDashboard: replaying against a non-CONFIRMED appointment is
   const result = await repo.cancelViaDoctorDashboard("clinic-1", "appt-1");
 
   assert.equal(result, null);
+});
+
+test("cancelViaMenu: cancels CONFIRMED with cancellation_reason=patient_cancelled_menu", async () => {
+  const cancelledRow = {
+    id: "appt-1",
+    status: "cancelled",
+    cancellation_reason: "patient_cancelled_menu",
+  };
+  const db = createFakeSupabaseClient({ data: cancelledRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaMenu("clinic-1", "appt-1");
+
+  assert.deepEqual(result, cancelledRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
+  assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "patient_cancelled_menu");
+  assert.ok(db.lastBuilder.updatedWith.cancelled_at);
+});
+
+test("findConfirmedByContact: scopes by clinic/contact/CONFIRMED and returns rows as-is", async () => {
+  const rows = [{ id: "appt-1", slot_start: "2026-07-12T03:30:00.000Z" }];
+  const db = createFakeSupabaseClient({ data: rows, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.findConfirmedByContact("clinic-1", "919876543210");
+
+  assert.deepEqual(result, rows);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "clinic_id" && val === "clinic-1"));
+  assert.ok(eqArgs.some(([col, val]) => col === "contact_phone" && val === "919876543210"));
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
 });
 
 // ─────────────────────────────────────────────────────────────

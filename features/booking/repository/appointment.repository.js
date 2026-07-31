@@ -66,6 +66,7 @@ const PAYMENT_FAILED_CANCELLATION_REASON = "payment_failed";
 const PATIENT_CANCELLED_VIA_REMINDER_REASON = "patient_cancelled_via_reminder";
 const PATIENT_NO_SHOW_CANCELLATION_REASON = "patient_no_show";
 const DOCTOR_CANCELLED_DASHBOARD_REASON = "doctor_cancelled_dashboard";
+const PATIENT_CANCELLED_MENU_REASON = "patient_cancelled_menu";
 const DASHBOARD_CANCELLED_REASON = "cancelled_by_doctor";
 const PATIENT_REQUESTED_CANCELLATION_REASON = "patient_requested";
 
@@ -219,6 +220,32 @@ export class AppointmentRepository extends BaseRepository {
           .is("deleted_at", null)
           .order("slot_start", { ascending: true }),
       "findConfirmedForClinic",
+    );
+  }
+
+  /**
+   * CONFIRMED appointments for a WhatsApp contact (START-menu Reschedule /
+   * Cancel). Ordered by slot_start ascending. Includes patient name for
+   * the multi-appointment picker list.
+   *
+   * @param {string} clinicId
+   * @param {string} contactPhone
+   * @returns {Promise<object[]>}
+   */
+  async findConfirmedByContact(clinicId, contactPhone) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select(
+            "id, patient_id, doctor_id, contact_phone, slot_start, slot_end, status, payment_status, payment_amount, razorpay_payment_id, refund_status, refund_id, refunded_at, patients(full_name)",
+          )
+          .eq("clinic_id", clinicId)
+          .eq("contact_phone", contactPhone)
+          .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+          .is("deleted_at", null)
+          .order("slot_start", { ascending: true }),
+      "findConfirmedByContact",
     );
   }
 
@@ -927,6 +954,40 @@ export class AppointmentRepository extends BaseRepository {
 
     this._log.error("DB error during cancelViaDoctorDashboard", { appointmentId, code: error.code });
     throw new DatabaseError("cancelViaDoctorDashboard", error);
+  }
+
+  /**
+   * Patient cancel from the START menu "Cancel appointment" option.
+   * Same shape as cancelViaReminderReply with
+   * cancellation_reason = patient_cancelled_menu.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async cancelViaMenu(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: PATIENT_CANCELLED_MENU_REASON,
+        cancelled_at: nowIso,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during cancelViaMenu", { appointmentId, code: error.code });
+    throw new DatabaseError("cancelViaMenu", error);
   }
 
   /**

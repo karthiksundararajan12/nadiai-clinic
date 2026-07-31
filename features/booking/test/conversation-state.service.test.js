@@ -135,6 +135,35 @@ function createFakeSlotSelectionService() {
       calls.push({ method: "handleReply", contactPhone: message.contactPhone });
       return { handled: true, action: "SLOT_SELECTION_REPLY", currentState: row.current_state };
     },
+    async enterRescheduleFlow({ message, appointment }) {
+      calls.push({
+        method: "enterRescheduleFlow",
+        contactPhone: message.contactPhone,
+        appointmentId: appointment.id,
+      });
+      return {
+        handled: true,
+        action: "SLOTS_PRESENTED",
+        currentState: CONVERSATION_STATE.SLOT_SELECTION,
+      };
+    },
+  };
+}
+
+function createFakeCancelRefundService() {
+  const cancelFromPatientMenuCalls = [];
+  return {
+    cancelFromPatientMenuCalls,
+    async cancelFromPatientMenu({ appointmentId, contactPhone }) {
+      cancelFromPatientMenuCalls.push({ appointmentId, contactPhone });
+      return {
+        id: appointmentId,
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: "patient_cancelled_menu",
+        refund_status: "not_applicable",
+        slot_start: "2026-07-12T03:30:00.000Z",
+      };
+    },
   };
 }
 
@@ -729,6 +758,236 @@ test("'Talk to clinic' is recognized but unimplemented — stays in START with a
   assert.equal(wa.calls[0].type, "text");
 });
 
+// ─────────────────────────────────────────────────────────────
+// START menu — Reschedule / Cancel
+// ─────────────────────────────────────────────────────────────
+
+function startMenuRow() {
+  return {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.START,
+    context: { last_wa_message_id: "wamid.0", menu_sent_at: new Date().toISOString() },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  };
+}
+
+test("START menu Reschedule: zero CONFIRMED appointments informs and re-shows the menu", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({ confirmedByContact: [] });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+  repo.rows.set("clinic-1:919876543210", startMenuRow());
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: START_MENU_INTENT.RESCHEDULE,
+    }),
+  });
+
+  assert.equal(result.action, "MENU_RESCHEDULE_NO_APPOINTMENTS");
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "list");
+  assert.match(wa.calls[0].opts.bodyText, /don't have an upcoming appointment to reschedule/i);
+});
+
+test("START menu Reschedule: exactly one CONFIRMED appointment enters enterRescheduleFlow", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const slotSvc = createFakeSlotSelectionService();
+  const appointment = {
+    id: "appt-1",
+    patient_id: "patient-1",
+    doctor_id: "doctor-1",
+    status: APPOINTMENT_STATUS.CONFIRMED,
+    slot_start: "2026-07-12T03:30:00.000Z",
+    patients: { full_name: "Asha Kumar" },
+  };
+  const appointmentRepo = createFakeAppointmentRepo({ confirmedByContact: [appointment] });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), slotSvc,
+    appointmentRepo,
+  );
+  repo.rows.set("clinic-1:919876543210", startMenuRow());
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: START_MENU_INTENT.RESCHEDULE,
+    }),
+  });
+
+  assert.equal(result.action, "MENU_RESCHEDULE_SLOT_SELECTION");
+  assert.equal(result.appointmentId, "appt-1");
+  assert.equal(slotSvc.calls.length, 1);
+  assert.equal(slotSvc.calls[0].method, "enterRescheduleFlow");
+  assert.equal(slotSvc.calls[0].appointmentId, "appt-1");
+});
+
+test("START menu Reschedule: multiple CONFIRMED appointments prompts a picker list", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointments = [
+    {
+      id: "appt-1",
+      status: APPOINTMENT_STATUS.CONFIRMED,
+      slot_start: "2026-07-12T03:30:00.000Z",
+      patients: { full_name: "Asha" },
+    },
+    {
+      id: "appt-2",
+      status: APPOINTMENT_STATUS.CONFIRMED,
+      slot_start: "2026-07-13T03:30:00.000Z",
+      patients: { full_name: "Ravi" },
+    },
+  ];
+  const appointmentRepo = createFakeAppointmentRepo({ confirmedByContact: appointments });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+  repo.rows.set("clinic-1:919876543210", startMenuRow());
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: START_MENU_INTENT.RESCHEDULE,
+    }),
+  });
+
+  assert.equal(result.action, "MENU_APPOINTMENT_PICK_PROMPTED");
+  assert.equal(result.appointmentCount, 2);
+  assert.equal(wa.calls[0].type, "list");
+  assert.match(wa.calls[0].opts.bodyText, /Which appointment would you like to reschedule/i);
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.context.menuAppointmentAction, "reschedule");
+  assert.deepEqual(row.context.menuAppointmentIds, ["appt-1", "appt-2"]);
+});
+
+test("START menu appointment pick (reschedule) continues into enterRescheduleFlow", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const slotSvc = createFakeSlotSelectionService();
+  const appointment = {
+    id: "appt-2",
+    patient_id: "patient-2",
+    doctor_id: "doctor-1",
+    status: APPOINTMENT_STATUS.CONFIRMED,
+    slot_start: "2026-07-13T03:30:00.000Z",
+    patients: { full_name: "Ravi" },
+  };
+  const appointmentRepo = createFakeAppointmentRepo({
+    confirmedByContact: [
+      { id: "appt-1", status: APPOINTMENT_STATUS.CONFIRMED, slot_start: "2026-07-12T03:30:00.000Z" },
+      appointment,
+    ],
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), slotSvc,
+    appointmentRepo,
+  );
+  repo.rows.set("clinic-1:919876543210", {
+    ...startMenuRow(),
+    context: {
+      last_wa_message_id: "wamid.0",
+      menuAppointmentAction: "reschedule",
+      menuAppointmentIds: ["appt-1", "appt-2"],
+    },
+  });
+
+  const { menuAppointmentRowId } = await import("../lib/menu-appointment-list.js");
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: menuAppointmentRowId("appt-2"),
+    }),
+  });
+
+  assert.equal(result.action, "MENU_RESCHEDULE_SLOT_SELECTION");
+  assert.equal(slotSvc.calls[0].appointmentId, "appt-2");
+});
+
+test("START menu Cancel: exactly one CONFIRMED appointment uses cancelFromPatientMenu", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointment = {
+    id: "appt-1",
+    status: APPOINTMENT_STATUS.CONFIRMED,
+    slot_start: "2026-07-12T03:30:00.000Z",
+    payment_amount: 500,
+  };
+  const appointmentRepo = createFakeAppointmentRepo({ confirmedByContact: [appointment] });
+  const cancelRefund = createFakeCancelRefundService();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+    null,
+    cancelRefund,
+  );
+  repo.rows.set("clinic-1:919876543210", startMenuRow());
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: START_MENU_INTENT.CANCEL,
+    }),
+  });
+
+  assert.equal(result.action, "MENU_APPOINTMENT_CANCELLED");
+  assert.equal(result.appointmentId, "appt-1");
+  assert.equal(cancelRefund.cancelFromPatientMenuCalls.length, 1);
+  assert.equal(cancelRefund.cancelFromPatientMenuCalls[0].appointmentId, "appt-1");
+  assert.equal(wa.calls.some((c) => c.type === "list"), true);
+  const row = repo.rows.get("clinic-1:919876543210");
+  assert.equal(row.current_state, CONVERSATION_STATE.START);
+  assert.ok(row.context.menu_sent_at);
+});
+
+test("START menu Cancel: zero CONFIRMED appointments informs and re-shows the menu", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({ confirmedByContact: [] });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+  repo.rows.set("clinic-1:919876543210", startMenuRow());
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.1",
+      type: "list_reply",
+      replyId: START_MENU_INTENT.CANCEL,
+    }),
+  });
+
+  assert.equal(result.action, "MENU_CANCEL_NO_APPOINTMENTS");
+  assert.match(wa.calls[0].opts.bodyText, /don't have an upcoming appointment to cancel/i);
+});
+
 test("inbound message while SLOT_SELECTION dispatches to SlotSelectionService.handleReply", async () => {
   const repo = createFakeConversationRepo();
   const wa = createFakeWhatsAppClient();
@@ -787,39 +1046,65 @@ test("a message for a state with no handler yet is safely no-op'd", async () => 
 // CONFIRMED / REMINDER_SENT inbound fallback
 // ─────────────────────────────────────────────────────────────
 
-function createFakeAppointmentRepo(appointment = null) {
+function createFakeAppointmentRepo(appointmentOrOpts = null) {
   const findCalls = [];
   const cancelCalls = [];
-  let current = appointment ? { ...appointment } : null;
+  const findConfirmedByContactCalls = [];
+
+  const isMenuOpts =
+    appointmentOrOpts &&
+    typeof appointmentOrOpts === "object" &&
+    Array.isArray(appointmentOrOpts.confirmedByContact);
+
+  const confirmedByContact = isMenuOpts ? appointmentOrOpts.confirmedByContact : [];
+  const byId = new Map(confirmedByContact.map((a) => [a.id, { ...a }]));
+
+  let current = null;
+  if (!isMenuOpts && appointmentOrOpts) {
+    current = { ...appointmentOrOpts };
+    if (current.id) byId.set(current.id, current);
+  }
+
   return {
     findCalls,
     cancelCalls,
+    findConfirmedByContactCalls,
     get current() {
       return current;
     },
+    async findConfirmedByContact(clinicId, contactPhone) {
+      findConfirmedByContactCalls.push({ clinicId, contactPhone });
+      if (isMenuOpts) return confirmedByContact.map((a) => ({ ...a }));
+      if (!current || current.status !== APPOINTMENT_STATUS.CONFIRMED) return [];
+      return [{ ...current }];
+    },
     async findByIdForClinic(clinicId, appointmentId) {
       findCalls.push({ clinicId, appointmentId });
+      if (byId.has(appointmentId)) return { ...byId.get(appointmentId) };
       if (!current) return null;
       if (current.id && current.id !== appointmentId) return null;
       return { ...current };
     },
     async cancelViaPatientKeyword(clinicId, appointmentId) {
       cancelCalls.push({ clinicId, appointmentId });
-      if (!current || current.id !== appointmentId) return null;
+      const existing = byId.get(appointmentId) ?? (current?.id === appointmentId ? current : null);
+      if (!existing) return null;
       if (
-        current.status !== APPOINTMENT_STATUS.PAYMENT_PENDING &&
-        current.status !== APPOINTMENT_STATUS.CONFIRMED
+        existing.status !== APPOINTMENT_STATUS.PAYMENT_PENDING &&
+        existing.status !== APPOINTMENT_STATUS.CONFIRMED
       ) {
         return null;
       }
-      current = {
-        ...current,
+      const cancelled = {
+        ...existing,
         status: APPOINTMENT_STATUS.CANCELLED,
         cancellation_reason: PATIENT_REQUESTED_CANCELLATION_REASON,
         cancelled_at: new Date().toISOString(),
         hold_expires_at: null,
       };
-      return { ...current };
+      byId.set(appointmentId, cancelled);
+      current = cancelled;
+      return { ...cancelled };
     },
   };
 }

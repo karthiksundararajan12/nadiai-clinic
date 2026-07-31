@@ -10,6 +10,7 @@ import {
   CAPTURED_PAYMENT_STATUSES,
   REMINDER_COPY,
   DOCTOR_CANCELLED_DASHBOARD_REASON,
+  PATIENT_CANCELLED_MENU_REASON,
 } from "../constants.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { maskPhoneForLog } from "../lib/phone.js";
@@ -98,6 +99,46 @@ export class AppointmentCancelRefundService {
           : REMINDER_COPY.CANCEL_ACK.replace("{slotLabel}", slotLabel),
       contactPhone: cancelled.contact_phone,
       contextLabel: "doctor dashboard cancel",
+    });
+  }
+
+  /**
+   * START-menu "Cancel appointment": flip CONFIRMED → cancelled
+   * (cancellation_reason=patient_cancelled_menu), then the same refund +
+   * patient ack + in-app notify pipeline as reminder Cancel.
+   *
+   * @param {{
+   *   clinic: { id: string; whatsapp_phone_number_id?: string|null };
+   *   appointmentId: string;
+   *   contactPhone?: string|null;
+   *   log?: import("../logger.js").Logger;
+   * }} params
+   * @returns {Promise<object|null>}
+   */
+  async cancelFromPatientMenu({
+    clinic,
+    appointmentId,
+    contactPhone = null,
+    log = this._log,
+  }) {
+    const cancelled = await this._appointmentRepo.cancelViaMenu(clinic.id, appointmentId);
+    if (!cancelled) return null;
+
+    const slotLabel = formatSlotLabel(new Date(cancelled.slot_start));
+    return this.finalizeAfterCancel({
+      clinic,
+      appointment: cancelled,
+      log,
+      reason: PATIENT_CANCELLED_MENU_REASON,
+      buildAckBody: (_appt, refundOutcome) =>
+        refundOutcome.refundInitiated
+          ? REMINDER_COPY.CANCEL_ACK_WITH_REFUND.replace(
+              "{amount}",
+              formatNotificationAmount(cancelled.payment_amount),
+            )
+          : REMINDER_COPY.CANCEL_ACK.replace("{slotLabel}", slotLabel),
+      contactPhone: contactPhone ?? cancelled.contact_phone,
+      contextLabel: "START menu Cancel",
     });
   }
 

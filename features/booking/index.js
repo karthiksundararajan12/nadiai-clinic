@@ -284,6 +284,7 @@ export {
   PATIENT_REQUESTED_CANCELLATION_REASON,
   PATIENT_NO_SHOW_CANCELLATION_REASON,
   DOCTOR_CANCELLED_DASHBOARD_REASON,
+  PATIENT_CANCELLED_MENU_REASON,
   CONFIRMED_INBOUND_COPY,
   CONFIRMED_INBOUND_FALLBACK_STATES,
   APPOINTMENT_STATUS,
@@ -358,6 +359,11 @@ export { describeInboundMessageForHandoff, describeContactForHandoff } from "./l
 export { levenshteinDistance, nameSimilarity, findClosestPatientMatch } from "./lib/fuzzy-match.js";
 export { validatePatientName, parseAgeOrDob } from "./lib/patient-input.js";
 export { buildPatientSelectionRows, patientOptionRowId, parsePatientOptionRowId } from "./lib/patient-list.js";
+export {
+  buildMenuAppointmentSelectionRows,
+  menuAppointmentRowId,
+  parseMenuAppointmentRowId,
+} from "./lib/menu-appointment-list.js";
 export {
   normalizeWorkingHours,
   generateCandidateSlots,
@@ -541,6 +547,15 @@ export function createBookingServices(supabaseClient) {
     slotSelectionService,
     { vaccinationSeedingService },
   );
+  const appointmentCancelRefundService = new _AppointmentCancelRefundService(
+    appointmentRepository,
+    {
+      razorpayClient,
+      whatsappClient,
+      inAppNotificationService,
+      conversationStateRepository,
+    },
+  );
   const conversationStateService = new _ConvService(
     conversationStateRepository,
     whatsappClient,
@@ -549,6 +564,7 @@ export function createBookingServices(supabaseClient) {
     slotSelectionService,
     appointmentRepository,
     inAppNotificationService,
+    appointmentCancelRefundService,
   );
   const invoiceStorageService = new _InvoiceStorageService(supabase);
   const invoiceService = new _InvoiceService(
@@ -574,15 +590,6 @@ export function createBookingServices(supabaseClient) {
       templatesLive: process.env.WHATSAPP_TEMPLATES_LIVE === "true",
       invoiceService,
       inAppNotificationService,
-    },
-  );
-  const appointmentCancelRefundService = new _AppointmentCancelRefundService(
-    appointmentRepository,
-    {
-      razorpayClient,
-      whatsappClient,
-      inAppNotificationService,
-      conversationStateRepository,
     },
   );
   const reminderService = new _ReminderService(

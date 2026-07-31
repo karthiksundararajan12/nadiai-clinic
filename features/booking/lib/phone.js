@@ -35,3 +35,17 @@ export function formatPhoneForDisplay(rawPhone) {
   }
   return `+${digits}`;
 }
+
+/**
+ * Masks a phone for logs / ops alerts — last 4 digits only.
+ * Example: `919876543210` → `******3210`.
+ *
+ * @param {string|null|undefined} rawPhone
+ * @returns {string}
+ */
+export function maskPhoneForLog(rawPhone) {
+  const digits = normalizePhoneForWhatsApp(rawPhone);
+  if (!digits) return "(none)";
+  if (digits.length <= 4) return `****${digits}`;
+  return `${"*".repeat(Math.min(digits.length - 4, 6))}${digits.slice(-4)}`;
+}

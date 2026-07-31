@@ -7,6 +7,7 @@
 
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { createLogger } from "../logger.js";
+import { PATIENT_NO_SHOW_CANCELLATION_REASON } from "../constants.js";
 
 export const NOTIFICATION_TYPE = Object.freeze({
   PAYMENT_RECEIVED: "payment_received",
@@ -42,6 +43,7 @@ export function formatPaymentReceivedMessage({ patientName, amount, slotStart })
  *   slotStart: string|Date;
  *   refundStatus?: string|null;
  *   paymentAmount?: number|string|null;
+ *   cancellationReason?: string|null;
  * }} params
  * @returns {string}
  */
@@ -50,12 +52,16 @@ export function formatAppointmentCancelledMessage({
   slotStart,
   refundStatus = null,
   paymentAmount = null,
+  cancellationReason = null,
 }) {
   const slot =
     slotStart instanceof Date
       ? formatSlotLabel(slotStart)
       : formatSlotLabel(new Date(slotStart));
-  const base = `${patientName} cancelled their appointment on ${slot}`;
+  const isNoShow = cancellationReason === PATIENT_NO_SHOW_CANCELLATION_REASON;
+  const base = isNoShow
+    ? `${patientName} did not show for their appointment on ${slot} (no-show)`
+    : `${patientName} cancelled their appointment on ${slot}`;
   if (!refundStatus || refundStatus === "not_applicable") return base;
   if (refundStatus === "completed" || refundStatus === "processing") {
     const amountPart =
@@ -129,9 +135,11 @@ export class InAppNotificationService {
 
   /**
    * Inserts an appointment_cancelled notification after a patient WhatsApp
-   * "cancel". Caller wraps in try/catch for best-effort use.
-   * When refund_status is present it is stored in payload and surfaced in
-   * the message so the dashboard can see refund outcome without a join.
+   * "cancel" or grace-period patient_no_show. Caller wraps in try/catch for
+   * best-effort use. When refund_status is present it is stored in payload
+   * and surfaced in the message so the dashboard can see refund outcome
+   * without a join. cancellation_reason is included so no-shows are
+   * distinguishable from patient-initiated cancels.
    *
    * @param {{ clinicId: string; appointment: {
    *   id: string;
@@ -140,6 +148,7 @@ export class InAppNotificationService {
    *   slot_start: string;
    *   refund_status?: string|null;
    *   payment_amount?: number|string|null;
+   *   cancellation_reason?: string|null;
    * } }} params
    * @returns {Promise<import("../repository/notification.repository.js").ClinicNotification>}
    */
@@ -151,21 +160,27 @@ export class InAppNotificationService {
     }
 
     const refundStatus = appointment.refund_status ?? null;
-    const payload = refundStatus ? { refund_status: refundStatus } : null;
+    const cancellationReason = appointment.cancellation_reason ?? null;
+    const payload = {};
+    if (refundStatus) payload.refund_status = refundStatus;
+    if (cancellationReason) payload.cancellation_reason = cancellationReason;
 
     return this._notificationRepo.insert({
       clinicId,
       doctorId: appointment.doctor_id ?? null,
       type: NOTIFICATION_TYPE.APPOINTMENT_CANCELLED,
-      title: "Appointment cancelled",
+      title: cancellationReason === PATIENT_NO_SHOW_CANCELLATION_REASON
+        ? "Patient no-show"
+        : "Appointment cancelled",
       message: formatAppointmentCancelledMessage({
         patientName,
         slotStart: appointment.slot_start,
         refundStatus,
         paymentAmount: appointment.payment_amount,
+        cancellationReason,
       }),
       relatedAppointmentId: appointment.id,
-      payload,
+      payload: Object.keys(payload).length > 0 ? payload : null,
     });
   }
 

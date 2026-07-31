@@ -592,31 +592,31 @@ test("claimReminder: a non-constraint DB error throws DatabaseError instead of b
 });
 
 // ─────────────────────────────────────────────────────────────
-// Session 5 — completeExpiredConfirmed (no-response timeout)
+// Grace-period resolution — find / complete / no-show cancel
 // ─────────────────────────────────────────────────────────────
 
-test("completeExpiredConfirmed: bulk-completes CONFIRMED rows past the grace period after slot_end", async () => {
-  const completed = [{ id: "appt-1" }, { id: "appt-2" }];
-  const db = createFakeSupabaseClient({ data: completed, error: null });
+test("findExpiredConfirmed: selects CONFIRMED rows past the grace period after slot_end", async () => {
+  const rows = [{ id: "appt-1" }, { id: "appt-2" }];
+  const db = createFakeSupabaseClient({ data: rows, error: null });
   const repo = new AppointmentRepository(db);
 
   const nowIso = "2026-07-06T11:00:00.000Z";
-  const result = await repo.completeExpiredConfirmed("clinic-1", nowIso);
+  const result = await repo.findExpiredConfirmed("clinic-1", nowIso);
 
-  assert.deepEqual(result, completed);
-  assert.equal(db.lastBuilder.updatedWith.status, "completed");
+  assert.deepEqual(result, rows);
+  assert.equal(db.lastBuilder.calls.find((c) => c.method === "select")?.args[0], "*");
   const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
   assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
   const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
   assert.deepEqual(ltArgs, ["slot_end", "2026-07-06T10:00:00.000Z"]);
 });
 
-test("completeExpiredConfirmed: appointments still within the grace window after slot_end do not match the auto-complete filter", async () => {
+test("findExpiredConfirmed: appointments still within the grace window after slot_end do not match the filter", async () => {
   const nowIso = "2026-07-06T11:00:00.000Z";
   const db = createFakeSupabaseClient({ data: [], error: null });
   const repo = new AppointmentRepository(db);
 
-  await repo.completeExpiredConfirmed("clinic-1", nowIso);
+  await repo.findExpiredConfirmed("clinic-1", nowIso);
 
   const cutoffIso = "2026-07-06T10:00:00.000Z";
   const ltArgs = db.lastBuilder.calls.find((c) => c.method === "lt")?.args;
@@ -627,6 +627,86 @@ test("completeExpiredConfirmed: appointments still within the grace window after
     Date.parse(slotEndWithinGrace) >= Date.parse(cutoffIso),
     "a slot that ended 30 minutes ago should remain confirmed until the grace period elapses",
   );
+});
+
+test("completeConfirmedIds: bulk-completes the given CONFIRMED ids", async () => {
+  const completed = [{ id: "appt-1" }, { id: "appt-2" }];
+  const db = createFakeSupabaseClient({ data: completed, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const nowIso = "2026-07-06T11:00:00.000Z";
+  const result = await repo.completeConfirmedIds("clinic-1", ["appt-1", "appt-2"], nowIso);
+
+  assert.deepEqual(result, completed);
+  assert.equal(db.lastBuilder.updatedWith.status, "completed");
+  const inArgs = db.lastBuilder.calls.find((c) => c.method === "in")?.args;
+  assert.deepEqual(inArgs, ["id", ["appt-1", "appt-2"]]);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("completeConfirmedIds: empty id list is a no-op (no DB call)", async () => {
+  const db = createFakeSupabaseClient({ data: [], error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.completeConfirmedIds("clinic-1", [], "2026-07-06T11:00:00.000Z");
+
+  assert.deepEqual(result, []);
+  assert.equal(db.builders.length, 0);
+});
+
+test("cancelViaNoShow: cancels CONFIRMED with cancellation_reason=patient_no_show", async () => {
+  const cancelledRow = { id: "appt-1", status: "cancelled", cancellation_reason: "patient_no_show" };
+  const db = createFakeSupabaseClient({ data: cancelledRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaNoShow("clinic-1", "appt-1");
+
+  assert.deepEqual(result, cancelledRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
+  assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "patient_no_show");
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
+  assert.ok(db.lastBuilder.updatedWith.cancelled_at);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("cancelViaNoShow: replaying against an already-cancelled appointment is a no-op (returns null)", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaNoShow("clinic-1", "appt-1");
+
+  assert.equal(result, null);
+});
+
+test("cancelViaDoctorDashboard: cancels CONFIRMED with cancellation_reason=doctor_cancelled_dashboard", async () => {
+  const cancelledRow = {
+    id: "appt-1",
+    status: "cancelled",
+    cancellation_reason: "doctor_cancelled_dashboard",
+  };
+  const db = createFakeSupabaseClient({ data: cancelledRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaDoctorDashboard("clinic-1", "appt-1");
+
+  assert.deepEqual(result, cancelledRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "cancelled");
+  assert.equal(db.lastBuilder.updatedWith.cancellation_reason, "doctor_cancelled_dashboard");
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
+  assert.ok(db.lastBuilder.updatedWith.cancelled_at);
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+});
+
+test("cancelViaDoctorDashboard: replaying against a non-CONFIRMED appointment is a no-op (returns null)", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.cancelViaDoctorDashboard("clinic-1", "appt-1");
+
+  assert.equal(result, null);
 });
 
 // ─────────────────────────────────────────────────────────────

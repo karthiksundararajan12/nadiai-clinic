@@ -64,6 +64,8 @@ const NOT_FOUND_CODE = "PGRST116";
 const EXPIRED_HOLD_CANCELLATION_REASON = "hold_expired";
 const PAYMENT_FAILED_CANCELLATION_REASON = "payment_failed";
 const PATIENT_CANCELLED_VIA_REMINDER_REASON = "patient_cancelled_via_reminder";
+const PATIENT_NO_SHOW_CANCELLATION_REASON = "patient_no_show";
+const DOCTOR_CANCELLED_DASHBOARD_REASON = "doctor_cancelled_dashboard";
 const DASHBOARD_CANCELLED_REASON = "cancelled_by_doctor";
 const PATIENT_REQUESTED_CANCELLATION_REASON = "patient_requested";
 
@@ -800,19 +802,17 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
-   * Bulk, idempotent no-response timeout (Session 5 step 5): any CONFIRMED
-   * appointment whose slot ended more than CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES
-   * ago with no reply moves straight to COMPLETED. NO_SHOW tracking is
-   * explicitly deferred per spec — this is COMPLETED-only, no clinic config
-   * flag. A plain bulk UPDATE (not a per-row claim) is safe here because
-   * re-running it is naturally a no-op: once a row is COMPLETED it no longer
-   * matches `status = 'confirmed'`.
+   * CONFIRMED appointments whose slot ended more than
+   * CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES ago. ReminderService resolves each
+   * row to COMPLETED (when a COMPLETED Scribe session exists) or cancels as
+   * patient_no_show. Returns full rows so the caller can refund without a
+   * second fetch.
    *
    * @param {string} clinicId
    * @param {string} nowIso
-   * @returns {Promise<Array<{ id: string }>>} rows that were transitioned, for logging.
+   * @returns {Promise<object[]>}
    */
-  async completeExpiredConfirmed(clinicId, nowIso) {
+  async findExpiredConfirmed(clinicId, nowIso) {
     const cutoffIso = new Date(
       Date.parse(nowIso) - CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES * 60_000,
     ).toISOString();
@@ -821,14 +821,112 @@ export class AppointmentRepository extends BaseRepository {
       () =>
         this._db
           .from(this._table)
-          .update({ status: APPOINTMENT_STATUS.COMPLETED, updated_at: nowIso })
+          .select("*")
           .eq("clinic_id", clinicId)
           .eq("status", APPOINTMENT_STATUS.CONFIRMED)
           .is("deleted_at", null)
-          .lt("slot_end", cutoffIso)
-          .select("id"),
-      "completeExpiredConfirmed",
+          .lt("slot_end", cutoffIso),
+      "findExpiredConfirmed",
     );
+  }
+
+  /**
+   * Bulk-complete specific CONFIRMED appointments (grace-period job, after
+   * confirming a COMPLETED Scribe session exists). Conditional on
+   * `status = confirmed` so a concurrent cancel/complete is a no-op.
+   *
+   * @param {string} clinicId
+   * @param {string[]} appointmentIds
+   * @param {string} nowIso
+   * @returns {Promise<Array<{ id: string }>>}
+   */
+  async completeConfirmedIds(clinicId, appointmentIds, nowIso) {
+    if (!appointmentIds?.length) return [];
+
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .update({ status: APPOINTMENT_STATUS.COMPLETED, updated_at: nowIso })
+          .eq("clinic_id", clinicId)
+          .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+          .in("id", appointmentIds)
+          .is("deleted_at", null)
+          .select("id"),
+      "completeConfirmedIds",
+    );
+  }
+
+  /**
+   * Grace-period no-show: cancel a CONFIRMED appointment that never got a
+   * completed Scribe session. Same shape as cancelViaReminderReply /
+   * cancelFromDashboard (status, cancelled_at, hold cleared) with
+   * cancellation_reason = patient_no_show for the refunds ledger.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async cancelViaNoShow(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: PATIENT_NO_SHOW_CANCELLATION_REASON,
+        cancelled_at: nowIso,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during cancelViaNoShow", { appointmentId, code: error.code });
+    throw new DatabaseError("cancelViaNoShow", error);
+  }
+
+  /**
+   * Doctor-initiated cancel from the appointments UI for a CONFIRMED row.
+   * Same shape as cancelViaReminderReply (status, cancelled_at, hold cleared)
+   * with cancellation_reason = doctor_cancelled_dashboard so dashboard
+   * cancels are distinguishable from WhatsApp-reminder and no-show cancels
+   * in the refunds ledger. Caller runs the shared refund + patient ack
+   * pipeline (AppointmentCancelRefundService).
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async cancelViaDoctorDashboard(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: DOCTOR_CANCELLED_DASHBOARD_REASON,
+        cancelled_at: nowIso,
+        hold_expires_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during cancelViaDoctorDashboard", { appointmentId, code: error.code });
+    throw new DatabaseError("cancelViaDoctorDashboard", error);
   }
 
   /**

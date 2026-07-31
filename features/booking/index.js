@@ -195,9 +195,10 @@
  *     (conversation_state → SLOT_SELECTION with rescheduleAppointmentId)
  *     and updates the SAME appointments row on the next slot pick.
  *
- * 26. No-response timeout (past-due CONFIRMED, no reply) transitions
- *     straight to COMPLETED — NO_SHOW tracking is deferred per explicit
- *     instruction, no clinic config flag built for it yet.
+ * 26. Grace-period resolution (past-due CONFIRMED after slot_end + grace):
+ *     COMPLETED when a COMPLETED scribe_sessions row exists for the
+ *     appointment_id; otherwise cancelled as patient_no_show with the
+ *     same Razorpay refund + in-app notify path as other paid cancels.
  *
  * 27. Cron endpoint: GET /api/cron/booking-reminders, scheduled every 15 min
  *     in vercel.json, protected by CRON_SECRET (same Bearer-token pattern as
@@ -281,6 +282,8 @@ export {
   RESET_COPY,
   CANCEL_COPY,
   PATIENT_REQUESTED_CANCELLATION_REASON,
+  PATIENT_NO_SHOW_CANCELLATION_REASON,
+  DOCTOR_CANCELLED_DASHBOARD_REASON,
   CONFIRMED_INBOUND_COPY,
   CONFIRMED_INBOUND_FALLBACK_STATES,
   APPOINTMENT_STATUS,
@@ -395,6 +398,7 @@ export { PatientCollectionService } from "./services/patient-collection.service.
 export { SlotSelectionService } from "./services/slot-selection.service.js";
 export { PaymentWebhookService } from "./services/payment-webhook.service.js";
 export { ReminderService } from "./services/reminder.service.js";
+export { AppointmentCancelRefundService } from "./services/appointment-cancel-refund.service.js";
 export { DailyDigestService } from "./services/daily-digest.service.js";
 export { InvoiceService } from "./services/invoice.service.js";
 export { InvoiceStorageService } from "./services/invoice-storage.service.js";
@@ -453,12 +457,14 @@ import { PatientCollectionService as _PatientCollectionService } from "./service
 import { SlotSelectionService as _SlotSelectionService } from "./services/slot-selection.service.js";
 import { PaymentWebhookService as _PaymentWebhookService } from "./services/payment-webhook.service.js";
 import { ReminderService as _ReminderService } from "./services/reminder.service.js";
+import { AppointmentCancelRefundService as _AppointmentCancelRefundService } from "./services/appointment-cancel-refund.service.js";
 import { InvoiceStorageService as _InvoiceStorageService } from "./services/invoice-storage.service.js";
 import { InvoiceService as _InvoiceService } from "./services/invoice.service.js";
 import { NotificationRepository as _NotificationRepo } from "./repository/notification.repository.js";
 import { InAppNotificationService as _InAppNotificationService } from "./services/in-app-notification.service.js";
 import { VaccinationRepository as _VaccinationRepo } from "../vaccinations/vaccination.repository.js";
 import { VaccinationSeedingService as _VaccinationSeedingService } from "../vaccinations/vaccination-seeding.service.js";
+import { SessionRepository as _ScribeSessionRepo } from "../scribe/repository/session.repository.js";
 
 /**
  * Wires together all booking domain services.
@@ -484,6 +490,7 @@ import { VaccinationSeedingService as _VaccinationSeedingService } from "../vacc
  *   conversationStateService: import("./services/conversation-state.service.js").ConversationStateService;
  *   paymentWebhookService: import("./services/payment-webhook.service.js").PaymentWebhookService;
  *   reminderService: import("./services/reminder.service.js").ReminderService;
+ *   appointmentCancelRefundService: import("./services/appointment-cancel-refund.service.js").AppointmentCancelRefundService;
  *   invoiceService: import("./services/invoice.service.js").InvoiceService;
  *   invoiceStorageService: import("./services/invoice-storage.service.js").InvoiceStorageService;
  *   inAppNotificationService: import("./services/in-app-notification.service.js").InAppNotificationService;
@@ -517,6 +524,7 @@ export function createBookingServices(supabaseClient) {
   );
   const vaccinationRepository = new _VaccinationRepo(supabase);
   const vaccinationSeedingService = new _VaccinationSeedingService(vaccinationRepository, doctorProfileRepository);
+  const scribeSessionRepository = new _ScribeSessionRepo(supabase);
   const slotSelectionService = new _SlotSelectionService(
     conversationStateRepository,
     appointmentRepository,
@@ -568,6 +576,15 @@ export function createBookingServices(supabaseClient) {
       inAppNotificationService,
     },
   );
+  const appointmentCancelRefundService = new _AppointmentCancelRefundService(
+    appointmentRepository,
+    {
+      razorpayClient,
+      whatsappClient,
+      inAppNotificationService,
+      conversationStateRepository,
+    },
+  );
   const reminderService = new _ReminderService(
     clinicRepository,
     appointmentRepository,
@@ -580,6 +597,8 @@ export function createBookingServices(supabaseClient) {
       slotSelectionService,
       inAppNotificationService,
       razorpayClient,
+      cancelRefundService: appointmentCancelRefundService,
+      scribeSessionRepository,
     },
   );
 
@@ -600,6 +619,7 @@ export function createBookingServices(supabaseClient) {
     conversationStateService,
     paymentWebhookService,
     reminderService,
+    appointmentCancelRefundService,
     invoiceService,
     invoiceStorageService,
     inAppNotificationService,

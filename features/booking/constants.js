@@ -267,6 +267,23 @@ export const CANCEL_COPY = Object.freeze({
 export const PATIENT_REQUESTED_CANCELLATION_REASON = "patient_requested";
 
 /**
+ * appointments.cancellation_reason when the grace-period job cancels a
+ * CONFIRMED appointment that never got a completed Scribe session
+ * (patient no-show). Distinct from doctor dashboard cancels
+ * (`doctor_cancelled_dashboard`) so refunds are attributable in the ledger.
+ */
+export const PATIENT_NO_SHOW_CANCELLATION_REASON = "patient_no_show";
+
+/**
+ * appointments.cancellation_reason for doctor-initiated cancel from the
+ * appointments dashboard (with Razorpay refund). Distinct from
+ * WhatsApp-reminder cancel (`patient_cancelled_via_reminder`), no-show
+ * (`patient_no_show`), and the legacy multi-status dashboard cancel
+ * (`cancelled_by_doctor`).
+ */
+export const DOCTOR_CANCELLED_DASHBOARD_REASON = "doctor_cancelled_dashboard";
+
+/**
  * Plain-text fallback when a contact messages while already booked
  * (conversation_state CONFIRMED). Free-form session message — not a Meta
  * template. Placeholders: {date}, {time} from the appointment's slot_start.
@@ -652,10 +669,11 @@ export const REMINDER_DEFAULT_OFFSET_MINUTES = Object.freeze({
 export const REMINDER_WINDOW_MINUTES = 20;
 
 /**
- * Grace period after `slot_end` before a CONFIRMED appointment with no
- * reminder reply is auto-completed by the booking-reminders cron
- * (`completeExpiredConfirmed`). Keeps the Scribe "Start consultation"
- * window open for late-running consultations.
+ * Grace period after `slot_end` before a CONFIRMED appointment is resolved
+ * by the booking-reminders cron: completed if a COMPLETED Scribe session
+ * exists for the appointment, otherwise cancelled as patient_no_show
+ * (with refund). Keeps the Scribe "Start consultation" window open for
+ * late-running consultations.
  */
 export const CONFIRMED_AUTO_COMPLETE_GRACE_MINUTES = 60;
 
@@ -714,6 +732,14 @@ export const REMINDER_COPY = Object.freeze({
    */
   CANCEL_ACK_WITH_REFUND:
     "Your appointment has been cancelled. A refund of ₹{amount} will be processed within a few business days.",
+  /**
+   * Auto no-show cancel after the grace window (no completed Scribe session).
+   * Prefer NO_SHOW_ACK_WITH_REFUND when a captured payment refund was initiated.
+   */
+  NO_SHOW_ACK:
+    "We didn't see you for your appointment on {slotLabel} — this has been cancelled.",
+  NO_SHOW_ACK_WITH_REFUND:
+    "We didn't see you for your appointment on {slotLabel} — this has been cancelled and refunded.",
   /** Shown before the slot list when patient taps Reschedule on a reminder. */
   RESCHEDULE_PICK_SLOT:
     "Sure — please pick a new time from the list below. Your current booking stays held until you choose.",

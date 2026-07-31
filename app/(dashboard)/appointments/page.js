@@ -38,6 +38,7 @@ import { formatPhoneForDisplay, normalizePhoneForWhatsApp } from "@/features/boo
 import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
+  cancelConfirmedAppointment,
 } from "@/features/appointments/appointments.client.js";
 import { shouldNudgeEarlyConsultation } from "@/features/appointments/consultation-time-gate.js";
 import { createVitals } from "@/features/vitals/vitals.client.js";
@@ -174,6 +175,8 @@ function AppointmentsPageContent() {
   const [vitalsError, setVitalsError] = useState("");
 
   const [earlyConsultTarget, setEarlyConsultTarget] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
+  const [cancelling, setCancelling] = useState(false);
 
   const today = clinicDateKey();
 
@@ -314,22 +317,25 @@ function AppointmentsPageContent() {
     }
   }
 
-  async function handleCancelAppointment(appointmentId) {
+  function openCancelDialog(appointment) {
+    if (!appointment?.id || appointment.status !== "confirmed") return;
+    setActionError("");
+    setCancelTarget(appointment);
+  }
+
+  async function confirmCancelAppointment() {
+    if (!cancelTarget?.id) return;
+    setCancelling(true);
     setActionError("");
     try {
-      const response = await fetch("/api/appointments", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "cancel", appointmentId }),
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Failed to cancel appointment");
-      }
+      await cancelConfirmedAppointment(cancelTarget.id);
+      setCancelTarget(null);
       closeDetail();
       await load();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -695,23 +701,43 @@ function AppointmentsPageContent() {
                             />
                           </Button>
                           {appointment.status === "confirmed" ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="gap-1 text-primary"
-                              title="Start consultation in Scribe"
-                              onClick={() =>
-                                requestStartConsultation({
-                                  id: appointment.id,
-                                  slotStart: appointment.slotStart,
-                                  slotLabel: appointment.slotLabel,
-                                })
-                              }
-                            >
-                              <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
-                              Start Consultation
-                            </Button>
+                            <>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="gap-1 text-primary"
+                                title="Start consultation in Scribe"
+                                onClick={() =>
+                                  requestStartConsultation({
+                                    id: appointment.id,
+                                    slotStart: appointment.slotStart,
+                                    slotLabel: appointment.slotLabel,
+                                  })
+                                }
+                              >
+                                <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                                Start Consultation
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive"
+                                title="Cancel appointment and refund patient"
+                                onClick={() =>
+                                  openCancelDialog({
+                                    id: appointment.id,
+                                    status: appointment.status,
+                                    patientName: appointment.patientName,
+                                    slotLabel: appointment.slotLabel,
+                                    amount: appointment.amount,
+                                  })
+                                }
+                              >
+                                Cancel
+                              </Button>
+                            </>
                           ) : null}
                           {appointment.patientId ? (
                             <Button
@@ -881,24 +907,35 @@ function AppointmentsPageContent() {
                     Start consultation
                   </Button>
                 ) : null}
+                {detail.status === "confirmed" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-destructive"
+                    onClick={() =>
+                      openCancelDialog({
+                        id: detail.id,
+                        status: detail.status,
+                        patientName: detail.patient_name,
+                        slotLabel:
+                          detail.date && detail.time
+                            ? `${detail.date} · ${detail.time}`
+                            : detail.slot_start,
+                        amount: detail.payment_amount,
+                      })
+                    }
+                  >
+                    Cancel
+                  </Button>
+                ) : null}
                 {ACTIONABLE_STATUSES.has(detail.status) ? (
-                  <>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => openRescheduleDialog(detail)}
-                    >
-                      Reschedule
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="text-destructive"
-                      onClick={() => handleCancelAppointment(detail.id)}
-                    >
-                      Cancel
-                    </Button>
-                  </>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openRescheduleDialog(detail)}
+                  >
+                    Reschedule
+                  </Button>
                 ) : null}
               </div>
             </div>
@@ -1262,6 +1299,58 @@ function AppointmentsPageContent() {
               Cancel
             </Button>
             <Button onClick={confirmEarlyConsultation}>Start Anyway</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(cancelTarget)}
+        onOpenChange={(open) => {
+          if (!open && !cancelling) setCancelTarget(null);
+        }}
+      >
+        <DialogContent
+          onClose={() => {
+            if (!cancelling) setCancelTarget(null);
+          }}
+          className="max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Cancel appointment?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Cancel this appointment for{" "}
+            <span className="font-medium text-foreground">
+              {cancelTarget?.patientName ?? "the patient"}
+            </span>{" "}
+            on{" "}
+            <span className="font-medium text-foreground">
+              {cancelTarget?.slotLabel ?? "the scheduled time"}
+            </span>
+            ? This will refund{" "}
+            <span className="font-medium text-foreground">
+              {formatAmount(cancelTarget?.amount)}
+            </span>{" "}
+            to the patient.
+          </p>
+          {actionError ? (
+            <p className="text-sm font-medium text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={cancelling}
+              onClick={() => setCancelTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={cancelling}
+              onClick={confirmCancelAppointment}
+            >
+              {cancelling ? "Cancelling…" : "Confirm Cancel"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

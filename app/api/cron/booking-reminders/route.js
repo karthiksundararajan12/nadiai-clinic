@@ -14,8 +14,10 @@
  * Modes:
  *   1. Default (no query params) — ReminderService.runReminderSweep():
  *      sends T-24h / T-2h reminders for CONFIRMED appointments that fall
- *      inside each clinic's configured offset window, and auto-completes
- *      past-due CONFIRMED appointments with no reply.
+ *      inside each clinic's configured offset window, and resolves
+ *      past-due CONFIRMED appointments past the grace window (COMPLETED
+ *      when a Scribe session completed; otherwise patient_no_show cancel
+ *      + refund).
  *   2. Force one appointment (testing) —
  *      ?appointmentId=<uuid>&kind=2h (or kind=24h)
  *      Bypasses the time window and runs the same claim+send path for

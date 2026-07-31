@@ -28,3 +28,21 @@ export function buildHighlightRedirectPath(appointmentId) {
   }
   return `/appointments?highlight=${encodeURIComponent(appointmentId)}`;
 }
+
+/**
+ * Doctor-initiated cancel for a CONFIRMED appointment (refund + patient ack).
+ *
+ * @param {string} appointmentId
+ * @returns {Promise<object>} cancelled appointment
+ */
+export async function cancelConfirmedAppointment(appointmentId) {
+  const response = await fetch(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/cancel`,
+    { method: "POST" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to cancel appointment");
+  }
+  return payload.appointment;
+}

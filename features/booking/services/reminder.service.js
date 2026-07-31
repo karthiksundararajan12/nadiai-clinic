@@ -7,10 +7,10 @@
  *   1. runReminderSweep(): loops every clinic with WhatsApp configured,
  *      finds CONFIRMED appointments crossing that clinic's T-24h / T-2h
  *      thresholds, and sends the reminder template — logged-only unless
- *      WHATSAPP_TEMPLATES_LIVE=true (see _sendReminder). Also completes
- *      past-due CONFIRMED appointments that got no reply (step 5 —
- *      no-response timeout; NO_SHOW tracking deferred per spec, hardcoded
- *      COMPLETED-only).
+ *      WHATSAPP_TEMPLATES_LIVE=true (see _sendReminder). Also resolves
+ *      past-due CONFIRMED appointments past the grace window: COMPLETED
+ *      when a COMPLETED Scribe session exists for the appointment,
+ *      otherwise cancelled as patient_no_show with refund + patient ack.
  *
  *   2. handleQuickReply(): Confirm/Cancel/Reschedule replies to a reminder.
  *      Routed here directly from the WhatsApp webhook route BEFORE
@@ -39,12 +39,12 @@ import {
   REMINDER_REPLY_ACTION,
   REMINDER_COPY,
   APPOINTMENT_STATUS,
-  REFUND_STATUS,
-  CAPTURED_PAYMENT_STATUSES,
+  PATIENT_NO_SHOW_CANCELLATION_REASON,
 } from "../constants.js";
 import { reminderReplyId, parseReminderReplyId } from "../lib/reminder-reply.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { formatNotificationAmount } from "./in-app-notification.service.js";
+import { AppointmentCancelRefundService } from "./appointment-cancel-refund.service.js";
 import { BookingError } from "../errors.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
@@ -62,6 +62,10 @@ export class ReminderService {
    *   slotSelectionService?: import("./slot-selection.service.js").SlotSelectionService|null;
    *   inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null;
    *   razorpayClient?: import("./razorpay-client.service.js").RazorpayClientService|null;
+   *   cancelRefundService?: import("./appointment-cancel-refund.service.js").AppointmentCancelRefundService|null;
+   *   scribeSessionRepository?: {
+   *     findCompletedAppointmentIds: (clinicId: string, appointmentIds: string[]) => Promise<string[]>;
+   *   }|null;
    * }} [opts]
    */
   constructor(clinicRepository, appointmentRepository, patientRepository, whatsappClient, doctorNotificationService, {
@@ -70,6 +74,8 @@ export class ReminderService {
     slotSelectionService = null,
     inAppNotificationService = null,
     razorpayClient = null,
+    cancelRefundService = null,
+    scribeSessionRepository = null,
   } = {}) {
     this._clinicRepo      = clinicRepository;
     this._appointmentRepo = appointmentRepository;
@@ -80,6 +86,12 @@ export class ReminderService {
     this._slotSelection   = slotSelectionService;
     this._inAppNotificationService = inAppNotificationService;
     this._razorpayClient  = razorpayClient;
+    this._cancelRefund = cancelRefundService ?? new AppointmentCancelRefundService(appointmentRepository, {
+      razorpayClient,
+      whatsappClient,
+      inAppNotificationService,
+    });
+    this._scribeSessionRepo = scribeSessionRepository;
     this._templatesLive   = templatesLive;
     this._log             = createLogger({ component: "ReminderService" });
   }
@@ -89,12 +101,24 @@ export class ReminderService {
   // ─────────────────────────────────────────────────────────────
 
   /**
-   * @returns {Promise<{ clinicsScanned: number; remindersSent: number; remindersFailed: number; completedNoResponse: number }>}
+   * @returns {Promise<{
+   *   clinicsScanned: number;
+   *   remindersSent: number;
+   *   remindersFailed: number;
+   *   completedNoResponse: number;
+   *   cancelledNoShow: number;
+   * }>}
    */
   async runReminderSweep() {
     const nowIso = new Date().toISOString();
     const clinics = await this._clinicRepo.findAllWithWhatsAppConfigured();
-    const summary = { clinicsScanned: clinics.length, remindersSent: 0, remindersFailed: 0, completedNoResponse: 0 };
+    const summary = {
+      clinicsScanned: clinics.length,
+      remindersSent: 0,
+      remindersFailed: 0,
+      completedNoResponse: 0,
+      cancelledNoShow: 0,
+    };
 
     for (const clinic of clinics) {
       const log = this._log.child({ clinicId: clinic.id });
@@ -111,17 +135,25 @@ export class ReminderService {
       }
 
       try {
-        const completed = await this._appointmentRepo.completeExpiredConfirmed(clinic.id, nowIso);
+        const { completed, cancelledNoShow } = await this._resolveExpiredConfirmed(clinic, nowIso, log);
         summary.completedNoResponse += completed.length;
+        summary.cancelledNoShow += cancelledNoShow.length;
         if (completed.length > 0) {
-          log.info("Completed past-due CONFIRMED appointments with no reply", { count: completed.length });
+          log.info("Completed past-due CONFIRMED appointments with completed Scribe session", {
+            count: completed.length,
+          });
+        }
+        if (cancelledNoShow.length > 0) {
+          log.info("Cancelled past-due CONFIRMED appointments as patient_no_show", {
+            count: cancelledNoShow.length,
+          });
         }
       } catch (err) {
-        log.error("Failed to complete expired CONFIRMED appointments", {
+        log.error("Failed to resolve expired CONFIRMED appointments", {
           error: err instanceof Error ? err.message : String(err),
         });
         await alertOps({
-          title: "Failed to complete expired CONFIRMED appointments (no-response timeout sweep)",
+          title: "Failed to resolve expired CONFIRMED appointments (grace-period sweep)",
           step: OPS_ALERT_STEP.REMINDER_SWEEP,
           error: err,
           clinicId: clinic.id,
@@ -131,6 +163,108 @@ export class ReminderService {
 
     this._log.info("Reminder sweep finished", summary);
     return summary;
+  }
+
+  /**
+   * Grace-period resolution: COMPLETED iff a COMPLETED scribe_sessions row
+   * exists for the appointment; otherwise cancel as patient_no_show with
+   * refund + patient WhatsApp ack + doctor in-app notification.
+   *
+   * @param {import("../repository/clinic.repository.js").BookingClinic} clinic
+   * @param {string} nowIso
+   * @param {import("../logger.js").Logger} log
+   * @returns {Promise<{ completed: Array<{ id: string }>; cancelledNoShow: object[] }>}
+   */
+  async _resolveExpiredConfirmed(clinic, nowIso, log) {
+    const expired = await this._appointmentRepo.findExpiredConfirmed(clinic.id, nowIso);
+    if (!expired.length) return { completed: [], cancelledNoShow: [] };
+
+    const appointmentIds = expired.map((a) => a.id);
+    let completedSessionIds = [];
+    if (this._scribeSessionRepo?.findCompletedAppointmentIds) {
+      completedSessionIds = await this._scribeSessionRepo.findCompletedAppointmentIds(
+        clinic.id,
+        appointmentIds,
+      );
+    } else {
+      log.warn(
+        "Scribe session repository not wired — treating expired CONFIRMED appointments as no-shows",
+        { count: expired.length },
+      );
+    }
+
+    const completedSet = new Set(completedSessionIds);
+    const toCompleteIds = expired.filter((a) => completedSet.has(a.id)).map((a) => a.id);
+    const toNoShow = expired.filter((a) => !completedSet.has(a.id));
+
+    const completed = toCompleteIds.length
+      ? await this._appointmentRepo.completeConfirmedIds(clinic.id, toCompleteIds, nowIso)
+      : [];
+
+    const cancelledNoShow = [];
+    for (const appointment of toNoShow) {
+      try {
+        const cancelled = await this._cancelNoShow({ clinic, appointment, log });
+        if (cancelled) cancelledNoShow.push(cancelled);
+      } catch (err) {
+        log.error("Failed to cancel expired CONFIRMED appointment as patient_no_show", {
+          appointmentId: appointment.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        await alertOps({
+          title: "Failed to cancel expired CONFIRMED appointment as patient_no_show",
+          step: OPS_ALERT_STEP.REMINDER_SWEEP,
+          error: err,
+          clinicId: clinic.id,
+          contactPhone: appointment.contact_phone ?? null,
+          extra: { appointmentId: appointment.id },
+        });
+      }
+    }
+
+    return { completed, cancelledNoShow };
+  }
+
+  /**
+   * Cancel + refund + patient ack + doctor in-app notify for a grace-period
+   * no-show. Mirrors _handleCancel's post-cancel side effects with
+   * patient_no_show copy/reason.
+   *
+   * @param {{
+   *   clinic: import("../repository/clinic.repository.js").BookingClinic;
+   *   appointment: object;
+   *   log: import("../logger.js").Logger;
+   * }} params
+   * @returns {Promise<object|null>}
+   */
+  async _cancelNoShow({ clinic, appointment, log }) {
+    const cancelled = await this._appointmentRepo.cancelViaNoShow(clinic.id, appointment.id);
+    if (!cancelled) {
+      log.info("No-show cancel skipped — appointment no longer CONFIRMED", {
+        appointmentId: appointment.id,
+      });
+      return null;
+    }
+
+    const slotLabel = formatSlotLabel(new Date(cancelled.slot_start));
+    const appointmentForNotify = await this._cancelRefund.finalizeAfterCancel({
+      clinic,
+      appointment: cancelled,
+      log,
+      reason: PATIENT_NO_SHOW_CANCELLATION_REASON,
+      buildAckBody: (_appt, refundOutcome) =>
+        refundOutcome.refundInitiated
+          ? REMINDER_COPY.NO_SHOW_ACK_WITH_REFUND.replace("{slotLabel}", slotLabel)
+          : REMINDER_COPY.NO_SHOW_ACK.replace("{slotLabel}", slotLabel),
+      contactPhone: cancelled.contact_phone,
+      contextLabel: "patient_no_show",
+    });
+
+    log.info("Appointment cancelled as patient_no_show after grace period", {
+      appointmentId: appointment.id,
+      refundStatus: appointmentForNotify.refund_status,
+    });
+    return appointmentForNotify;
   }
 
   /**
@@ -446,244 +580,28 @@ export class ReminderService {
       return { handled: true, action: "STALE_APPOINTMENT" };
     }
 
-    // Best-effort Razorpay refund after status flip — never rolls back cancel.
-    const refundOutcome = await this._refundAfterCancel({
-      clinicId: clinic.id,
+    const slotLabel = formatSlotLabel(new Date(cancelled.slot_start));
+    const appointmentForNotify = await this._cancelRefund.finalizeAfterCancel({
+      clinic,
       appointment: cancelled,
       log,
+      reason: "patient_cancelled_via_reminder",
+      buildAckBody: (_appt, refundOutcome) =>
+        refundOutcome.refundInitiated
+          ? REMINDER_COPY.CANCEL_ACK_WITH_REFUND.replace(
+              "{amount}",
+              formatNotificationAmount(cancelled.payment_amount),
+            )
+          : REMINDER_COPY.CANCEL_ACK.replace("{slotLabel}", slotLabel),
+      contactPhone: message.contactPhone,
+      contextLabel: "reminder Cancel",
     });
-    const appointmentForNotify = {
-      ...cancelled,
-      refund_status: refundOutcome.refundStatus,
-      refund_id: refundOutcome.refundId ?? cancelled.refund_id ?? null,
-      refunded_at: refundOutcome.refundedAt ?? cancelled.refunded_at ?? null,
-      payment_status: refundOutcome.paymentStatus ?? cancelled.payment_status ?? null,
-    };
-
-    const slotLabel = formatSlotLabel(new Date(cancelled.slot_start));
-    const ackBody = refundOutcome.refundInitiated
-      ? REMINDER_COPY.CANCEL_ACK_WITH_REFUND.replace(
-          "{amount}",
-          formatNotificationAmount(cancelled.payment_amount),
-        )
-      : REMINDER_COPY.CANCEL_ACK.replace("{slotLabel}", slotLabel);
-    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, ackBody);
-
-    if (this._inAppNotificationService) {
-      try {
-        await this._inAppNotificationService.createAppointmentCancelled({
-          clinicId: clinic.id,
-          appointment: appointmentForNotify,
-        });
-      } catch (err) {
-        log.error("Failed to create in-app cancel notification after reminder Cancel", {
-          clinicId: clinic.id,
-          appointmentId: cancelled.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await alertOps({
-          title: "In-app cancel notification failed after reminder Cancel",
-          step: OPS_ALERT_STEP.IN_APP_NOTIFICATION,
-          error: err,
-          clinicId: clinic.id,
-          patientId: cancelled.patient_id ?? null,
-          extra: { appointmentId: cancelled.id },
-        });
-      }
-    }
 
     log.info("Appointment cancelled via reminder reply", {
       appointmentId: appointment.id,
-      refundStatus: refundOutcome.refundStatus,
+      refundStatus: appointmentForNotify.refund_status,
     });
-    return { handled: true, action: "CANCELLED", refundStatus: refundOutcome.refundStatus };
-  }
-
-  /**
-   * Best-effort full refund after cancelViaReminderReply. Failures are logged
-   * and persisted as refund_status=failed — never rethrown.
-   *
-   * @param {{ clinicId: string; appointment: object; log: import("../logger.js").Logger }} params
-   * @returns {Promise<{
-   *   refundStatus: string;
-   *   refundInitiated: boolean;
-   *   refundId?: string|null;
-   *   refundedAt?: string|null;
-   *   paymentStatus?: string|null;
-   * }>}
-   */
-  async _refundAfterCancel({ clinicId, appointment, log }) {
-    const existing = appointment.refund_status ?? null;
-    if (existing === REFUND_STATUS.COMPLETED || existing === REFUND_STATUS.PROCESSING) {
-      log.info("Skipping Razorpay refund — already in progress or completed", {
-        appointmentId: appointment.id,
-        refundStatus: existing,
-        paymentId: appointment.razorpay_payment_id ?? null,
-      });
-      return {
-        refundStatus: existing,
-        refundInitiated: existing === REFUND_STATUS.PROCESSING || existing === REFUND_STATUS.COMPLETED,
-        refundId: appointment.refund_id ?? null,
-        refundedAt: appointment.refunded_at ?? null,
-      };
-    }
-
-    const paymentId = appointment.razorpay_payment_id ?? null;
-    const paymentStatus = String(appointment.payment_status ?? "").toLowerCase();
-    const hasCapturedPayment =
-      Boolean(paymentId) && CAPTURED_PAYMENT_STATUSES.includes(paymentStatus);
-
-    if (!hasCapturedPayment) {
-      try {
-        await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
-          refundStatus: REFUND_STATUS.NOT_APPLICABLE,
-        });
-      } catch (err) {
-        log.error("Failed to persist refund_status=not_applicable after cancel", {
-          appointmentId: appointment.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await alertOps({
-          title: "Failed to persist refund_status=not_applicable after cancel",
-          step: OPS_ALERT_STEP.REFUND,
-          error: err,
-          clinicId,
-          extra: { appointmentId: appointment.id },
-        });
-      }
-      return { refundStatus: REFUND_STATUS.NOT_APPLICABLE, refundInitiated: false };
-    }
-
-    if (!this._razorpayClient) {
-      log.error("Razorpay client not wired — cannot refund captured payment after cancel", {
-        appointmentId: appointment.id,
-        paymentId,
-      });
-      await alertOps({
-        title: "Razorpay client not wired — cannot refund captured payment after cancel",
-        step: OPS_ALERT_STEP.REFUND,
-        error: new Error("Razorpay client not wired"),
-        clinicId,
-        extra: { appointmentId: appointment.id, paymentId },
-      });
-      try {
-        await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
-          refundStatus: REFUND_STATUS.FAILED,
-        });
-      } catch (err) {
-        log.error("Failed to persist refund_status=failed after missing Razorpay client", {
-          appointmentId: appointment.id,
-          paymentId,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await alertOps({
-          title: "Failed to persist refund_status=failed after missing Razorpay client",
-          step: OPS_ALERT_STEP.REFUND,
-          error: err,
-          clinicId,
-          extra: { appointmentId: appointment.id, paymentId },
-        });
-      }
-      return { refundStatus: REFUND_STATUS.FAILED, refundInitiated: false };
-    }
-
-    try {
-      await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
-        refundStatus: REFUND_STATUS.PROCESSING,
-      });
-    } catch (err) {
-      log.error("Failed to mark refund_status=processing before Razorpay call", {
-        appointmentId: appointment.id,
-        paymentId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      await alertOps({
-        title: "Failed to mark refund_status=processing before Razorpay call",
-        step: OPS_ALERT_STEP.REFUND,
-        error: err,
-        clinicId,
-        extra: { appointmentId: appointment.id, paymentId },
-      });
-    }
-
-    try {
-      const refund = await this._razorpayClient.createRefund({
-        paymentId,
-        idempotencyKey: `appt_cancel_${appointment.id}`,
-        notes: {
-          appointment_id: appointment.id,
-          clinic_id: clinicId,
-          reason: "patient_cancelled_via_reminder",
-        },
-      });
-      const refundedAt = new Date().toISOString();
-      try {
-        await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
-          refundStatus: REFUND_STATUS.COMPLETED,
-          refundId: refund.id,
-          refundedAt,
-          paymentStatus: "refunded",
-        });
-      } catch (err) {
-        log.error("Razorpay refund succeeded but failed to persist refund fields", {
-          appointmentId: appointment.id,
-          paymentId,
-          refundId: refund.id,
-          error: err instanceof Error ? err.message : String(err),
-        });
-        await alertOps({
-          title: "Razorpay refund succeeded but failed to persist refund fields",
-          step: OPS_ALERT_STEP.REFUND,
-          error: err,
-          clinicId,
-          extra: { appointmentId: appointment.id, paymentId, refundId: refund.id },
-        });
-      }
-      log.info("Razorpay refund completed after reminder Cancel", {
-        appointmentId: appointment.id,
-        paymentId,
-        refundId: refund.id,
-      });
-      return {
-        refundStatus: REFUND_STATUS.COMPLETED,
-        refundInitiated: true,
-        refundId: refund.id,
-        refundedAt,
-        paymentStatus: "refunded",
-      };
-    } catch (err) {
-      log.error("Razorpay refund failed after reminder Cancel — cancellation still stands", {
-        appointmentId: appointment.id,
-        paymentId,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      await alertOps({
-        title: "Razorpay refund failed after reminder Cancel — cancellation still stands",
-        step: OPS_ALERT_STEP.REFUND,
-        error: err,
-        clinicId,
-        extra: { appointmentId: appointment.id, paymentId },
-      });
-      try {
-        await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
-          refundStatus: REFUND_STATUS.FAILED,
-        });
-      } catch (persistErr) {
-        log.error("Failed to persist refund_status=failed after Razorpay error", {
-          appointmentId: appointment.id,
-          paymentId,
-          error: persistErr instanceof Error ? persistErr.message : String(persistErr),
-        });
-        await alertOps({
-          title: "Failed to persist refund_status=failed after Razorpay error",
-          step: OPS_ALERT_STEP.REFUND,
-          error: persistErr,
-          clinicId,
-          extra: { appointmentId: appointment.id, paymentId },
-        });
-      }
-      return { refundStatus: REFUND_STATUS.FAILED, refundInitiated: false };
-    }
+    return { handled: true, action: "CANCELLED", refundStatus: appointmentForNotify.refund_status };
   }
 
   async _handleReschedule({ clinic, message, appointment, log }) {

@@ -169,6 +169,29 @@ test("createAppointmentCancelled includes refund_status in payload and message w
   assert.match(repo.insertCalls[0].message, /Refund of ₹500: completed/);
 });
 
+test("createAppointmentCancelled surfaces patient_no_show in title, message, and payload", async () => {
+  const repo = createFakeNotificationRepo();
+  const service = new InAppNotificationService(repo, createFakePatientRepo());
+
+  await service.createAppointmentCancelled({
+    clinicId: CLINIC_A,
+    appointment: {
+      ...APPOINTMENT,
+      cancellation_reason: "patient_no_show",
+      refund_status: "completed",
+      payment_amount: 500,
+    },
+  });
+
+  assert.equal(repo.insertCalls[0].title, "Patient no-show");
+  assert.match(repo.insertCalls[0].message, /did not show for their appointment/);
+  assert.match(repo.insertCalls[0].message, /no-show/);
+  assert.deepEqual(repo.insertCalls[0].payload, {
+    refund_status: "completed",
+    cancellation_reason: "patient_no_show",
+  });
+});
+
 test("createAppointmentRescheduled inserts appointment_rescheduled row scoped to clinic_id", async () => {
   const repo = createFakeNotificationRepo();
   const service = new InAppNotificationService(repo, createFakePatientRepo());

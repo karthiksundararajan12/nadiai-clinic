@@ -55,23 +55,28 @@ function buildMessage(overrides = {}) {
  * @param {object[]} [opts.clinics]
  * @param {(clinicId: string, column: string, fromIso: string, toIso: string) => Promise<object[]>|object[]} [opts.findDueForReminderImpl]
  * @param {(clinicId: string, appointmentId: string, column: string) => Promise<object|null>|object|null} [opts.claimReminderImpl]
- * @param {object[]} [opts.completeExpiredConfirmedResult]
+ * @param {object[]} [opts.findExpiredConfirmedResult]
+ * @param {object[]} [opts.completeConfirmedIdsResult]
  */
 function createFakeRepos({
   clinics = [CLINIC],
   findDueForReminderImpl = null,
   claimReminderImpl = null,
-  completeExpiredConfirmedResult = [],
+  findExpiredConfirmedResult = [],
+  completeConfirmedIdsResult = null,
   findByIdForClinicImpl = null,
   findByIdImpl = null,
   cancelViaReminderReplyImpl = null,
+  cancelViaNoShowImpl = null,
   requestRescheduleViaReminderReplyImpl = null,
   remindersEnabledByClinic = true,
 } = {}) {
   const calls = {
     findDueForReminder: [],
     claimReminder: [],
-    completeExpiredConfirmed: [],
+    findExpiredConfirmed: [],
+    completeConfirmedIds: [],
+    cancelViaNoShow: [],
     findByIdForClinic: [],
     findById: [],
     cancelViaReminderReply: [],
@@ -100,9 +105,25 @@ function createFakeRepos({
       if (claimReminderImpl) return claimReminderImpl(clinicId, appointmentId, column);
       return null;
     },
-    async completeExpiredConfirmed(clinicId, nowIso) {
-      calls.completeExpiredConfirmed.push({ clinicId, nowIso });
-      return completeExpiredConfirmedResult;
+    async findExpiredConfirmed(clinicId, nowIso) {
+      calls.findExpiredConfirmed.push({ clinicId, nowIso });
+      return findExpiredConfirmedResult;
+    },
+    async completeConfirmedIds(clinicId, appointmentIds, nowIso) {
+      calls.completeConfirmedIds.push({ clinicId, appointmentIds, nowIso });
+      if (completeConfirmedIdsResult) return completeConfirmedIdsResult;
+      return appointmentIds.map((id) => ({ id }));
+    },
+    async cancelViaNoShow(clinicId, appointmentId) {
+      calls.cancelViaNoShow.push({ clinicId, appointmentId });
+      if (cancelViaNoShowImpl) return cancelViaNoShowImpl(clinicId, appointmentId);
+      const source = findExpiredConfirmedResult.find((a) => a.id === appointmentId);
+      return {
+        ...(source ?? buildAppointment({ id: appointmentId })),
+        status: APPOINTMENT_STATUS.CANCELLED,
+        cancellation_reason: "patient_no_show",
+        cancelled_at: new Date().toISOString(),
+      };
     },
     async findByIdForClinic(clinicId, appointmentId) {
       calls.findByIdForClinic.push({ clinicId, appointmentId });
@@ -147,6 +168,18 @@ function createFakeRepos({
   };
 
   return { calls, clinicRepository, appointmentRepository, patientRepository, doctorProfileRepository };
+}
+
+function createFakeScribeSessionRepo({ completedAppointmentIds = [] } = {}) {
+  const findCompletedAppointmentIdsCalls = [];
+  return {
+    findCompletedAppointmentIdsCalls,
+    async findCompletedAppointmentIds(clinicId, appointmentIds) {
+      findCompletedAppointmentIdsCalls.push({ clinicId, appointmentIds });
+      const set = new Set(completedAppointmentIds);
+      return appointmentIds.filter((id) => set.has(id));
+    },
+  };
 }
 
 function createFakeWhatsAppClient() {
@@ -290,7 +323,7 @@ test("runReminderSweep: skips reminder queries when reminders_enabled is false f
   assert.deepEqual(calls.isRemindersEnabledForClinic, ["clinic-1"]);
   assert.equal(calls.findDueForReminder.length, 0);
   assert.equal(summary.remindersSent, 0);
-  assert.equal(calls.completeExpiredConfirmed.length, 1, "no-response timeout still runs");
+  assert.equal(calls.findExpiredConfirmed.length, 1, "grace-period resolution still runs");
 });
 
 // ─────────────────────────────────────────────────────────────
@@ -382,20 +415,129 @@ test("runReminderSweep: a query failure for one clinic doesn't stop the sweep fr
 });
 
 // ─────────────────────────────────────────────────────────────
-// runReminderSweep — no-response timeout (step 5)
+// runReminderSweep — grace-period resolution (complete vs no-show)
 // ─────────────────────────────────────────────────────────────
 
-test("runReminderSweep: includes completeExpiredConfirmed's count in the summary", async () => {
-  const { clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
-    completeExpiredConfirmedResult: [{ id: "appt-old-1" }, { id: "appt-old-2" }],
+test("runReminderSweep: completes expired CONFIRMED appointments that have a COMPLETED Scribe session", async () => {
+  const withSession = buildAppointment({ id: "appt-done", slot_end: "2020-01-01T00:00:00.000Z" });
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [withSession],
   });
   const wa = createFakeWhatsAppClient();
   const doctorNotifier = createFakeDoctorNotifier();
-  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier);
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: ["appt-done"] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+  });
 
   const summary = await service.runReminderSweep();
 
-  assert.equal(summary.completedNoResponse, 2);
+  assert.equal(summary.completedNoResponse, 1);
+  assert.equal(summary.cancelledNoShow, 0);
+  assert.deepEqual(calls.completeConfirmedIds[0].appointmentIds, ["appt-done"]);
+  assert.equal(calls.cancelViaNoShow.length, 0);
+  assert.equal(wa.sendTextCalls.length, 0);
+});
+
+test("runReminderSweep: cancels expired CONFIRMED without Scribe session as patient_no_show with refund + ack + in-app notify", async () => {
+  const noShow = buildAppointment({
+    id: "appt-noshow",
+    slot_start: "2020-01-01T09:00:00.000Z",
+    slot_end: "2020-01-01T09:30:00.000Z",
+    razorpay_payment_id: "pay_NOSHOW",
+    payment_status: "captured",
+    payment_amount: 500,
+    doctor_id: "doctor-1",
+  });
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [noShow],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const razorpay = createFakeRazorpayClient();
+  const inApp = createFakeInAppNotificationService();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: [] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+    razorpayClient: razorpay,
+    inAppNotificationService: inApp,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.completedNoResponse, 0);
+  assert.equal(summary.cancelledNoShow, 1);
+  assert.equal(calls.completeConfirmedIds.length, 0);
+  assert.equal(calls.cancelViaNoShow.length, 1);
+  assert.equal(razorpay.createRefundCalls.length, 1);
+  assert.equal(razorpay.createRefundCalls[0].paymentId, "pay_NOSHOW");
+  assert.equal(razorpay.createRefundCalls[0].notes.reason, "patient_no_show");
+  assert.equal(wa.sendTextCalls.length, 1);
+  assert.match(wa.sendTextCalls[0].body, /We didn't see you for your appointment/);
+  assert.match(wa.sendTextCalls[0].body, /cancelled and refunded/);
+  assert.equal(inApp.createAppointmentCancelledCalls.length, 1);
+  assert.equal(
+    inApp.createAppointmentCancelledCalls[0].appointment.cancellation_reason,
+    "patient_no_show",
+  );
+  assert.equal(
+    inApp.createAppointmentCancelledCalls[0].appointment.refund_status,
+    REFUND_STATUS.COMPLETED,
+  );
+});
+
+test("runReminderSweep: splits a mixed expired batch into completes and no-shows", async () => {
+  const done = buildAppointment({ id: "appt-done", slot_end: "2020-01-01T00:00:00.000Z" });
+  const missed = buildAppointment({
+    id: "appt-missed",
+    slot_start: "2020-01-01T09:00:00.000Z",
+    slot_end: "2020-01-01T00:00:00.000Z",
+    payment_status: "not_required",
+  });
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [done, missed],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const inApp = createFakeInAppNotificationService();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: ["appt-done"] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+    inAppNotificationService: inApp,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.completedNoResponse, 1);
+  assert.equal(summary.cancelledNoShow, 1);
+  assert.deepEqual(calls.completeConfirmedIds[0].appointmentIds, ["appt-done"]);
+  assert.deepEqual(calls.cancelViaNoShow.map((c) => c.appointmentId), ["appt-missed"]);
+  assert.match(wa.sendTextCalls[0].body, /We didn't see you/);
+  assert.doesNotMatch(wa.sendTextCalls[0].body, /refunded/);
+});
+
+test("runReminderSweep: includes grace-period counts in the summary", async () => {
+  const withSession = buildAppointment({ id: "appt-old-1", slot_end: "2020-01-01T00:00:00.000Z" });
+  const noShow = buildAppointment({
+    id: "appt-old-2",
+    slot_start: "2020-01-01T09:00:00.000Z",
+    slot_end: "2020-01-01T00:00:00.000Z",
+    payment_status: "not_required",
+  });
+  const { clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [withSession, noShow],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: ["appt-old-1"] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.completedNoResponse, 1);
+  assert.equal(summary.cancelledNoShow, 1);
 });
 
 // ─────────────────────────────────────────────────────────────

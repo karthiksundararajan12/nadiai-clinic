@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { format, formatDistanceToNow } from "date-fns";
 import {
@@ -40,6 +39,7 @@ import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
 } from "@/features/appointments/appointments.client.js";
+import { shouldNudgeEarlyConsultation } from "@/features/appointments/consultation-time-gate.js";
 import { createVitals } from "@/features/vitals/vitals.client.js";
 import { cn } from "@/lib/utils";
 
@@ -172,6 +172,8 @@ function AppointmentsPageContent() {
   const [vitalsForm, setVitalsForm] = useState(EMPTY_VITALS_FORM);
   const [savingVitals, setSavingVitals] = useState(false);
   const [vitalsError, setVitalsError] = useState("");
+
+  const [earlyConsultTarget, setEarlyConsultTarget] = useState(null);
 
   const today = clinicDateKey();
 
@@ -351,6 +353,36 @@ function AppointmentsPageContent() {
     setVitalsTarget(null);
     setVitalsForm(EMPTY_VITALS_FORM);
     setVitalsError("");
+  }
+
+  function goToScribeConsultation(appointmentId) {
+    if (!appointmentId) return;
+    router.push(`/scribe?appointment_id=${encodeURIComponent(appointmentId)}`);
+  }
+
+  /**
+   * Soft time-gate: slots more than 2h ahead get a confirm nudge; past /
+   * near slots go straight to Scribe (running behind is expected).
+   *
+   * @param {{ id: string; slotStart?: string|null; slotLabel?: string|null }} appointment
+   */
+  function requestStartConsultation(appointment) {
+    if (!appointment?.id) return;
+    const slotLabel = appointment.slotLabel ?? "the scheduled time";
+    if (shouldNudgeEarlyConsultation(appointment.slotStart)) {
+      setEarlyConsultTarget({
+        id: appointment.id,
+        slotLabel,
+      });
+      return;
+    }
+    goToScribeConsultation(appointment.id);
+  }
+
+  function confirmEarlyConsultation() {
+    const appointmentId = earlyConsultTarget?.id;
+    setEarlyConsultTarget(null);
+    if (appointmentId) goToScribeConsultation(appointmentId);
   }
 
   async function handleSaveVitals() {
@@ -585,7 +617,9 @@ function AppointmentsPageContent() {
                       id={`appointment-${appointment.id}`}
                       ref={highlighted ? highlightRef : null}
                       className={cn(
-                        "hover:bg-muted/30",
+                        appointment.status === "confirmed"
+                          ? "bg-primary/5 hover:bg-primary/10"
+                          : "hover:bg-muted/30",
                         highlighted && "ring-2 ring-inset ring-primary",
                       )}
                     >
@@ -660,6 +694,25 @@ function AppointmentsPageContent() {
                               strokeWidth={ICON_STROKE}
                             />
                           </Button>
+                          {appointment.status === "confirmed" ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 text-primary"
+                              title="Start consultation in Scribe"
+                              onClick={() =>
+                                requestStartConsultation({
+                                  id: appointment.id,
+                                  slotStart: appointment.slotStart,
+                                  slotLabel: appointment.slotLabel,
+                                })
+                              }
+                            >
+                              <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                              Start Consultation
+                            </Button>
+                          ) : null}
                           {appointment.patientId ? (
                             <Button
                               type="button"
@@ -809,12 +862,24 @@ function AppointmentsPageContent() {
                   </Button>
                 ) : null}
                 {CONSULTATION_STATUSES.has(detail.status) ? (
-                  <Link href={`/scribe?appointment_id=${detail.id}`}>
-                    <Button variant="outline" size="sm" className="gap-1">
-                      <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
-                      Start consultation
-                    </Button>
-                  </Link>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1"
+                    onClick={() =>
+                      requestStartConsultation({
+                        id: detail.id,
+                        slotStart: detail.slot_start,
+                        slotLabel:
+                          detail.date && detail.time
+                            ? `${detail.date} · ${detail.time}`
+                            : null,
+                      })
+                    }
+                  >
+                    <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                    Start consultation
+                  </Button>
                 ) : null}
                 {ACTIONABLE_STATUSES.has(detail.status) ? (
                   <>
@@ -1174,6 +1239,29 @@ function AppointmentsPageContent() {
             <Button onClick={handleSaveVitals} disabled={savingVitals}>
               {savingVitals ? "Saving…" : "Save vitals"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog
+        open={Boolean(earlyConsultTarget)}
+        onOpenChange={(open) => !open && setEarlyConsultTarget(null)}
+      >
+        <DialogContent onClose={() => setEarlyConsultTarget(null)} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Start consultation early?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            This appointment is for{" "}
+            <span className="font-medium text-foreground">
+              {earlyConsultTarget?.slotLabel ?? "the scheduled time"}
+            </span>{" "}
+            — start consultation now anyway?
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEarlyConsultTarget(null)}>
+              Cancel
+            </Button>
+            <Button onClick={confirmEarlyConsultation}>Start Anyway</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

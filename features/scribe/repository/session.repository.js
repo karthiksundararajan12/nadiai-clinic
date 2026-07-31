@@ -217,6 +217,40 @@ export class SessionRepository extends BaseRepository {
     };
   }
 
+  /**
+   * Appointment ids in `appointmentIds` that already have a COMPLETED
+   * scribe session for this clinic. Used by the start-consultation picker
+   * to hide appointments whose consultation is finished (per-appointment,
+   * not per-patient).
+   *
+   * @param {string} clinicId
+   * @param {string[]} appointmentIds
+   * @returns {Promise<string[]>}
+   */
+  async findCompletedAppointmentIds(clinicId, appointmentIds) {
+    if (!appointmentIds?.length) return [];
+
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select("appointment_id")
+          .eq("clinic_id", clinicId)
+          .eq("status", SESSION_STATUS.COMPLETED)
+          .in("appointment_id", appointmentIds)
+          .is("deleted_at", null),
+      "findCompletedAppointmentIds",
+    );
+
+    const ids = new Set();
+    for (const row of rows ?? []) {
+      if (typeof row?.appointment_id === "string" && row.appointment_id.length > 0) {
+        ids.add(row.appointment_id);
+      }
+    }
+    return [...ids];
+  }
+
   // ─────────────────────────────────────────────────────────────
   // UPDATE
   // ─────────────────────────────────────────────────────────────

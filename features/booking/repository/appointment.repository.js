@@ -190,6 +190,37 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * CONFIRMED appointments for the Scribe "start consultation" picker.
+   * Ordered soonest-first so today's queue reads top-to-bottom.
+   *
+   * @param {string} clinicId
+   * @returns {Promise<Array<{
+   *   id: string;
+   *   patient_id: string;
+   *   contact_phone: string|null;
+   *   slot_start: string;
+   *   slot_end: string;
+   *   status: string;
+   *   patients: { full_name: string; age_years: number|null; gender: string|null }|null;
+   * }>>}
+   */
+  async findConfirmedForClinic(clinicId) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select(
+            "id, patient_id, contact_phone, slot_start, slot_end, status, patients(full_name, age_years, gender)",
+          )
+          .eq("clinic_id", clinicId)
+          .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+          .is("deleted_at", null)
+          .order("slot_start", { ascending: true }),
+      "findConfirmedForClinic",
+    );
+  }
+
+  /**
    * Full appointment history for one patient (detail page) — newest slot
    * first. Bounded to 200 rows, which is generous for a per-patient history
    * view without needing pagination there yet.

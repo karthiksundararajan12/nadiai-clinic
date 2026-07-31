@@ -120,6 +120,7 @@ export function ScribeWorkflow() {
       .then((appointment) => {
         if (!mountedRef.current) return;
         setSelectedPatient(appointmentToPatientPrefill(appointment));
+        setAppointmentId(appointment?.id ?? id);
       })
       .catch((err) => {
         if (!mountedRef.current) return;
@@ -500,7 +501,12 @@ export function ScribeWorkflow() {
       onDelete={() => deleteSession(activeSessionId)}
       deleting={busySessionId === activeSessionId}
       selectedPatient={selectedPatient}
-      onSelectedPatientChange={setSelectedPatient}
+      onSelectedPatientChange={(next) => {
+        setSelectedPatient(next);
+        if (next?.appointment_id !== undefined) {
+          setAppointmentId(next.appointment_id ?? null);
+        }
+      }}
       onWorkspaceStateChange={setWorkspaceState}
     />
   ) : (
@@ -519,8 +525,14 @@ export function ScribeWorkflow() {
     >
       <PatientSelector
         patient={selectedPatient}
-        onSelect={setSelectedPatient}
-        onClear={() => setSelectedPatient(null)}
+        onSelect={(next) => {
+          setSelectedPatient(next);
+          setAppointmentId(next?.appointment_id ?? null);
+        }}
+        onClear={() => {
+          setSelectedPatient(null);
+          setAppointmentId(null);
+        }}
       />
       {appointmentPrefillLoading && (
         <p className="border-b border-gray-200 bg-amber-50 px-6 py-2 text-xs text-amber-800">

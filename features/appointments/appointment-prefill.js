@@ -13,5 +13,7 @@ export function appointmentToPatientPrefill(appointment) {
     phone: appointment.contact_phone ?? null,
     age: appointment.patient_age ?? null,
     gender: appointment.patient_gender ?? null,
+    appointment_id: appointment.id ?? null,
+    slot_label: null,
   };
 }

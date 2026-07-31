@@ -1,10 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Loader2, Search, UserPlus, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Loader2, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { createPatient, searchPatients } from "../../services/patient.client.js";
+import {
+  createPatient,
+  fetchEligibleConsultationPatients,
+} from "../../services/patient.client.js";
 
 function initials(name) {
   return (name ?? "P").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
@@ -16,39 +19,61 @@ function daysSince(dateStr) {
   return days;
 }
 
+function optionLabel(patient) {
+  const slot = patient.slot_label ? ` · ${patient.slot_label}` : "";
+  return `${patient.name}${slot}`;
+}
+
 export function PatientSelector({ patient, onSelect, onClear, className }) {
-  const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [searching, setSearching] = useState(false);
+  const [options, setOptions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [form, setForm] = useState({ name: "", phone: "", age: "", gender: "Male" });
 
-  const runSearch = useCallback(async (q) => {
-    if (q.trim().length < 2) { setResults([]); return; }
-    setSearching(true);
+  const loadEligible = useCallback(async () => {
+    setLoading(true);
+    setLoadError(null);
     try {
-      setResults(await searchPatients(q));
-    } catch {
-      setResults([]);
+      setOptions(await fetchEligibleConsultationPatients());
+    } catch (err) {
+      setOptions([]);
+      setLoadError(err instanceof Error ? err : new Error(String(err)));
     } finally {
-      setSearching(false);
+      setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => runSearch(query), 300);
-    return () => clearTimeout(t);
-  }, [query, runSearch]);
+    void loadEligible();
+  }, [loadEligible]);
+
+  const selectValue = useMemo(() => {
+    if (!patient?.appointment_id) return "";
+    return options.some((opt) => opt.appointment_id === patient.appointment_id)
+      ? patient.appointment_id
+      : "";
+  }, [options, patient?.appointment_id]);
+
+  const handleSelectChange = (event) => {
+    const appointmentId = event.target.value;
+    if (!appointmentId) {
+      onClear?.();
+      return;
+    }
+    const selected = options.find((opt) => opt.appointment_id === appointmentId);
+    if (selected) onSelect?.(selected);
+  };
 
   const handleCreate = async () => {
     if (!form.name.trim() || !form.phone.trim()) return;
     setCreating(true);
     try {
       const created = await createPatient(form);
-      onSelect?.(created);
+      onSelect?.({ ...created, appointment_id: null });
       setShowCreate(false);
-      setQuery("");
+      setForm({ name: "", phone: "", age: "", gender: "Male" });
     } finally {
       setCreating(false);
     }
@@ -67,7 +92,12 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
             <div>
               <p className="text-sm font-semibold text-gray-900">{patient.name}</p>
               <p className="text-xs text-gray-600">
-                {[patient.age ? `${patient.age} yrs` : null, patient.gender, patient.phone].filter(Boolean).join(" · ")}
+                {[
+                  patient.age ? `${patient.age} yrs` : null,
+                  patient.gender,
+                  patient.phone,
+                  patient.slot_label,
+                ].filter(Boolean).join(" · ")}
               </p>
             </div>
             {days != null && (
@@ -95,35 +125,41 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
     <div className={cn("relative w-full border-b border-gray-200 bg-white px-6 py-4", className)}>
       <PatientStepLabel />
       <div className="relative mt-3 max-w-xl">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-        <input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search patient by name or phone..."
-          className="h-10 w-full rounded-lg border border-gray-200 bg-white pl-9 pr-3 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30"
-        />
-        {searching && <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />}
+        <select
+          value={selectValue}
+          onChange={handleSelectChange}
+          disabled={loading}
+          data-testid="scribe-patient-select"
+          aria-label="Select patient to start consultation"
+          className="h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-wait disabled:opacity-70"
+        >
+          <option value="">
+            {loading ? "Loading patients…" : "Select patient to start consultation"}
+          </option>
+          {options.map((opt) => (
+            <option key={opt.appointment_id} value={opt.appointment_id}>
+              {optionLabel(opt)}
+            </option>
+          ))}
+        </select>
+        {loading && (
+          <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
+        )}
       </div>
 
-      {results.length > 0 && (
-        <ul className="absolute left-6 right-6 z-30 mt-1 max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white shadow-lg">
-          {results.map((p) => (
-            <li key={p.id}>
-              <button
-                type="button"
-                className="flex w-full cursor-pointer items-center gap-3 px-4 py-3 text-left transition-all duration-200 hover:bg-gray-50"
-                onClick={() => { onSelect?.(p); setQuery(""); setResults([]); }}
-              >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-xs font-semibold">{initials(p.name)}</div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">{p.name}</p>
-                  <p className="text-xs text-gray-500">{[p.age ? `${p.age} yrs` : null, p.last_visit ? new Date(p.last_visit).toLocaleDateString() : null].filter(Boolean).join(" · ")}</p>
-                </div>
-              </button>
-            </li>
-          ))}
-        </ul>
+      {loadError && (
+        <p className="mt-2 text-xs text-destructive">
+          {loadError.message}{" "}
+          <button type="button" className="underline" onClick={() => void loadEligible()}>
+            Retry
+          </button>
+        </p>
+      )}
+
+      {!loading && !loadError && options.length === 0 && (
+        <p className="mt-2 text-xs text-gray-500">
+          No confirmed appointments waiting for consultation. Create a walk-in patient below, or confirm an appointment first.
+        </p>
       )}
 
       <Button

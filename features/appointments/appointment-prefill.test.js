@@ -4,6 +4,7 @@ import { appointmentToPatientPrefill } from "./appointment-prefill.js";
 
 test("appointmentToPatientPrefill maps appointment fields into scribe patient shape", () => {
   const patient = appointmentToPatientPrefill({
+    id: "appt-1",
     patient_id: "patient-1",
     patient_name: "Asha Kumar",
     contact_phone: "919876543210",
@@ -17,6 +18,8 @@ test("appointmentToPatientPrefill maps appointment fields into scribe patient sh
     phone: "919876543210",
     age: 34,
     gender: "Female",
+    appointment_id: "appt-1",
+    slot_label: null,
   });
 });
 
@@ -31,5 +34,7 @@ test("appointmentToPatientPrefill tolerates missing optional fields", () => {
     phone: null,
     age: null,
     gender: null,
+    appointment_id: null,
+    slot_label: null,
   });
 });

@@ -22,8 +22,10 @@ import { ICON_SIZE_NAV, ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/ic
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
 import { Separator } from "@/components/ui/separator";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
+import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import {
   confirmRecordingLeave,
   shouldBlockNavigation,
@@ -43,6 +45,8 @@ export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
   const router = useRouter();
   const { displayName, initials, specialization } = useUser();
+  const { personalProfile } = useDoctorProfileSettings();
+  const avatarUrl = personalProfile?.avatarUrl ?? null;
   const visibleNavItems = filterNavItems(NAV_ITEMS, specialization);
 
   const navigateIfAllowed = (href, event) => {
@@ -155,9 +159,12 @@ export function Sidebar({ collapsed, onToggle }) {
             collapsed && "justify-center px-0"
           )}
         >
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
-            {initials}
-          </div>
+          <Avatar className="h-8 w-8">
+            <AvatarImage src={avatarUrl ?? undefined} alt={displayName} />
+            <AvatarFallback className="text-xs font-semibold">
+              {initials}
+            </AvatarFallback>
+          </Avatar>
           {!collapsed && (
             <div className="flex flex-1 flex-col min-w-0">
               <span className="text-base font-medium text-gray-900 truncate dark:text-gray-100">

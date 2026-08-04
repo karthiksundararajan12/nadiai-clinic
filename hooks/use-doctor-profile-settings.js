@@ -1,6 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
+const DoctorProfileSettingsContext = createContext(null);
 
 async function readResponse(response) {
   const payload = await response.json().catch(() => ({}));
@@ -10,7 +19,12 @@ async function readResponse(response) {
   return payload;
 }
 
-export function useDoctorProfileSettings() {
+/**
+ * Shared doctor profile settings for the dashboard (sidebar avatar + settings page).
+ * Fetches /api/doctor-profile once; mutations update the same context so the
+ * navbar avatar refreshes immediately after a profile photo upload.
+ */
+export function DoctorProfileSettingsProvider({ children }) {
   const [consultationFee, setConsultationFee] = useState(null);
   const [clinic, setClinic] = useState(null);
   const [personalProfile, setPersonalProfile] = useState(null);
@@ -137,20 +151,59 @@ export function useDoctorProfileSettings() {
     return payload;
   }, []);
 
-  return {
-    consultationFee,
-    clinic,
-    personalProfile,
-    notifications,
-    preferences,
-    loading,
-    error,
-    saveConsultationFee,
-    saveClinicSettings,
-    savePersonalProfile,
-    saveNotificationSettings,
-    savePreferences,
-    uploadProfilePhoto,
-    refresh: load,
-  };
+  const refreshPublic = useCallback(
+    (signal) => load(signal instanceof AbortSignal ? signal : undefined),
+    [load],
+  );
+
+  const value = useMemo(
+    () => ({
+      consultationFee,
+      clinic,
+      personalProfile,
+      notifications,
+      preferences,
+      loading,
+      error,
+      saveConsultationFee,
+      saveClinicSettings,
+      savePersonalProfile,
+      saveNotificationSettings,
+      savePreferences,
+      uploadProfilePhoto,
+      refresh: refreshPublic,
+    }),
+    [
+      consultationFee,
+      clinic,
+      personalProfile,
+      notifications,
+      preferences,
+      loading,
+      error,
+      saveConsultationFee,
+      saveClinicSettings,
+      savePersonalProfile,
+      saveNotificationSettings,
+      savePreferences,
+      uploadProfilePhoto,
+      refreshPublic,
+    ],
+  );
+
+  return (
+    <DoctorProfileSettingsContext.Provider value={value}>
+      {children}
+    </DoctorProfileSettingsContext.Provider>
+  );
+}
+
+export function useDoctorProfileSettings() {
+  const context = useContext(DoctorProfileSettingsContext);
+  if (!context) {
+    throw new Error(
+      "useDoctorProfileSettings must be used within DoctorProfileSettingsProvider",
+    );
+  }
+  return context;
 }

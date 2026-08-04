@@ -121,6 +121,16 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
     );
   }
 
+  const hasEligible = options.length > 0;
+  const selectDisabled = loading || Boolean(loadError) || !hasEligible;
+  const placeholder = loading
+    ? "Loading patients…"
+    : loadError
+      ? "Unable to load appointments"
+      : hasEligible
+        ? "Select patient to start consultation"
+        : "No active appointments to consult";
+
   return (
     <div className={cn("relative w-full border-b border-gray-200 bg-white px-6 py-4", className)}>
       <PatientStepLabel />
@@ -128,14 +138,20 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
         <select
           value={selectValue}
           onChange={handleSelectChange}
-          disabled={loading}
+          disabled={selectDisabled}
           data-testid="scribe-patient-select"
           aria-label="Select patient to start consultation"
-          className="h-10 w-full cursor-pointer rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:cursor-wait disabled:opacity-70"
+          aria-busy={loading || undefined}
+          className={cn(
+            "h-10 w-full rounded-lg border border-gray-200 bg-white px-3 pr-8 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30",
+            selectDisabled
+              ? loading
+                ? "cursor-wait opacity-70"
+                : "cursor-not-allowed opacity-70"
+              : "cursor-pointer",
+          )}
         >
-          <option value="">
-            {loading ? "Loading patients…" : "Select patient to start consultation"}
-          </option>
+          <option value="">{placeholder}</option>
           {options.map((opt) => (
             <option key={opt.appointment_id} value={opt.appointment_id}>
               {optionLabel(opt)}
@@ -143,22 +159,25 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
           ))}
         </select>
         {loading && (
-          <Loader2 className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400" />
+          <Loader2
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-400"
+            aria-hidden
+          />
         )}
       </div>
 
       {loadError && (
-        <p className="mt-2 text-xs text-destructive">
-          {loadError.message}{" "}
+        <p className="mt-2 text-xs text-destructive" data-testid="scribe-patient-select-error">
+          Couldn&apos;t load appointments. {loadError.message}{" "}
           <button type="button" className="underline" onClick={() => void loadEligible()}>
             Retry
           </button>
         </p>
       )}
 
-      {!loading && !loadError && options.length === 0 && (
-        <p className="mt-2 text-xs text-gray-500">
-          No confirmed appointments waiting for consultation. Create a walk-in patient below, or confirm an appointment first.
+      {!loading && !loadError && !hasEligible && (
+        <p className="mt-2 text-xs text-gray-500" data-testid="scribe-patient-select-empty">
+          No active appointments to consult
         </p>
       )}
 

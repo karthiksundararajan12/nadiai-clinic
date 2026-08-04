@@ -1,8 +1,16 @@
 import { normalizePhoneForWhatsApp } from "../booking/lib/phone.js";
+import { createLogger } from "../booking/logger.js";
 import { SCRIBE_LANGUAGE } from "../scribe/constants.js";
+import { PROFILE_PHOTO } from "./profile-photo.constants.js";
 
 export const CONSULTATION_FEE_MIN_RUPEES = 0;
 export const CONSULTATION_FEE_MAX_RUPEES = 100_000;
+
+const MIME_TO_EXTENSION = Object.freeze({
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+});
 
 const VALID_SCRIBE_LANGUAGES = new Set(Object.values(SCRIBE_LANGUAGE));
 const DEFAULT_SCRIBE_LANGUAGE = SCRIBE_LANGUAGE.HINGLISH;
@@ -109,6 +117,7 @@ function formatPersonalProfile(profile) {
     email: profile?.email ?? "",
     phone: profile?.phone ?? null,
     licenseNumber: profile?.license_number ?? "",
+    avatarUrl: profile?.avatar_url ?? null,
     joinedAt: profile?.created_at ?? null,
   };
 }
@@ -178,9 +187,18 @@ function parseLicenseNumber(rawLicense) {
 }
 
 export class DoctorProfileService {
-  constructor(doctorProfileRepository, clinicRepository) {
+  /**
+   * @param {import("../booking/repository/doctor-profile.repository.js").DoctorProfileRepository} doctorProfileRepository
+   * @param {*} clinicRepository
+   * @param {import("@supabase/supabase-js").SupabaseClient|null} [storageClient]
+   *   Service-role client used for Storage uploads. Optional for fee/profile
+   *   tests that never touch photo upload.
+   */
+  constructor(doctorProfileRepository, clinicRepository, storageClient = null) {
     this._doctors = doctorProfileRepository;
     this._clinics = clinicRepository;
+    this._storage = storageClient;
+    this._log = createLogger({ component: "DoctorProfileService" });
   }
 
   async _requireProfile(clinicId, userId) {
@@ -294,5 +312,87 @@ export class DoctorProfileService {
     );
 
     return { preferences: formatPreferences(updated) };
+  }
+
+  /**
+   * Uploads a profile photo to the public `profile-photos` bucket and persists
+   * the public URL on doctor_profiles.avatar_url.
+   *
+   * @param {string} clinicId
+   * @param {string} userId
+   * @param {{ bytes: Uint8Array|ArrayBuffer|Buffer; mimeType: string; size: number }} file
+   */
+  async updateProfilePhoto(clinicId, userId, file) {
+    await this._requireProfile(clinicId, userId);
+
+    if (!this._storage?.storage) {
+      throw new DoctorProfileRequestError(
+        "Photo storage is not configured",
+        500,
+      );
+    }
+
+    const mimeType = String(file?.mimeType ?? "").toLowerCase();
+    if (!PROFILE_PHOTO.ALLOWED_MIME_TYPES.includes(mimeType)) {
+      throw new DoctorProfileRequestError(
+        "Photo must be a JPG, PNG, or WebP image",
+      );
+    }
+
+    const size = Number(file?.size);
+    if (!Number.isFinite(size) || size <= 0) {
+      throw new DoctorProfileRequestError("Photo file is empty");
+    }
+    if (size > PROFILE_PHOTO.MAX_BYTES) {
+      throw new DoctorProfileRequestError("Photo must be 2MB or smaller");
+    }
+
+    const extension = MIME_TO_EXTENSION[mimeType];
+    const storagePath = PROFILE_PHOTO.buildPath(clinicId, userId, extension);
+    const body =
+      file.bytes instanceof Uint8Array ? file.bytes : new Uint8Array(file.bytes);
+
+    const { error: uploadError } = await this._storage.storage
+      .from(PROFILE_PHOTO.BUCKET)
+      .upload(storagePath, body, {
+        contentType: mimeType,
+        upsert: true,
+        cacheControl: "3600",
+      });
+
+    if (uploadError) {
+      this._log.error("Failed to upload profile photo", {
+        clinicId,
+        userId,
+        storagePath,
+        error: uploadError.message,
+      });
+      throw new DoctorProfileRequestError(
+        "Failed to upload profile photo. Please try again.",
+        500,
+      );
+    }
+
+    const { data: publicData } = this._storage.storage
+      .from(PROFILE_PHOTO.BUCKET)
+      .getPublicUrl(storagePath);
+
+    const publicUrl = publicData?.publicUrl;
+    if (!publicUrl) {
+      throw new DoctorProfileRequestError(
+        "Failed to resolve profile photo URL",
+        500,
+      );
+    }
+
+    // Bust CDN/browser cache after upsert to the same object path.
+    const avatarUrl = `${publicUrl}?v=${Date.now()}`;
+    const updated = await this._doctors.updateAvatarUrl(
+      clinicId,
+      userId,
+      avatarUrl,
+    );
+
+    return { profile: formatPersonalProfile(updated) };
   }
 }

@@ -121,6 +121,22 @@ export function useDoctorProfileSettings() {
     return payload;
   }, []);
 
+  const uploadProfilePhoto = useCallback(async (file) => {
+    setError(null);
+    const body = new FormData();
+    body.append("photo", file);
+    const payload = await readResponse(
+      await fetch("/api/doctor-profile/avatar", {
+        method: "POST",
+        body,
+      }),
+    );
+    if (payload.profile) {
+      setPersonalProfile(payload.profile);
+    }
+    return payload;
+  }, []);
+
   return {
     consultationFee,
     clinic,
@@ -134,6 +150,7 @@ export function useDoctorProfileSettings() {
     savePersonalProfile,
     saveNotificationSettings,
     savePreferences,
+    uploadProfilePhoto,
     refresh: load,
   };
 }

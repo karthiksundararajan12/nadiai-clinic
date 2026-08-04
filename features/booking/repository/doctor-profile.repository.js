@@ -84,7 +84,7 @@ export class DoctorProfileRepository extends BaseRepository {
         this._db
           .from(this._table)
           .select(
-            "id, full_name, specialization, email, phone, license_number, created_at, consultation_fee, working_hours_start, working_hours_end, reminders_enabled, default_scribe_language",
+            "id, full_name, specialization, email, phone, license_number, created_at, consultation_fee, working_hours_start, working_hours_end, reminders_enabled, default_scribe_language, avatar_url",
           )
           .eq("clinic_id", clinicId)
           .eq("user_id", userId)
@@ -164,9 +164,35 @@ export class DoctorProfileRepository extends BaseRepository {
           })
           .eq("clinic_id", clinicId)
           .eq("user_id", userId)
-          .select("full_name, specialization, email, phone, license_number, created_at")
+          .select(
+            "full_name, specialization, email, phone, license_number, created_at, avatar_url",
+          )
           .single(),
       "updatePersonalProfile",
+    );
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} userId
+   * @param {string} avatarUrl
+   */
+  async updateAvatarUrl(clinicId, userId, avatarUrl) {
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .update({
+            avatar_url: avatarUrl,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("clinic_id", clinicId)
+          .eq("user_id", userId)
+          .select(
+            "full_name, specialization, email, phone, license_number, created_at, avatar_url",
+          )
+          .single(),
+      "updateAvatarUrl",
     );
   }
 

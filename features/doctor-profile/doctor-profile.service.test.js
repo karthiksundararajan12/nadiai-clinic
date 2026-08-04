@@ -19,6 +19,7 @@ const DEFAULT_PROFILE = {
   email: "dr.ananya@nadiai.com",
   phone: "919876543210",
   license_number: "MCI-123456",
+  avatar_url: null,
   created_at: "2026-01-15T10:00:00.000Z",
   reminders_enabled: true,
   default_scribe_language: "hinglish",
@@ -35,6 +36,9 @@ function createService({
   updatePersonalProfileResult,
   updateRemindersEnabledResult,
   updateDefaultScribeLanguageResult,
+  updateAvatarUrlResult,
+  storageClient = undefined,
+  storageUploadError = null,
 } = {}) {
   const calls = {
     findByUserId: [],
@@ -44,7 +48,9 @@ function createService({
     updatePersonalProfile: [],
     updateRemindersEnabled: [],
     updateDefaultScribeLanguage: [],
+    updateAvatarUrl: [],
     updateById: [],
+    storageUpload: [],
   };
 
   const doctorProfileRepository = {
@@ -72,6 +78,7 @@ function createService({
           email: data.email,
           phone: data.phone,
           license_number: data.license_number,
+          avatar_url: profile?.avatar_url ?? null,
           created_at: DEFAULT_PROFILE.created_at,
         }
       );
@@ -88,6 +95,20 @@ function createService({
         }
       );
     },
+    async updateAvatarUrl(clinicId, userId, avatarUrl) {
+      calls.updateAvatarUrl.push({ clinicId, userId, avatarUrl });
+      return (
+        updateAvatarUrlResult ?? {
+          full_name: DEFAULT_PROFILE.full_name,
+          specialization: DEFAULT_PROFILE.specialization,
+          email: DEFAULT_PROFILE.email,
+          phone: DEFAULT_PROFILE.phone,
+          license_number: DEFAULT_PROFILE.license_number,
+          created_at: DEFAULT_PROFILE.created_at,
+          avatar_url: avatarUrl,
+        }
+      );
+    },
   };
 
   const clinicRepository = {
@@ -101,9 +122,36 @@ function createService({
     },
   };
 
+  const resolvedStorage =
+    storageClient === undefined
+      ? {
+          storage: {
+            from(bucket) {
+              return {
+                async upload(path, bytes, options) {
+                  calls.storageUpload.push({ bucket, path, bytes, options });
+                  return { error: storageUploadError };
+                },
+                getPublicUrl(path) {
+                  return {
+                    data: {
+                      publicUrl: `https://storage.example/${bucket}/${path}`,
+                    },
+                  };
+                },
+              };
+            },
+          },
+        }
+      : storageClient;
+
   return {
     calls,
-    service: new DoctorProfileService(doctorProfileRepository, clinicRepository),
+    service: new DoctorProfileService(
+      doctorProfileRepository,
+      clinicRepository,
+      resolvedStorage,
+    ),
   };
 }
 
@@ -128,6 +176,7 @@ test("getSettings returns consultation fee, clinic fields, personal profile, not
     email: "dr.ananya@nadiai.com",
     phone: "919876543210",
     licenseNumber: "MCI-123456",
+    avatarUrl: null,
     joinedAt: "2026-01-15T10:00:00.000Z",
   });
   assert.deepEqual(result.notifications, { remindersEnabled: true });
@@ -412,5 +461,61 @@ test("updatePreferences rejects invalid default Scribe languages", async () => {
       error instanceof DoctorProfileRequestError &&
       error.statusCode === 400 &&
       /Default Scribe language/.test(error.message),
+  );
+});
+
+test("updateProfilePhoto uploads to storage and persists avatar_url", async () => {
+  const { service, calls } = createService();
+  const bytes = new Uint8Array([1, 2, 3, 4]);
+
+  const result = await service.updateProfilePhoto("clinic-1", "user-1", {
+    bytes,
+    mimeType: "image/png",
+    size: bytes.byteLength,
+  });
+
+  assert.equal(calls.storageUpload.length, 1);
+  assert.equal(calls.storageUpload[0].bucket, "profile-photos");
+  assert.equal(calls.storageUpload[0].path, "clinic-1/user-1/avatar.png");
+  assert.equal(calls.updateAvatarUrl.length, 1);
+  assert.match(
+    calls.updateAvatarUrl[0].avatarUrl,
+    /^https:\/\/storage\.example\/profile-photos\/clinic-1\/user-1\/avatar\.png\?v=\d+$/,
+  );
+  assert.match(result.profile.avatarUrl, /avatar\.png\?v=\d+$/);
+});
+
+test("updateProfilePhoto rejects unsupported mime types", async () => {
+  const { service, calls } = createService();
+
+  await assert.rejects(
+    () =>
+      service.updateProfilePhoto("clinic-1", "user-1", {
+        bytes: new Uint8Array([1]),
+        mimeType: "image/gif",
+        size: 1,
+      }),
+    (error) =>
+      error instanceof DoctorProfileRequestError &&
+      error.statusCode === 400 &&
+      /JPG, PNG, or WebP/.test(error.message),
+  );
+  assert.equal(calls.storageUpload.length, 0);
+});
+
+test("updateProfilePhoto rejects files over 2MB", async () => {
+  const { service } = createService();
+
+  await assert.rejects(
+    () =>
+      service.updateProfilePhoto("clinic-1", "user-1", {
+        bytes: new Uint8Array([1]),
+        mimeType: "image/jpeg",
+        size: 2 * 1024 * 1024 + 1,
+      }),
+    (error) =>
+      error instanceof DoctorProfileRequestError &&
+      error.statusCode === 400 &&
+      /2MB/.test(error.message),
   );
 });

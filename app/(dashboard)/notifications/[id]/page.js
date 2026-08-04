@@ -8,11 +8,13 @@ import { ArrowLeft, CalendarDays, CreditCard } from "lucide-react";
 import { ICON_SIZE_MD, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { useNotifications } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 
 export default function NotificationDetailPage() {
   const { id } = useParams();
   const router = useRouter();
+  const { markRead } = useNotifications();
   const [notification, setNotification] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -35,14 +37,17 @@ export default function NotificationDetailPage() {
         setNotification(payload.notification ?? null);
         setError(null);
 
+        // Shared markRead updates Supabase + header unreadCount immediately.
         if (payload.notification && !payload.notification.is_read) {
-          const markRes = await fetch("/api/notifications", {
-            method: "PATCH",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ id: payload.notification.id }),
-          });
-          if (markRes.ok) {
-            setNotification((prev) => (prev ? { ...prev, is_read: true } : prev));
+          try {
+            await markRead(payload.notification.id);
+            if (!controller.signal.aborted) {
+              setNotification((prev) =>
+                prev ? { ...prev, is_read: true } : prev,
+              );
+            }
+          } catch {
+            // Detail still renders; next poll will resync the badge.
           }
         }
       } catch (loadError) {
@@ -56,7 +61,7 @@ export default function NotificationDetailPage() {
 
     void load();
     return () => controller.abort();
-  }, [id]);
+  }, [id, markRead]);
 
   const isPayment = notification?.type === "payment_received";
 

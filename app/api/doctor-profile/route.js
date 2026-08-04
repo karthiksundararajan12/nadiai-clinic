@@ -35,6 +35,7 @@ async function resolveDoctorProfileService() {
   return new DoctorProfileService(
     new DoctorProfileRepository(supabase),
     new ClinicRepository(supabase),
+    supabase,
   );
 }
 

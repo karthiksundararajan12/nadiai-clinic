@@ -9,6 +9,7 @@ import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Button } from "@/components/ui/button";
+import { useNotifications } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 50;
@@ -31,8 +32,8 @@ export default function NotificationsPage() {
 function NotificationsPageContent() {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
+  const { unreadCount, markAllRead: markAllReadShared } = useNotifications();
   const [notifications, setNotifications] = useState([]);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -54,7 +55,6 @@ function NotificationsPageContent() {
       }
       const rows = Array.isArray(payload.notifications) ? payload.notifications : [];
       setNotifications((prev) => (append ? [...prev, ...rows] : rows));
-      setUnreadCount(Number(payload.unreadCount) || 0);
       setHasMore(Boolean(payload.hasMore));
       setError(null);
     } catch (loadError) {
@@ -78,14 +78,12 @@ function NotificationsPageContent() {
   }, [highlightId, loading, notifications]);
 
   async function markAllRead() {
-    const response = await fetch("/api/notifications", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ markAllRead: true }),
-    });
-    if (!response.ok) return;
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    setUnreadCount(0);
+    try {
+      await markAllReadShared();
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    } catch {
+      // Leave list as-is; next load/poll will resync.
+    }
   }
 
   return (

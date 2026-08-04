@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Header } from "@/components/layout/header";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
@@ -30,6 +30,8 @@ import {
 
 const CONSULTATION_FEE_MIN = 0;
 const CONSULTATION_FEE_MAX = 100_000;
+const PROFILE_PHOTO_MAX_BYTES = 2 * 1024 * 1024;
+const PROFILE_PHOTO_ACCEPT = "image/jpeg,image/png,image/webp";
 
 function profileInitials(fullName) {
   const parts = String(fullName ?? "").trim().split(/\s+/).filter(Boolean);
@@ -52,8 +54,10 @@ export default function SettingsPage() {
     saveNotificationSettings,
     preferences,
     savePreferences,
+    uploadProfilePhoto,
   } = useDoctorProfileSettings();
   const { theme } = useTheme();
+  const photoInputRef = useRef(null);
   const [feeInput, setFeeInput] = useState("");
   const [feeSaving, setFeeSaving] = useState(false);
   const [feeError, setFeeError] = useState("");
@@ -65,6 +69,10 @@ export default function SettingsPage() {
     phone: "",
     licenseNumber: "",
   });
+  const [avatarUrl, setAvatarUrl] = useState(null);
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [photoError, setPhotoError] = useState("");
+  const [photoSuccess, setPhotoSuccess] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileSuccess, setProfileSuccess] = useState("");
@@ -106,6 +114,7 @@ export default function SettingsPage() {
         phone: personalProfile.phone ? formatPhoneForDisplay(personalProfile.phone) : "",
         licenseNumber: personalProfile.licenseNumber ?? "",
       });
+      setAvatarUrl(personalProfile.avatarUrl ?? null);
     }
   }, [personalProfile, profileSettingsLoading]);
 
@@ -174,6 +183,45 @@ export default function SettingsPage() {
       setProfileError(saveError.message);
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const handleUploadPhotoClick = () => {
+    photoInputRef.current?.click();
+  };
+
+  const handlePhotoSelected = async (event) => {
+    const file = event.target.files?.[0];
+    // Allow selecting the same file again after a failed attempt.
+    event.target.value = "";
+    if (!file) return;
+
+    setPhotoError("");
+    setPhotoSuccess("");
+
+    if (!PROFILE_PHOTO_ACCEPT.split(",").includes(file.type)) {
+      const message = "Photo must be a JPG, PNG, or WebP image.";
+      console.error("[settings] profile photo rejected:", message, file.type);
+      setPhotoError(message);
+      return;
+    }
+    if (file.size > PROFILE_PHOTO_MAX_BYTES) {
+      const message = "Photo must be 2MB or smaller.";
+      console.error("[settings] profile photo rejected:", message, file.size);
+      setPhotoError(message);
+      return;
+    }
+
+    setPhotoUploading(true);
+    try {
+      const payload = await uploadProfilePhoto(file);
+      setAvatarUrl(payload.profile?.avatarUrl ?? null);
+      setPhotoSuccess("Profile photo updated.");
+    } catch (uploadError) {
+      console.error("[settings] profile photo upload failed:", uploadError);
+      setPhotoError(uploadError.message || "Failed to upload profile photo.");
+    } finally {
+      setPhotoUploading(false);
     }
   };
 
@@ -277,18 +325,44 @@ export default function SettingsPage() {
                   )}
                   <div className="flex items-center gap-4 mb-6">
                     <Avatar className="h-20 w-20">
+                      <AvatarImage src={avatarUrl ?? undefined} alt="Profile photo" />
                       <AvatarFallback className="text-xl">
                         {profileInitials(profileForm.fullName)}
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <Button variant="outline" size="sm" className="gap-1.5" disabled>
+                      <input
+                        ref={photoInputRef}
+                        type="file"
+                        accept={PROFILE_PHOTO_ACCEPT}
+                        className="sr-only"
+                        tabIndex={-1}
+                        onChange={handlePhotoSelected}
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        disabled={profileSettingsLoading || photoUploading}
+                        onClick={handleUploadPhotoClick}
+                      >
                         <Camera className="h-3.5 w-3.5" />
-                        Change Photo
+                        {photoUploading ? "Uploading…" : "Upload profile photo"}
                       </Button>
                       <p className="text-xs font-medium text-muted-foreground mt-1.5">
-                        JPG, PNG. Max 2MB. Photo upload coming soon.
+                        JPG, PNG, or WebP. Max 2MB.
                       </p>
+                      {photoError && (
+                        <p className="mt-1.5 text-xs font-medium text-destructive">
+                          {photoError}
+                        </p>
+                      )}
+                      {photoSuccess && (
+                        <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                          {photoSuccess}
+                        </p>
+                      )}
                     </div>
                   </div>
 

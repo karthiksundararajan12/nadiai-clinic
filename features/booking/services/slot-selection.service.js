@@ -225,12 +225,13 @@ export class SlotSelectionService {
   // Presenting availability
   // ─────────────────────────────────────────────────────────────
 
-  async _computeAvailableSlots(clinic, doctor) {
+  async _computeAvailableSlots(clinic, doctor, log = this._log) {
     const now = new Date();
     const windowStart = now;
     const windowEnd = new Date(now.getTime() + SLOT_SEARCH_DAYS_AHEAD * 24 * 60 * 60 * 1000);
     const workingHours = normalizeWorkingHours(doctor.working_hours_start, doctor.working_hours_end);
     const durationMinutes = doctor.consultation_duration || SLOT_DEFAULT_CONSULTATION_DURATION_MINUTES;
+    const earliestAllowed = new Date(now.getTime() + SLOT_MIN_LEAD_MINUTES * 60 * 1000);
 
     const candidates = generateCandidateSlots({
       workingHoursStart: workingHours.start,
@@ -248,8 +249,35 @@ export class SlotSelectionService {
       windowEnd.toISOString(),
     );
     const takenMs = new Set(taken.map((iso) => new Date(iso).getTime()));
+    const open = candidates.filter((slot) => !takenMs.has(slot.slotStart.getTime()));
 
-    return candidates.filter((slot) => !takenMs.has(slot.slotStart.getTime()));
+    // Traceability for "why isn't the list 10:00–18:00?" reports: raw DB
+    // hours, post-normalize open/close, lead-time cutoff, and the actual
+    // first/last offered starts (IST labels). Same-day lists often start
+    // after open because of SLOT_MIN_LEAD_MINUTES; the last start is often
+    // before close because slotStart+duration must fit inside working_hours_end.
+    log.info("Slot generation inputs and result", {
+      clinicId: clinic.id,
+      doctorId: doctor.id,
+      rawWorkingHoursStart: doctor.working_hours_start ?? null,
+      rawWorkingHoursEnd: doctor.working_hours_end ?? null,
+      rawConsultationDuration: doctor.consultation_duration ?? null,
+      normalizedWorkingHoursStart: workingHours.start,
+      normalizedWorkingHoursEnd: workingHours.end,
+      usedWorkingHoursFallback: workingHours.usedFallback,
+      consultationDurationMinutes: durationMinutes,
+      minLeadMinutes: SLOT_MIN_LEAD_MINUTES,
+      nowIso: now.toISOString(),
+      earliestAllowedIso: earliestAllowed.toISOString(),
+      candidateCount: candidates.length,
+      takenCount: taken.length,
+      openCount: open.length,
+      firstOpenSlotLabel: open[0] ? formatSlotLabel(open[0].slotStart) : null,
+      lastOpenSlotLabel: open.length ? formatSlotLabel(open[open.length - 1].slotStart) : null,
+      openSlotLabelsSample: open.slice(0, 5).map((s) => formatSlotLabel(s.slotStart)),
+    });
+
+    return open;
   }
 
   /**
@@ -267,7 +295,7 @@ export class SlotSelectionService {
     prefixMessage = null,
     offset = 0,
   }) {
-    const candidates = await this._computeAvailableSlots(clinic, doctor);
+    const candidates = await this._computeAvailableSlots(clinic, doctor, log);
 
     log.info("Computed open slots before WhatsApp list paging", {
       contactPhone: message.contactPhone,

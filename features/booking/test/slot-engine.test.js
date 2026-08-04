@@ -136,6 +136,30 @@ test("generateCandidateSlots: 09:00–18:00 / 20min from 12:31 PM includes last 
   assert.equal(lastEndIst.getUTCMinutes(), 0);
 });
 
+test("generateCandidateSlots: Deepti clinic (10:00–18:00 / 20min / 60min lead) at 11:51 IST → today 13:00–17:40, tomorrow 10:00", () => {
+  // Reproduces the live Deepti clinic report (clinic_id 1c764182-…): DB hours
+  // are 10:00–18:00 but the first WhatsApp page looked like 1:00 PM–5:40 PM.
+  // Root cause is lead-time + duration, not a timezone/hours mis-read.
+  const now = new Date("2026-08-04T06:21:00.000Z"); // 11:51 AM IST
+  const slots = generateCandidateSlots({
+    workingHoursStart: "10:00",
+    workingHoursEnd: "18:00",
+    consultationDurationMinutes: 20,
+    daysAhead: 2,
+    minLeadMinutes: 60,
+    now,
+  });
+
+  const labelParts = slots.map((s) => formatSlotDateTimeParts(s.slotStart));
+  const today = labelParts.filter((p) => p.date === "Tue 4 Aug");
+  const tomorrow = labelParts.filter((p) => p.date === "Wed 5 Aug");
+
+  assert.equal(today[0]?.time, "1:00 PM");
+  assert.equal(today.at(-1)?.time, "5:40 PM");
+  assert.equal(tomorrow[0]?.time, "10:00 AM");
+  assert.equal(tomorrow.at(-1)?.time, "5:40 PM");
+});
+
 // ─────────────────────────────────────────────────────────────
 // formatSlotLabel
 // ─────────────────────────────────────────────────────────────

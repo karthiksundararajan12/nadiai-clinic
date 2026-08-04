@@ -44,9 +44,10 @@ const ICON_MAP = {
 export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
   const router = useRouter();
-  const { displayName, initials, specialization } = useUser();
+  const { displayName, initials, specialization, profile } = useUser();
   const { personalProfile } = useDoctorProfileSettings();
-  const avatarUrl = personalProfile?.avatarUrl ?? null;
+  const avatarUrl =
+    personalProfile?.avatarUrl ?? profile?.avatar_url ?? null;
   const visibleNavItems = filterNavItems(NAV_ITEMS, specialization);
 
   const navigateIfAllowed = (href, event) => {

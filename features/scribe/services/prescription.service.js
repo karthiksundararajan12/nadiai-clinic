@@ -423,8 +423,14 @@ export class PrescriptionService {
    */
   async _handleGenerationError(err, sessionId, soapNote, ctx, inputHash, fromStatus, startedAt) {
     const message = err instanceof Error ? err.message : String(err);
+    const details = err && typeof err === "object" && "details" in err ? err.details : null;
 
-    this._log.error("Prescription generation failed", { sessionId, error: message });
+    this._log.error("Prescription generation failed", {
+      sessionId,
+      error: message,
+      issues: err?.issues ?? err?.errors ?? details?.issues ?? null,
+      rawOutput: details?.rawOutput ?? null,
+    });
 
     await this._prescriptions.upsertDraft({
       session_id:          sessionId,
@@ -533,6 +539,8 @@ function parseAndValidateDraft(text, assessment = "", plan = "") {
     throw new PrescriptionValidationError({
       reason: "invalid_json",
       message: "Could not generate prescription. Please enter manually.",
+      issues: null,
+      rawOutput: text,
     });
   }
 
@@ -546,6 +554,8 @@ function parseAndValidateDraft(text, assessment = "", plan = "") {
       reason: "validation_failed",
       message: "Could not generate prescription. Please enter manually.",
       details: result.error.flatten(),
+      issues: result.error.issues,
+      rawOutput: normalized,
     });
   }
   return result.data;

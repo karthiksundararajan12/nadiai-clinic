@@ -7,6 +7,7 @@ import {
   isUsableSoapAssessment,
   mapGeminiDrugToMedication,
 } from "./prescription-medication-suggestions.js";
+import { reconcileMedicationRangesFromPlan } from "./prescription-field-ranges.js";
 
 /**
  * @param {Record<string, unknown>} raw
@@ -33,9 +34,11 @@ export function mapGeminiPrescriptionToDraft(raw, assessment = "", plan = "") {
   });
 
   // No clear diagnosis → leave Rx empty for manual entry (never invent meds).
-  const medications = isUsableSoapAssessment(assessment)
+  const mapped = isUsableSoapAssessment(assessment)
     ? drugs.map((drug) => mapGeminiDrugToMedication(drug))
     : [];
+  // Restore "3-4 days" / "500-1000mg" when the model collapsed the Plan range.
+  const medications = reconcileMedicationRangesFromPlan(mapped, plan);
 
   return {
     diagnosis: seeded.diagnosis,

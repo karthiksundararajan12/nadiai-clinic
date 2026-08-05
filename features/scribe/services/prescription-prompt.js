@@ -54,6 +54,7 @@ Generate a prescription draft as JSON only, no markdown, no preamble:
 Rules for drugs:
 - If Assessment/diagnosis is missing, unclear, or only says it was not documented, return "drugs": [] (empty array). Do NOT invent medicines.
 - Only suggest medicines that are reasonable for the stated assessment and what was discussed.
+- Preserve duration and dose ranges exactly as stated in the Plan (e.g. "3-4 days", "500-1000mg"). Never collapse a range to a single lower/upper bound.
 - confidence is 0.0–1.0 reflecting how sure you are that this medicine/dose/frequency/duration fits (lower when uncertain).
 
 Only respond with valid JSON. Nothing else.`;

@@ -48,6 +48,8 @@ import {
   mapGeminiPrescriptionToDraft,
 } from "../lib/prescription-response-mapper.js";
 
+const parseDraftLog = createLogger({ component: "PrescriptionService.parseAndValidateDraft" });
+
 export class PrescriptionService {
   /**
    * @param {import("../repository/session.repository.js").SessionRepository}         sessionRepository
@@ -425,11 +427,17 @@ export class PrescriptionService {
     const message = err instanceof Error ? err.message : String(err);
     const details = err && typeof err === "object" && "details" in err ? err.details : null;
 
+    const rawOutput = details?.rawOutput ?? null;
+    const rawOutputStr = typeof rawOutput === "string" ? rawOutput : null;
+    const trimmedRaw = rawOutputStr?.trimEnd() ?? "";
     this._log.error("Prescription generation failed", {
       sessionId,
       error: message,
       issues: err?.issues ?? err?.errors ?? details?.issues ?? null,
-      rawOutput: details?.rawOutput ?? null,
+      rawOutput,
+      rawOutputLength: details?.rawOutputLength ?? rawOutputStr?.length ?? null,
+      looksTruncated: details?.looksTruncated
+        ?? (rawOutputStr != null ? trimmedRaw.length > 0 && !trimmedRaw.endsWith("}") : null),
     });
 
     await this._prescriptions.upsertDraft({
@@ -536,11 +544,21 @@ function parseAndValidateDraft(text, assessment = "", plan = "") {
   try {
     parsed = JSON.parse(text);
   } catch (err) {
+    const raw = typeof text === "string" ? text : String(text ?? "");
+    const trimmed = raw.trimEnd();
+    const looksTruncated = trimmed.length > 0 && !trimmed.endsWith("}");
+    parseDraftLog.error("Prescription draft JSON.parse failed", {
+      rawOutputLength: raw.length,
+      looksTruncated,
+      parseError: err instanceof Error ? err.message : String(err),
+    });
     throw new PrescriptionValidationError({
       reason: "invalid_json",
       message: "Could not generate prescription. Please enter manually.",
       issues: null,
       rawOutput: text,
+      rawOutputLength: raw.length,
+      looksTruncated,
     });
   }
 

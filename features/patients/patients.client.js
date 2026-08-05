@@ -44,6 +44,31 @@ export async function createPatient(input) {
 }
 
 /**
+ * @param {string} patientId
+ */
+export async function fetchPatientDeletionImpact(patientId) {
+  return readResponse(
+    await fetch(
+      `/api/patients/${encodeURIComponent(patientId)}/deletion-impact`,
+      { cache: "no-store" },
+    ),
+  );
+}
+
+/**
+ * Hard-deletes a patient and cascaded history.
+ *
+ * @param {string} patientId
+ */
+export async function deletePatient(patientId) {
+  return readResponse(
+    await fetch(`/api/patients/${encodeURIComponent(patientId)}`, {
+      method: "DELETE",
+    }),
+  );
+}
+
+/**
  * Builds the `/patients?highlight=…` path used to land back on the list
  * with a newly created patient's row highlighted (same `?highlight=`
  * mechanism as /appointments — see

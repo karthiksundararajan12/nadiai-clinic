@@ -46,3 +46,36 @@ export async function cancelConfirmedAppointment(appointmentId) {
   }
   return payload.appointment;
 }
+
+/**
+ * @param {string} appointmentId
+ */
+export async function fetchAppointmentDeletionImpact(appointmentId) {
+  const response = await fetch(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/deletion-impact`,
+    { cache: "no-store" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to load deletion impact");
+  }
+  return payload.impact;
+}
+
+/**
+ * Hard-deletes an appointment (no Razorpay refund). Refuses when paid and
+ * not yet refunded — Cancel first.
+ *
+ * @param {string} appointmentId
+ */
+export async function deleteAppointment(appointmentId) {
+  const response = await fetch(
+    `/api/appointments/${encodeURIComponent(appointmentId)}`,
+    { method: "DELETE" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to delete appointment");
+  }
+  return payload;
+}

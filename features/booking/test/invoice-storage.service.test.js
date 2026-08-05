@@ -3,9 +3,14 @@ import assert from "node:assert/strict";
 import { InvoiceStorageService } from "../services/invoice-storage.service.js";
 import { INVOICE_STORAGE } from "../constants.js";
 
-function createFakeSupabaseStorage({ failUpload = false, failSign = false } = {}) {
+function createFakeSupabaseStorage({
+  failUpload = false,
+  failSign = false,
+  failRemove = false,
+} = {}) {
   const uploads = [];
   const signed = [];
+  const removed = [];
 
   const bucketApi = {
     async upload(path, body, opts) {
@@ -21,11 +26,17 @@ function createFakeSupabaseStorage({ failUpload = false, failSign = false } = {}
         error: null,
       };
     },
+    async remove(paths) {
+      removed.push(paths);
+      if (failRemove) return { data: null, error: { message: "remove failed" } };
+      return { data: paths.map((path) => ({ name: path })), error: null };
+    },
   };
 
   return {
     uploads,
     signed,
+    removed,
     storage: {
       from(bucket) {
         assert.equal(bucket, INVOICE_STORAGE.BUCKET);
@@ -77,4 +88,28 @@ test("InvoiceStorageService.uploadInvoicePdf: throws on storage upload failure",
       }),
     (err) => err.code === "DATABASE_ERROR",
   );
+});
+
+test("InvoiceStorageService.deleteInvoicePdfs: removes objects from bucket", async () => {
+  const fake = createFakeSupabaseStorage();
+  const service = new InvoiceStorageService(fake);
+
+  await service.deleteInvoicePdfs([
+    "invoices/clinic-1/appt-1.pdf",
+    "invoices/clinic-1/appt-2.pdf",
+  ]);
+
+  assert.deepEqual(fake.removed[0], [
+    "invoices/clinic-1/appt-1.pdf",
+    "invoices/clinic-1/appt-2.pdf",
+  ]);
+});
+
+test("InvoiceStorageService.deleteInvoicePdfs: no-ops on empty path list", async () => {
+  const fake = createFakeSupabaseStorage();
+  const service = new InvoiceStorageService(fake);
+
+  await service.deleteInvoicePdfs([]);
+  await service.deleteInvoicePdfs([null, ""]);
+  assert.equal(fake.removed.length, 0);
 });

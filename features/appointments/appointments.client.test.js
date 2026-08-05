@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   buildHighlightRedirectPath,
   cancelConfirmedAppointment,
+  deleteAppointment,
+  fetchAppointmentDeletionImpact,
 } from "./appointments.client.js";
 
 // Covers the redirect used by the dashboard "New Appointment" flow: after a
@@ -70,6 +72,49 @@ test("cancelConfirmedAppointment throws on non-OK response", async () => {
       () => cancelConfirmedAppointment("appt-1"),
       /Only confirmed appointments can be cancelled/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("fetchAppointmentDeletionImpact GETs deletion-impact endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { impact: { bookingInvoices: 1, scribeSessions: 0, blocked: false } };
+      },
+    };
+  };
+  try {
+    const impact = await fetchAppointmentDeletionImpact("appt-1");
+    assert.equal(calls[0].url, "/api/appointments/appt-1/deletion-impact");
+    assert.equal(impact.bookingInvoices, 1);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deleteAppointment DELETEs /api/appointments/[id]", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { deleted: true, appointmentId: "appt-1" };
+      },
+    };
+  };
+  try {
+    const result = await deleteAppointment("appt-1");
+    assert.equal(calls[0].url, "/api/appointments/appt-1");
+    assert.equal(calls[0].opts.method, "DELETE");
+    assert.equal(result.deleted, true);
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -8,6 +8,14 @@ import {
 } from "../lib/payment-list.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 
+export class PaymentRequestError extends Error {
+  constructor(message, statusCode = 400) {
+    super(message);
+    this.name = "PaymentRequestError";
+    this.statusCode = statusCode;
+  }
+}
+
 export class PaymentsService {
   /**
    * @param {import("../repository/payment.repository.js").PaymentRepository} paymentRepo

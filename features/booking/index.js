@@ -419,7 +419,11 @@ export {
 } from "./services/in-app-notification.service.js";
 export { NotificationRepository } from "./repository/notification.repository.js";
 export { PaymentRepository } from "./repository/payment.repository.js";
-export { PaymentsService } from "./services/payments.service.js";
+export {
+  PaymentsService,
+  PaymentRequestError,
+} from "./services/payments.service.js";
+export { PaymentDeleteService } from "./services/payment-delete.service.js";
 export {
   PAYMENT_STATUS_FILTER,
   PAYMENT_STATUS_LABEL,

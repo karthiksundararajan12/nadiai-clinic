@@ -262,4 +262,27 @@ export class PatientRepository extends BaseRepository {
       "recordConsent",
     );
   }
+
+  /**
+   * Hard-deletes a clinic-scoped patient row. Callers must remove / cascade
+   * dependent rows (invoices, scribe sessions, appointments) first when
+   * booking_invoices RESTRICT would otherwise block the appointment cascade.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<{ id: string }|null>}
+   */
+  async hardDelete(clinicId, patientId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .eq("id", patientId)
+          .select("id")
+          .single(),
+      "hardDelete",
+    );
+  }
 }

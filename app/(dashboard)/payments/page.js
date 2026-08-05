@@ -8,6 +8,7 @@ import {
   ChevronRight,
   ExternalLink,
   FileText,
+  Trash2,
 } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
@@ -22,6 +23,13 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
@@ -64,6 +72,10 @@ export default function PaymentsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [openingInvoice, setOpeningInvoice] = useState(null);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -139,6 +151,45 @@ export default function PaymentsPage() {
       setError(invoiceError);
     } finally {
       setOpeningInvoice(null);
+    }
+  }
+
+  function openDeleteDialog(payment) {
+    setDeleteError("");
+    setDeleteTarget(payment);
+    setDeleteStep(1);
+  }
+
+  function closeDeleteDialog() {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeleteStep(1);
+    setDeleteError("");
+  }
+
+  async function confirmDeletePayment() {
+    if (!deleteTarget?.appointmentId && !deleteTarget?.id) return;
+    if (deleteStep === 1) {
+      setDeleteStep(2);
+      return;
+    }
+    const appointmentId = deleteTarget.appointmentId ?? deleteTarget.id;
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      const response = await fetch(`/api/payments/${encodeURIComponent(appointmentId)}`, {
+        method: "DELETE",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Failed to delete payment");
+      }
+      closeDeleteDialog();
+      await load();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -290,6 +341,7 @@ export default function PaymentsPage() {
                     <th className="px-4 py-3 font-semibold">Payment ID</th>
                     <th className="px-4 py-3 font-semibold">Invoice</th>
                     <th className="px-4 py-3 font-semibold">Created</th>
+                    <th className="px-4 py-3 font-semibold">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
@@ -345,6 +397,19 @@ export default function PaymentsPage() {
                           {formatRelative(payment.createdAt)}
                         </div>
                       </td>
+                      <td className="px-4 py-3">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="text-muted-foreground hover:text-destructive"
+                          title="Delete payment record permanently"
+                          aria-label={`Delete payment for ${payment.patientName}`}
+                          onClick={() => openDeleteDialog(payment)}
+                        >
+                          <Trash2 className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -383,6 +448,73 @@ export default function PaymentsPage() {
           </div>
         )}
       </div>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog();
+        }}
+      >
+        <DialogContent onClose={closeDeleteDialog} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {deleteStep === 1
+                ? "Delete payment record?"
+                : "Permanently delete payment record?"}
+            </DialogTitle>
+          </DialogHeader>
+          {deleteStep === 1 ? (
+            <div className="space-y-2 text-sm text-muted-foreground">
+              <p>
+                Permanently remove the accounting record for{" "}
+                <span className="font-medium text-foreground">
+                  {deleteTarget?.patientName ?? "this patient"}
+                </span>
+                {deleteTarget?.slotLabel ? (
+                  <>
+                    {" "}
+                    (
+                    <span className="font-medium text-foreground">
+                      {deleteTarget.slotLabel}
+                    </span>
+                    )
+                  </>
+                ) : null}
+                .
+              </p>
+              <p>
+                This clears payment and refund fields on the appointment, deletes
+                the booking invoice row and PDF if present, and keeps the
+                appointment itself. It does not issue a Razorpay refund.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Confirm permanent removal of this accounting record. This cannot be
+              undone.
+            </p>
+          )}
+          {deleteError ? (
+            <p className="text-sm font-medium text-destructive">{deleteError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" disabled={deleting} onClick={closeDeleteDialog}>
+              Keep payment
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={deleting}
+              onClick={confirmDeletePayment}
+            >
+              {deleting
+                ? "Deleting…"
+                : deleteStep === 1
+                  ? "Continue"
+                  : "Permanently Delete"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

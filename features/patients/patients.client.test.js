@@ -1,6 +1,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildHighlightRedirectPath } from "./patients.client.js";
+import {
+  buildHighlightRedirectPath,
+  deletePatient,
+  fetchPatientDeletionImpact,
+} from "./patients.client.js";
 
 // Covers the redirect used by the dashboard "Add Patient" flow: after a
 // successful create, the caller should land back on /patients with the new
@@ -29,4 +33,47 @@ test("buildHighlightRedirectPath returns null for a missing id", () => {
 test("buildHighlightRedirectPath returns null for a non-string id", () => {
   assert.equal(buildHighlightRedirectPath(42), null);
   assert.equal(buildHighlightRedirectPath({ id: "x" }), null);
+});
+
+test("fetchPatientDeletionImpact GETs deletion-impact endpoint", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { impact: { appointments: 2, blocked: false } };
+      },
+    };
+  };
+  try {
+    const payload = await fetchPatientDeletionImpact("patient-1");
+    assert.equal(calls[0].url, "/api/patients/patient-1/deletion-impact");
+    assert.equal(payload.impact.appointments, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("deletePatient DELETEs /api/patients/[id]", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { deleted: true, patientId: "patient-1" };
+      },
+    };
+  };
+  try {
+    const result = await deletePatient("patient-1");
+    assert.equal(calls[0].url, "/api/patients/patient-1");
+    assert.equal(calls[0].opts.method, "DELETE");
+    assert.equal(result.deleted, true);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });

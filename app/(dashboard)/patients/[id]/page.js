@@ -3,14 +3,25 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { Activity, ArrowLeft, Cake, Phone, Syringe } from "lucide-react";
+import { Activity, ArrowLeft, Cake, Phone, Syringe, Trash2 } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/shared/empty-state";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ApproximateDobBadge } from "@/components/shared/approximate-dob-badge";
-import { fetchPatientDetail } from "@/features/patients/patients.client";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  fetchPatientDetail,
+  fetchPatientDeletionImpact,
+  deletePatient,
+} from "@/features/patients/patients.client";
 import { formatDateOnly } from "@/lib/date-only";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +50,12 @@ export default function PatientDetailPage() {
   const [vitals, setVitals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleteImpact, setDeleteImpact] = useState(null);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState("");
 
   useEffect(() => {
     if (!id) return;
@@ -68,6 +85,51 @@ export default function PatientDetailPage() {
       cancelled = true;
     };
   }, [id]);
+
+  async function openDeleteDialog() {
+    if (!patient?.id) return;
+    setDeleteError("");
+    setDeleteOpen(true);
+    setDeleteImpact(null);
+    setDeleteStep(1);
+    setDeleteLoading(true);
+    try {
+      const payload = await fetchPatientDeletionImpact(patient.id);
+      setDeleteImpact(payload.impact ?? null);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleteOpen(false);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  function closeDeleteDialog() {
+    if (deleting) return;
+    setDeleteOpen(false);
+    setDeleteImpact(null);
+    setDeleteStep(1);
+    setDeleteError("");
+  }
+
+  async function confirmDeletePatient() {
+    if (!patient?.id) return;
+    if (deleteImpact?.blocked) return;
+    if (deleteStep === 1) {
+      setDeleteStep(2);
+      return;
+    }
+    setDeleting(true);
+    setDeleteError("");
+    try {
+      await deletePatient(patient.id);
+      router.push("/patients");
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   return (
     <>
@@ -111,11 +173,21 @@ export default function PatientDetailPage() {
                     {formatGenderAge(patient)}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-sm font-medium text-muted-foreground">
+                <div className="flex flex-col items-end gap-2 text-sm font-medium text-muted-foreground">
                   <span className="tabular-nums">
                     {patient.totalVisits} visit{patient.totalVisits === 1 ? "" : "s"}
                   </span>
                   <span>Registered {formatRegisteredOn(patient.createdAt)}</span>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-destructive"
+                    onClick={openDeleteDialog}
+                  >
+                    <Trash2 className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                    Delete patient
+                  </Button>
                 </div>
               </div>
 
@@ -370,6 +442,107 @@ export default function PatientDetailPage() {
           </>
         )}
       </div>
+
+      <Dialog
+        open={deleteOpen}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog();
+        }}
+      >
+        <DialogContent onClose={closeDeleteDialog} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {deleteStep === 1 ? "Delete patient?" : "Permanently delete patient?"}
+            </DialogTitle>
+          </DialogHeader>
+          {deleteLoading ? (
+            <p className="text-sm text-muted-foreground">Checking linked records…</p>
+          ) : deleteImpact?.blocked ? (
+            <p className="text-sm text-destructive">
+              This patient has {deleteImpact.paidUnrefundedAppointments} paid
+              appointment
+              {deleteImpact.paidUnrefundedAppointments === 1 ? "" : "s"} that
+              {deleteImpact.paidUnrefundedAppointments === 1 ? " has" : " have"} not
+              been refunded. Cancel those appointments first to issue refunds,
+              then delete the patient.
+            </p>
+          ) : deleteStep === 1 ? (
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Permanently delete{" "}
+                <span className="font-medium text-foreground">
+                  {patient?.name ?? "this patient"}
+                </span>
+                ? This removes the patient and all linked history listed below.
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.appointments ?? 0}
+                  </span>{" "}
+                  appointment{(deleteImpact?.appointments ?? 0) === 1 ? "" : "s"}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.bookingInvoices ?? 0}
+                  </span>{" "}
+                  booking invoice
+                  {(deleteImpact?.bookingInvoices ?? 0) === 1 ? "" : "s"}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.scribeSessions ?? 0}
+                  </span>{" "}
+                  scribe session
+                  {(deleteImpact?.scribeSessions ?? 0) === 1 ? "" : "s"}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.vaccinationSchedules ?? 0}
+                  </span>{" "}
+                  vaccination schedule row
+                  {(deleteImpact?.vaccinationSchedules ?? 0) === 1 ? "" : "s"}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.vitals ?? 0}
+                  </span>{" "}
+                  vitals record{(deleteImpact?.vitals ?? 0) === 1 ? "" : "s"}
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Confirm permanent deletion of{" "}
+              <span className="font-medium text-foreground">
+                {patient?.name ?? "this patient"}
+              </span>{" "}
+              and all linked history. This is irreversible.
+            </p>
+          )}
+          {deleteError ? (
+            <p className="text-sm font-medium text-destructive">{deleteError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" disabled={deleting} onClick={closeDeleteDialog}>
+              Keep patient
+            </Button>
+            {!deleteImpact?.blocked ? (
+              <Button
+                variant="destructive"
+                disabled={deleting || deleteLoading}
+                onClick={confirmDeletePatient}
+              >
+                {deleting
+                  ? "Deleting…"
+                  : deleteStep === 1
+                    ? "Continue"
+                    : "Permanently Delete"}
+              </Button>
+            ) : null}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -193,6 +193,21 @@ export class VaccinationRepository extends BaseRepository {
   }
 
   /**
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<number>}
+   */
+  async countForPatient(clinicId, patientId) {
+    const { count, error } = await this._db
+      .from(this._table)
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId);
+    if (error) throw new DatabaseError("countForPatient", error);
+    return count ?? 0;
+  }
+
+  /**
    * Bulk-inserts one row per entry, all status='pending' (DB default) —
    * used by VaccinationSeedingService (IAP auto-seed on patient creation,
    * and the one-time backfill script) to write a whole immunization

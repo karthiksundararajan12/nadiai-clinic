@@ -96,4 +96,27 @@ export class InvoiceStorageService {
 
     return data.signedUrl;
   }
+
+  /**
+   * Removes invoice PDF objects from private storage. Missing objects are
+   * ignored (idempotent delete); other storage errors are logged and thrown.
+   *
+   * @param {string[]} storagePaths
+   * @returns {Promise<void>}
+   */
+  async deleteInvoicePdfs(storagePaths) {
+    const paths = (storagePaths ?? []).filter(
+      (p) => typeof p === "string" && p.length > 0,
+    );
+    if (paths.length === 0) return;
+
+    const { error } = await this._db.storage.from(this._bucket).remove(paths);
+    if (error) {
+      this._log.error("Failed to delete invoice PDF(s) from storage", {
+        paths,
+        error: error.message,
+      });
+      throw new DatabaseError("deleteInvoicePdfs", error);
+    }
+  }
 }

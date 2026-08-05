@@ -11,7 +11,7 @@
  */
 
 import { BaseRepository }      from "./base.repository.js";
-import { SessionNotFoundError } from "../errors.js";
+import { DatabaseError, SessionNotFoundError } from "../errors.js";
 import { SESSION_STATUS }       from "../constants.js";
 
 /** @typedef {import("../models/session.model.js").ScribeSession}       ScribeSession */
@@ -412,6 +412,82 @@ export class SessionRepository extends BaseRepository {
       "softDelete",
     );
     if (!result) throw new SessionNotFoundError(sessionId);
+  }
+
+  /**
+   * Count scribe sessions for a patient (clinic-scoped). Includes soft-deleted
+   * rows — hard-delete cascades remove them too.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<number>}
+   */
+  async countByPatientId(clinicId, patientId) {
+    const { count, error } = await this._db
+      .from(this._table)
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId);
+    if (error) throw new DatabaseError("countByPatientId", error);
+    return count ?? 0;
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<number>}
+   */
+  async countByAppointmentId(clinicId, appointmentId) {
+    const { count, error } = await this._db
+      .from(this._table)
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("appointment_id", appointmentId);
+    if (error) throw new DatabaseError("countByAppointmentId", error);
+    return count ?? 0;
+  }
+
+  /**
+   * Hard-deletes scribe sessions for a patient. DB CASCADE removes child
+   * clinical artifacts (SOAP, prescriptions, audio chunks, etc.).
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<number>}
+   */
+  async hardDeleteByPatientId(clinicId, patientId) {
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .eq("patient_id", patientId)
+          .select("id"),
+      "hardDeleteByPatientId",
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
+  /**
+   * Hard-deletes scribe sessions linked to an appointment.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<number>}
+   */
+  async hardDeleteByAppointmentId(clinicId, appointmentId) {
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .eq("appointment_id", appointmentId)
+          .select("id"),
+      "hardDeleteByAppointmentId",
+    );
+    return Array.isArray(rows) ? rows.length : 0;
   }
 
   // ─────────────────────────────────────────────────────────────

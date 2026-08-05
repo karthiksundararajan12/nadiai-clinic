@@ -1109,6 +1109,80 @@ export class AppointmentRepository extends BaseRepository {
   }
 
   /**
+   * Clears payment_* and refund_* accounting fields on an appointment
+   * (Payments ledger "delete payment" — keeps the appointment row).
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async clearPaymentFields(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        payment_status: "not_required",
+        payment_amount: null,
+        razorpay_payment_id: null,
+        refund_status: null,
+        refund_id: null,
+        refunded_at: null,
+        updated_at: nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+    throw new DatabaseError("clearPaymentFields", error);
+  }
+
+  /**
+   * Hard-deletes a clinic-scoped appointment row.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<{ id: string }|null>}
+   */
+  async hardDeleteById(clinicId, appointmentId) {
+    return this._runNullable(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .eq("id", appointmentId)
+          .select("id")
+          .single(),
+      "hardDeleteById",
+    );
+  }
+
+  /**
+   * Hard-deletes all appointments for a patient in a clinic.
+   *
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<number>}
+   */
+  async hardDeleteByPatientId(clinicId, patientId) {
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .eq("patient_id", patientId)
+          .select("id"),
+      "hardDeleteByPatientId",
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
+  /**
    * Self-serve reschedule from a reminder: move a CONFIRMED appointment to a
    * new slot on the SAME row (does not insert a new appointment). Relies on
    * appointments_no_double_booking for the new slot. Zero rows / unique

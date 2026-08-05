@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Mic,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
@@ -39,6 +40,8 @@ import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
   cancelConfirmedAppointment,
+  fetchAppointmentDeletionImpact,
+  deleteAppointment,
 } from "@/features/appointments/appointments.client.js";
 import { shouldNudgeEarlyConsultation } from "@/features/appointments/consultation-time-gate.js";
 import { createVitals } from "@/features/vitals/vitals.client.js";
@@ -177,6 +180,11 @@ function AppointmentsPageContent() {
   const [earlyConsultTarget, setEarlyConsultTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deleteImpact, setDeleteImpact] = useState(null);
+  const [deleteStep, setDeleteStep] = useState(1);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const today = clinicDateKey();
 
@@ -336,6 +344,52 @@ function AppointmentsPageContent() {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCancelling(false);
+    }
+  }
+
+  async function openDeleteDialog(appointment) {
+    if (!appointment?.id) return;
+    setActionError("");
+    setDeleteTarget(appointment);
+    setDeleteImpact(null);
+    setDeleteStep(1);
+    setDeleteLoading(true);
+    try {
+      const impact = await fetchAppointmentDeletionImpact(appointment.id);
+      setDeleteImpact(impact);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+      setDeleteTarget(null);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
+
+  function closeDeleteDialog() {
+    if (deleting) return;
+    setDeleteTarget(null);
+    setDeleteImpact(null);
+    setDeleteStep(1);
+  }
+
+  async function confirmDeleteAppointment() {
+    if (!deleteTarget?.id) return;
+    if (deleteImpact?.blocked) return;
+    if (deleteStep === 1) {
+      setDeleteStep(2);
+      return;
+    }
+    setDeleting(true);
+    setActionError("");
+    try {
+      await deleteAppointment(deleteTarget.id);
+      closeDeleteDialog();
+      closeDetail();
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -757,6 +811,23 @@ function AppointmentsPageContent() {
                               <Activity className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                             </Button>
                           ) : null}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            title="Delete appointment permanently"
+                            aria-label={`Delete appointment for ${appointment.patientName}`}
+                            onClick={() =>
+                              openDeleteDialog({
+                                id: appointment.id,
+                                patientName: appointment.patientName,
+                                slotLabel: appointment.slotLabel,
+                              })
+                            }
+                          >
+                            <Trash2 className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                          </Button>
                         </div>
                       </td>
                     </tr>
@@ -937,6 +1008,24 @@ function AppointmentsPageContent() {
                     Reschedule
                   </Button>
                 ) : null}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 text-destructive"
+                  onClick={() =>
+                    openDeleteDialog({
+                      id: detail.id,
+                      patientName: detail.patient_name,
+                      slotLabel:
+                        detail.date && detail.time
+                          ? `${detail.date} · ${detail.time}`
+                          : detail.slot_start,
+                    })
+                  }
+                >
+                  <Trash2 className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                  Delete
+                </Button>
               </div>
             </div>
           ) : null}
@@ -1351,6 +1440,90 @@ function AppointmentsPageContent() {
             >
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog();
+        }}
+      >
+        <DialogContent onClose={closeDeleteDialog} className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {deleteStep === 1 ? "Delete appointment?" : "Permanently delete?"}
+            </DialogTitle>
+          </DialogHeader>
+          {deleteLoading ? (
+            <p className="text-sm text-muted-foreground">Checking linked records…</p>
+          ) : deleteImpact?.blocked ? (
+            <p className="text-sm text-destructive">
+              {deleteImpact.blockReason}
+            </p>
+          ) : deleteStep === 1 ? (
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                Permanently delete the appointment for{" "}
+                <span className="font-medium text-foreground">
+                  {deleteTarget?.patientName ?? "the patient"}
+                </span>{" "}
+                on{" "}
+                <span className="font-medium text-foreground">
+                  {deleteTarget?.slotLabel ?? "the scheduled time"}
+                </span>
+                ? This is separate from Cancel (which refunds). Delete removes
+                the row entirely and does not refund via Razorpay.
+              </p>
+              <ul className="list-disc space-y-1 pl-5">
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.bookingInvoices ?? 0}
+                  </span>{" "}
+                  booking invoice
+                  {(deleteImpact?.bookingInvoices ?? 0) === 1 ? "" : "s"}
+                </li>
+                <li>
+                  <span className="font-medium text-foreground">
+                    {deleteImpact?.scribeSessions ?? 0}
+                  </span>{" "}
+                  scribe session
+                  {(deleteImpact?.scribeSessions ?? 0) === 1 ? "" : "s"}{" "}
+                  (including SOAP notes, prescriptions, and audio)
+                </li>
+              </ul>
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              This cannot be undone. Linked invoices and scribe sessions will be
+              permanently removed.
+            </p>
+          )}
+          {actionError ? (
+            <p className="text-sm font-medium text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={deleting}
+              onClick={closeDeleteDialog}
+            >
+              Keep appointment
+            </Button>
+            {!deleteImpact?.blocked ? (
+              <Button
+                variant="destructive"
+                disabled={deleting || deleteLoading}
+                onClick={confirmDeleteAppointment}
+              >
+                {deleting
+                  ? "Deleting…"
+                  : deleteStep === 1
+                    ? "Continue"
+                    : "Permanently Delete"}
+              </Button>
+            ) : null}
           </DialogFooter>
         </DialogContent>
       </Dialog>

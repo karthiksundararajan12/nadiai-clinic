@@ -7,6 +7,7 @@
  */
 
 import { BaseRepository } from "../booking/repository/base.repository.js";
+import { DatabaseError } from "../booking/errors.js";
 
 export class VitalsRepository extends BaseRepository {
   /** @param {import("@supabase/supabase-js").SupabaseClient} supabase */
@@ -78,5 +79,20 @@ export class VitalsRepository extends BaseRepository {
           .limit(limit),
       "listForPatient",
     );
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} patientId
+   * @returns {Promise<number>}
+   */
+  async countForPatient(clinicId, patientId) {
+    const { count, error } = await this._db
+      .from(this._table)
+      .select("id", { count: "exact", head: true })
+      .eq("clinic_id", clinicId)
+      .eq("patient_id", patientId);
+    if (error) throw new DatabaseError("countForPatient", error);
+    return count ?? 0;
   }
 }

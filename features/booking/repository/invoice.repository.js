@@ -114,4 +114,49 @@ export class InvoiceRepository extends BaseRepository {
       "insert",
     );
   }
+
+  /**
+   * Ledger rows for a set of appointment ids (clinic-scoped). Used by
+   * hard-delete cascades to remove invoice PDFs before deleting rows.
+   *
+   * @param {string} clinicId
+   * @param {string[]} appointmentIds
+   * @returns {Promise<BookingInvoice[]>}
+   */
+  async listByAppointmentIds(clinicId, appointmentIds) {
+    if (!appointmentIds?.length) return [];
+    return this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .select(
+            "id, clinic_id, appointment_id, invoice_number, invoice_seq, razorpay_payment_id, storage_path, amount, created_at",
+          )
+          .eq("clinic_id", clinicId)
+          .in("appointment_id", appointmentIds),
+      "listByAppointmentIds",
+    );
+  }
+
+  /**
+   * Hard-deletes invoice ledger rows for the given appointments.
+   *
+   * @param {string} clinicId
+   * @param {string[]} appointmentIds
+   * @returns {Promise<number>} deleted row count
+   */
+  async deleteByAppointmentIds(clinicId, appointmentIds) {
+    if (!appointmentIds?.length) return 0;
+    const rows = await this._run(
+      () =>
+        this._db
+          .from(this._table)
+          .delete()
+          .eq("clinic_id", clinicId)
+          .in("appointment_id", appointmentIds)
+          .select("id"),
+      "deleteByAppointmentIds",
+    );
+    return Array.isArray(rows) ? rows.length : 0;
+  }
 }

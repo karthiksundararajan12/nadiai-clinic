@@ -3,6 +3,7 @@
  * versioning, approval, and rejection workflow for generated SOAP notes.
  */
 
+import { APPOINTMENT_STATUS } from "../../booking/constants.js";
 import { AUDIT_ACTION, SESSION_STATUS, SOAP_NOTE_STATUS } from "../constants.js";
 import {
   InvalidStateTransitionError,
@@ -43,11 +44,13 @@ export class SOAPReviewService {
    * @param {import("../repository/session.repository.js").SessionRepository} sessionRepository
    * @param {import("../repository/soap.repository.js").SOAPRepository} soapRepository
    * @param {import("./audit.service.js").AuditService} auditService
+   * @param {import("../../booking/repository/appointment.repository.js").AppointmentRepository} [appointmentRepository]
    */
-  constructor(sessionRepository, soapRepository, auditService) {
+  constructor(sessionRepository, soapRepository, auditService, appointmentRepository = null) {
     this._sessions = sessionRepository;
     this._soap = soapRepository;
     this._audit = auditService;
+    this._appointments = appointmentRepository;
     this._log = createLogger({ component: "SOAPReviewService" });
   }
 
@@ -342,6 +345,8 @@ export class SOAPReviewService {
       { error_message: null },
     );
 
+    await this._syncLinkedAppointmentCompleted(updatedSession, ctx);
+
     await this._audit.log({
       action: AUDIT_ACTION.STATE_TRANSITIONED,
       sessionId,
@@ -370,6 +375,86 @@ export class SOAPReviewService {
     });
 
     return { session: updatedSession, note: updatedNote, version };
+  }
+
+  /**
+   * After the scribe session reaches COMPLETED, flip the linked appointment
+   * to COMPLETED immediately — but only when it is still CONFIRMED.
+   * Scoped by ctx.clinicId (same clinic guard as resolveRequestContext).
+   * Failures are logged and do not roll back SOAP approval.
+   *
+   * @param {Record<string, unknown>} session
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  async _syncLinkedAppointmentCompleted(session, ctx) {
+    const appointmentId = typeof session?.appointment_id === "string" ? session.appointment_id : null;
+    if (!appointmentId) return;
+
+    if (!this._appointments?.findByIdForClinic || !this._appointments?.completeConfirmedIds) {
+      this._log.warn("Appointment repository not wired — skipping appointment COMPLETED sync", {
+        sessionId: session.id,
+        appointmentId,
+      });
+      return;
+    }
+
+    try {
+      const appointment = await this._appointments.findByIdForClinic(ctx.clinicId, appointmentId);
+      if (!appointment) {
+        this._log.warn("Linked appointment not found for clinic — skipping COMPLETED sync", {
+          sessionId: session.id,
+          appointmentId,
+          clinicId: ctx.clinicId,
+        });
+        return;
+      }
+
+      if (appointment.status === APPOINTMENT_STATUS.COMPLETED) {
+        this._log.info("Linked appointment already COMPLETED — no status change", {
+          sessionId: session.id,
+          appointmentId,
+        });
+        return;
+      }
+
+      if (appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
+        this._log.warn("Linked appointment in unexpected status — not overwriting to COMPLETED", {
+          sessionId: session.id,
+          appointmentId,
+          status: appointment.status,
+          clinicId: ctx.clinicId,
+        });
+        return;
+      }
+
+      const nowIso = new Date().toISOString();
+      const updated = await this._appointments.completeConfirmedIds(
+        ctx.clinicId,
+        [appointmentId],
+        nowIso,
+      );
+      if (!updated?.length) {
+        this._log.warn("Appointment COMPLETED sync no-op (concurrent status change)", {
+          sessionId: session.id,
+          appointmentId,
+          clinicId: ctx.clinicId,
+        });
+        return;
+      }
+
+      this._log.info("Linked appointment marked COMPLETED after SOAP approval", {
+        sessionId: session.id,
+        appointmentId,
+        clinicId: ctx.clinicId,
+      });
+    } catch (err) {
+      this._log.error("Failed to mark linked appointment COMPLETED after SOAP approval", {
+        sessionId: session.id,
+        appointmentId,
+        clinicId: ctx.clinicId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   /** @param {string} sessionId @param {Record<string, unknown>} rawInput @param {import("../models/session.model.js").RequestContext} ctx */

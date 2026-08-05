@@ -540,6 +540,58 @@ test("runReminderSweep: includes grace-period counts in the summary", async () =
   assert.equal(summary.cancelledNoShow, 1);
 });
 
+test("runReminderSweep: already-COMPLETED appointments are absent from expired CONFIRMED set (no double-process)", async () => {
+  // After SOAP approval flips CONFIRMED → COMPLETED immediately, findExpiredConfirmed
+  // returns only still-CONFIRMED rows — already-completed appointments never appear.
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: ["appt-already-done"] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.completedNoResponse, 0);
+  assert.equal(summary.cancelledNoShow, 0);
+  assert.equal(calls.findExpiredConfirmed.length, 1);
+  assert.equal(calls.completeConfirmedIds.length, 0);
+  assert.equal(calls.cancelViaNoShow.length, 0);
+  assert.equal(wa.sendTextCalls.length, 0);
+});
+
+test("runReminderSweep: no-show flow unchanged when Scribe was never completed", async () => {
+  const noShow = buildAppointment({
+    id: "appt-noshow-only",
+    slot_start: "2020-01-01T09:00:00.000Z",
+    slot_end: "2020-01-01T09:30:00.000Z",
+    payment_status: "not_required",
+  });
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [noShow],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const inApp = createFakeInAppNotificationService();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: [] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+    inAppNotificationService: inApp,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.completedNoResponse, 0);
+  assert.equal(summary.cancelledNoShow, 1);
+  assert.equal(calls.completeConfirmedIds.length, 0);
+  assert.equal(calls.cancelViaNoShow.length, 1);
+  assert.equal(calls.cancelViaNoShow[0].appointmentId, "appt-noshow-only");
+  assert.match(wa.sendTextCalls[0].body, /We didn't see you for your appointment/);
+});
+
 // ─────────────────────────────────────────────────────────────
 // handleQuickReply — Confirm
 // ─────────────────────────────────────────────────────────────

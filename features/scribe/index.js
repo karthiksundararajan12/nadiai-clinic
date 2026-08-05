@@ -178,6 +178,7 @@ import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescri
 import { ConsultationHistoryService as _HistorySvc } from "./services/consultation-history.service.js";
 import { SOAPExportService as _ExportSvc } from "./services/soap-export.service.js";
 import { AudioPlaybackService as _AudioSvc } from "./services/audio-playback.service.js";
+import { AppointmentRepository as _AppointmentRepo } from "../booking/repository/appointment.repository.js";
 
 /**
  * Wires together all scribe domain services with a Supabase client.
@@ -205,7 +206,8 @@ export function createScribeServices(supabaseClient) {
   const transcriptionSvc = new _TS(supabase, sessionRepo, transcriptionRepo, auditSvc);
   const reviewSvc = new _RS(sessionRepo, reviewRepo, auditSvc);
   const soapSvc = new _SOAPService(sessionRepo, soapRepo, auditSvc);
-  const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc);
+  const appointmentRepo = new _AppointmentRepo(supabase);
+  const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc, appointmentRepo);
   const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
   const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
   const consultationHistorySvc = new _HistorySvc(sessionRepo, soapRepo, prescriptionRepo, auditSvc);

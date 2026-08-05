@@ -8,7 +8,6 @@ import {
   updatePrescriptionDraft,
 } from "../services/prescription-review.client.js";
 import {
-  assertDoctorRegistrationForApproval,
   hasDoctorRegistrationNumber,
   MISSING_DOCTOR_REGISTRATION_CODE,
 } from "../../lib/prescription-registration-gate.js";
@@ -145,17 +144,13 @@ export function usePrescriptionPanel(sessionId) {
     setApproving(true);
     setApprovalError(null);
     try {
-      let doctorForGate = doctor;
-      if (!hasDoctorRegistrationNumber(doctorForGate)) {
-        doctorForGate = (await loadDoctorFallback()) ?? doctorForGate;
-      }
-      assertDoctorRegistrationForApproval(doctorForGate);
-
+      // Registration number is optional — banner nudges but does not block.
       await saveDraft(draft);
       await approvePrescription(sessionId);
       setApproved(true);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // Legacy servers may still return this code; surface it as a warning, not a hard stop path.
       const isRegistrationGate =
         err?.code === MISSING_DOCTOR_REGISTRATION_CODE ||
         /registration number/i.test(message);
@@ -168,7 +163,7 @@ export function usePrescriptionPanel(sessionId) {
     } finally {
       setApproving(false);
     }
-  }, [sessionId, draft, doctor, saveDraft, loadDoctorFallback]);
+  }, [sessionId, draft, saveDraft]);
 
   const discard = useCallback(() => {
     setPanelOpen(false);

@@ -27,15 +27,11 @@ test("getDoctorRegistrationNumber trims when present", () => {
   assert.equal(getDoctorRegistrationNumber({ license_number: "" }), null);
 });
 
-test("assertDoctorRegistrationForApproval blocks when registration missing", () => {
-  assert.throws(
-    () => assertDoctorRegistrationForApproval({ full_name: "Dr. A", license_number: "" }),
-    (err) =>
-      err instanceof Error &&
-      err.code === MISSING_DOCTOR_REGISTRATION_CODE &&
-      err.message === MISSING_DOCTOR_REGISTRATION_MESSAGE &&
-      err.details?.settingsHref === SETTINGS_HREF,
+test("assertDoctorRegistrationForApproval does not block when registration missing", () => {
+  assert.doesNotThrow(() =>
+    assertDoctorRegistrationForApproval({ full_name: "Dr. A", license_number: "" }),
   );
+  assert.doesNotThrow(() => assertDoctorRegistrationForApproval(null));
 });
 
 test("assertDoctorRegistrationForApproval allows approval when registration present", () => {
@@ -47,7 +43,14 @@ test("assertDoctorRegistrationForApproval allows approval when registration pres
   );
 });
 
-test("MissingDoctorRegistrationError is a hard 422 gate with Settings details", () => {
+test("soft warning message nudges Settings without implying a hard block", () => {
+  assert.match(MISSING_DOCTOR_REGISTRATION_MESSAGE, /Settings/);
+  assert.match(MISSING_DOCTOR_REGISTRATION_MESSAGE, /still approve/i);
+  assert.equal(SETTINGS_HREF, "/settings");
+  assert.equal(MISSING_DOCTOR_REGISTRATION_CODE, "MISSING_DOCTOR_REGISTRATION");
+});
+
+test("MissingDoctorRegistrationError remains available for legacy API responses", () => {
   const err = new MissingDoctorRegistrationError();
   assert.equal(err.code, "MISSING_DOCTOR_REGISTRATION");
   assert.equal(err.statusCode, 422);

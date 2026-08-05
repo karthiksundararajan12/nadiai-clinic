@@ -267,10 +267,11 @@ export class PrescriptionReviewError extends ScribeError {
   }
 }
 
+/** @deprecated License is optional; approval no longer throws this. Kept for legacy clients. */
 export class MissingDoctorRegistrationError extends ScribeError {
   constructor() {
     super(
-      "Add your medical registration number in Settings before approving prescriptions",
+      "Add your medical registration number in Settings so it appears on prescriptions. You can still approve this draft.",
       "MISSING_DOCTOR_REGISTRATION",
       422,
       { settingsHref: "/settings" },

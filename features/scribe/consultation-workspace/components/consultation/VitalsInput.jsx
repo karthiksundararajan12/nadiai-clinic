@@ -93,7 +93,7 @@ export function VitalsInput({ value, onChange, disabled }) {
             type="text"
             inputMode="numeric"
             className={cn(inputCls, "text-center")}
-            placeholder="120"
+            placeholder="—"
             value={vitals.bpSys}
             disabled={disabled}
             onChange={(e) => update({ bpSys: e.target.value.replace(/[^\d]/g, "") })}
@@ -104,7 +104,7 @@ export function VitalsInput({ value, onChange, disabled }) {
             type="text"
             inputMode="numeric"
             className={cn(inputCls, "text-center")}
-            placeholder="80"
+            placeholder="—"
             value={vitals.bpDia}
             disabled={disabled}
             onChange={(e) => update({ bpDia: e.target.value.replace(/[^\d]/g, "") })}

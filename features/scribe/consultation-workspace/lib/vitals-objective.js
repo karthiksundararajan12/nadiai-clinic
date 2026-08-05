@@ -1,5 +1,8 @@
 const EMPTY = { bpSys: "", bpDia: "", hr: "", temp: "", spo2: "", weight: "" };
 
+/** SOAP Objective fallback when nothing clinical was captured in the transcript. */
+const NOT_DOCUMENTED_RE = /^not documented in transcript\.?$/i;
+
 function normalizeVitalPart(part) {
   const t = String(part ?? "")
     .trim()
@@ -7,6 +10,14 @@ function normalizeVitalPart(part) {
     .trim();
   if (!t || t === "—" || t === "-" || t === "–") return "";
   return t;
+}
+
+/**
+ * @param {string|null|undefined} text
+ * @returns {boolean}
+ */
+export function isObjectiveNotDocumented(text = "") {
+  return NOT_DOCUMENTED_RE.test(String(text).trim());
 }
 
 export function formatVitalsString(vitals) {
@@ -21,7 +32,19 @@ export function formatVitalsString(vitals) {
   return parts.join(" | ");
 }
 
+/**
+ * Parse structured vitals from the Objective field.
+ * When the draft body is the "Not documented in transcript." fallback, always
+ * return empty fields — never surface hallucinated or stale Vitals: lines.
+ *
+ * @param {string} [text]
+ */
 export function parseVitalsFromObjective(text = "") {
+  const body = stripVitalsFromObjective(text);
+  if (isObjectiveNotDocumented(body) || isObjectiveNotDocumented(text)) {
+    return { ...EMPTY };
+  }
+
   const line = String(text).split("\n").find((l) => l.startsWith("Vitals:"));
   if (!line) return { ...EMPTY };
   const vitals = { ...EMPTY };
@@ -51,9 +74,28 @@ export function stripVitalsFromObjective(text = "") {
     .trim();
 }
 
+/**
+ * Drop a structured Vitals: line when the Objective draft says nothing was
+ * documented — keeps stored SOAP consistent with empty vitals inputs.
+ *
+ * @param {string} [text]
+ * @returns {string}
+ */
+export function sanitizeObjectiveVitals(text = "") {
+  const body = stripVitalsFromObjective(text);
+  if (isObjectiveNotDocumented(body) || isObjectiveNotDocumented(text)) {
+    return body || "Not documented in transcript.";
+  }
+  return String(text);
+}
+
 export function buildObjectiveWithVitals(vitals, objectiveText = "") {
-  const formatted = formatVitalsString(vitals);
   const body = stripVitalsFromObjective(objectiveText);
+  if (isObjectiveNotDocumented(body)) {
+    // Do not re-attach vitals on top of the not-documented fallback.
+    return body;
+  }
+  const formatted = formatVitalsString(vitals);
   if (!formatted) return body;
   return body ? `Vitals: ${formatted}\n\n${body}` : `Vitals: ${formatted}`;
 }

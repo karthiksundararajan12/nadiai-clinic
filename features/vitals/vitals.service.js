@@ -9,11 +9,14 @@
  * this is what "pre-filled from that appointment, no manual patient
  * lookup needed" (see the /appointments row action) actually means from a
  * trust-boundary standpoint, and it means a client can never record
- * vitals against a mismatched patient_id/appointment_id pair. A bare
- * patientId (no appointmentId) is still accepted for a future
+ * vitals against a mismatched patient_id/appointment_id pair. Appointment-
+ * linked create is only allowed while status is confirmed (409 otherwise).
+ * A bare patientId (no appointmentId) is still accepted for a future
  * direct-entry path — the vitals table's appointment_id column is
  * nullable for exactly this reason.
  */
+
+import { APPOINTMENT_STATUS } from "../booking/constants.js";
 
 export class VitalsRequestError extends Error {
   constructor(message, statusCode = 400) {
@@ -138,6 +141,12 @@ export class VitalsService {
       );
       if (!appointment) {
         throw new VitalsRequestError("Appointment not found", 404);
+      }
+      if (String(appointment.status ?? "").toLowerCase() !== APPOINTMENT_STATUS.CONFIRMED) {
+        throw new VitalsRequestError(
+          "Vitals can only be recorded for confirmed appointments",
+          409,
+        );
       }
       if (!appointment.patient_id) {
         throw new VitalsRequestError("Appointment has no linked patient");

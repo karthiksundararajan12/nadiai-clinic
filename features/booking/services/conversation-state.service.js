@@ -547,29 +547,56 @@ export class ConversationStateService {
   }
 
   /**
-   * Unrecognized inbound while the contact already has a confirmed booking.
-   * Plain-text session reply (24h customer-service window) — does not change
-   * conversation_state or touch the appointment row. Global RESET_KEYWORDS /
+   * Unrecognized inbound while conversation_state is CONFIRMED (or a legacy
+   * REMINDER_SENT string). Fresh-reads appointments.status each time — never
+   * trust conversation_state alone, since doctor-dashboard / no-show cancel
+   * leave conversation_state as CONFIRMED. Global RESET_KEYWORDS /
    * CANCEL_KEYWORDS are intercepted before this runs.
    */
   async _handleConfirmedInbound({ clinic, message, row, log }) {
     const appointmentId = row.context?.appointmentId ?? null;
-    let body = CONFIRMED_INBOUND_COPY.WITHOUT_SLOT;
+    const nowMs = Date.now();
+    let body = CONFIRMED_INBOUND_COPY.NO_UPCOMING;
+    /** @type {string|null} */
+    let resolvedStatus = null;
 
-    if (appointmentId && this._appointmentRepo) {
+    if (this._appointmentRepo) {
       try {
-        const appointment = await this._appointmentRepo.findByIdForClinic(clinic.id, appointmentId);
-        if (appointment?.slot_start) {
-          const { date, time } = formatSlotDateTimeParts(new Date(appointment.slot_start));
-          body = CONFIRMED_INBOUND_COPY.WITH_SLOT
-            .replace("{date}", date)
-            .replace("{time}", time);
+        let appointment = null;
+        if (appointmentId) {
+          appointment = await this._appointmentRepo.findByIdForClinic(
+            clinic.id,
+            appointmentId,
+          );
+        }
+
+        if (appointment?.status === APPOINTMENT_STATUS.CANCELLED) {
+          resolvedStatus = APPOINTMENT_STATUS.CANCELLED;
+          body = CONFIRMED_INBOUND_COPY.CANCELLED;
+        } else {
+          const upcoming =
+            this._isUpcomingConfirmedAppointment(appointment, nowMs)
+              ? appointment
+              : await this._findUpcomingConfirmedForContact(
+                  clinic.id,
+                  message.contactPhone,
+                  nowMs,
+                );
+
+          if (upcoming) {
+            resolvedStatus = APPOINTMENT_STATUS.CONFIRMED;
+            body = this._formatConfirmedInboundBody(upcoming);
+          } else {
+            resolvedStatus = appointment?.status ?? null;
+            body = CONFIRMED_INBOUND_COPY.NO_UPCOMING;
+          }
         }
       } catch (err) {
-        log.warn("Failed to load appointment for CONFIRMED inbound fallback — sending generic copy", {
+        log.warn("Failed to load appointment for CONFIRMED inbound fallback — sending no-upcoming copy", {
           appointmentId,
           error: err instanceof Error ? err.message : String(err),
         });
+        body = CONFIRMED_INBOUND_COPY.NO_UPCOMING;
       }
     }
 
@@ -583,12 +610,61 @@ export class ConversationStateService {
       contactPhone: message.contactPhone,
       currentState: row.current_state,
       appointmentId,
+      appointmentStatus: resolvedStatus,
     });
     return {
       handled: true,
       action: "CONFIRMED_FALLBACK_SENT",
       currentState: row.current_state,
     };
+  }
+
+  /**
+   * @param {object|null|undefined} appointment
+   * @param {number} nowMs
+   * @returns {boolean}
+   */
+  _isUpcomingConfirmedAppointment(appointment, nowMs) {
+    if (!appointment || appointment.status !== APPOINTMENT_STATUS.CONFIRMED) {
+      return false;
+    }
+    if (!appointment.slot_start) return true;
+    const slotMs = Date.parse(appointment.slot_start);
+    return Number.isFinite(slotMs) && slotMs >= nowMs;
+  }
+
+  /**
+   * Fresh lookup of the soonest upcoming CONFIRMED appointment for this
+   * WhatsApp contact (clinic-scoped). Used when context.appointmentId is
+   * missing, past, completed, or otherwise not an upcoming confirmed row.
+   *
+   * @param {string} clinicId
+   * @param {string} contactPhone
+   * @param {number} nowMs
+   * @returns {Promise<object|null>}
+   */
+  async _findUpcomingConfirmedForContact(clinicId, contactPhone, nowMs) {
+    if (!this._appointmentRepo?.findConfirmedByContact) return null;
+    const rows = await this._appointmentRepo.findConfirmedByContact(
+      clinicId,
+      contactPhone,
+    );
+    for (const row of rows ?? []) {
+      if (this._isUpcomingConfirmedAppointment(row, nowMs)) return row;
+    }
+    return null;
+  }
+
+  /**
+   * @param {object} appointment
+   * @returns {string}
+   */
+  _formatConfirmedInboundBody(appointment) {
+    if (!appointment?.slot_start) return CONFIRMED_INBOUND_COPY.WITHOUT_SLOT;
+    const { date, time } = formatSlotDateTimeParts(new Date(appointment.slot_start));
+    return CONFIRMED_INBOUND_COPY.WITH_SLOT
+      .replace("{date}", date)
+      .replace("{time}", time);
   }
 
   // ─────────────────────────────────────────────────────────────

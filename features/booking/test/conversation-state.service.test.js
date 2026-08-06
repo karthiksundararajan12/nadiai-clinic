@@ -1123,10 +1123,11 @@ function createFakeInAppNotificationService() {
 test("CONFIRMED: unrecognized message gets a plain-text fallback with appointment date/time", async () => {
   const repo = createFakeConversationRepo();
   const wa = createFakeWhatsAppClient();
+  // Future slot so "upcoming confirmed" check passes (Mon 6 Jul 2099, 9:00 AM IST).
   const appointmentRepo = createFakeAppointmentRepo({
     id: "appt-1",
-    slot_start: "2026-07-06T03:30:00.000Z", // Mon 6 Jul, 9:00 AM IST
-    status: "confirmed",
+    slot_start: "2099-07-06T03:30:00.000Z",
+    status: APPOINTMENT_STATUS.CONFIRMED,
   });
   const service = new ConversationStateService(
     repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
@@ -1159,6 +1160,7 @@ test("CONFIRMED: unrecognized message gets a plain-text fallback with appointmen
   assert.match(wa.calls[0].body, /confirmed/i);
   assert.match(wa.calls[0].body, /cancel/i);
   assert.match(wa.calls[0].body, /menu/i);
+  assert.doesNotMatch(wa.calls[0].body, /was cancelled/i);
   assert.deepEqual(appointmentRepo.findCalls[0], { clinicId: "clinic-1", appointmentId: "appt-1" });
   assert.equal(repo.rows.get("clinic-1:919876543210").current_state, CONVERSATION_STATE.CONFIRMED);
   assert.equal(repo.rows.get("clinic-1:919876543210").context.appointmentId, "appt-1");
@@ -1204,7 +1206,8 @@ test("REMINDER_SENT: unrecognized message gets the same confirmed fallback treat
   const wa = createFakeWhatsAppClient();
   const appointmentRepo = createFakeAppointmentRepo({
     id: "appt-1",
-    slot_start: "2026-07-06T03:30:00.000Z",
+    slot_start: "2099-07-06T03:30:00.000Z",
+    status: APPOINTMENT_STATUS.CONFIRMED,
   });
   const service = new ConversationStateService(
     repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
@@ -1234,7 +1237,88 @@ test("REMINDER_SENT: unrecognized message gets the same confirmed fallback treat
   assert.equal(wa.calls[0].type, "text");
   assert.match(wa.calls[0].body, /Mon 6 Jul/);
   assert.match(wa.calls[0].body, /9:00 AM/);
+  assert.match(wa.calls[0].body, /confirmed/i);
   assert.equal(repo.rows.get("clinic-1:919876543210").current_state, "REMINDER_SENT");
+});
+
+test("CONFIRMED inbound after doctor/no-show cancel: next 'hi' must NOT say confirmed", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  // Conversation_state stays CONFIRMED (doctor-dashboard / no-show cancel do
+  // not reset WhatsApp state) but the appointment row is cancelled.
+  const appointmentRepo = createFakeAppointmentRepo({
+    id: "appt-1",
+    slot_start: "2099-07-06T03:30:00.000Z",
+    status: APPOINTMENT_STATUS.CANCELLED,
+    cancellation_reason: "doctor_cancelled_dashboard",
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.CONFIRMED,
+    context: { last_wa_message_id: "wamid.0", appointmentId: "appt-1" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.hi", type: "text", text: "hi" }),
+  });
+
+  assert.equal(result.handled, true);
+  assert.equal(result.action, "CONFIRMED_FALLBACK_SENT");
+  assert.equal(wa.calls.length, 1);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /was cancelled/i);
+  assert.doesNotMatch(wa.calls[0].body, /is confirmed/i);
+  assert.doesNotMatch(wa.calls[0].body, /Mon 6 Jul/);
+  assert.doesNotMatch(wa.calls[0].body, /9:00 AM/);
+  assert.deepEqual(appointmentRepo.findCalls[0], {
+    clinicId: "clinic-1",
+    appointmentId: "appt-1",
+  });
+});
+
+test("CONFIRMED inbound with past confirmed appointment and no other upcoming: says no upcoming", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const appointmentRepo = createFakeAppointmentRepo({
+    id: "appt-1",
+    slot_start: "2020-01-06T03:30:00.000Z",
+    status: APPOINTMENT_STATUS.CONFIRMED,
+  });
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), createFakeSlotSelectionService(),
+    appointmentRepo,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.CONFIRMED,
+    context: { last_wa_message_id: "wamid.0", appointmentId: "appt-1" },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.hi2", type: "text", text: "hi" }),
+  });
+
+  assert.equal(result.action, "CONFIRMED_FALLBACK_SENT");
+  assert.match(wa.calls[0].body, /don't have an upcoming confirmed appointment/i);
+  assert.doesNotMatch(wa.calls[0].body, /is confirmed/i);
 });
 
 test("'cancel' from CONFIRMED cancels appointment, notifies doctor, and resets with confirmation copy", async () => {

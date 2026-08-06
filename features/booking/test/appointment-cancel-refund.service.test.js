@@ -7,8 +7,9 @@ import {
   REFUND_STATUS,
   REMINDER_COPY,
 } from "../constants.js";
-import { RazorpaySendError, WhatsAppSendError } from "../errors.js";
+import { RazorpaySendError, RefundRetryError, WhatsAppSendError } from "../errors.js";
 import { maskPhoneForLog } from "../lib/phone.js";
+import { RAZORPAY_TEST_MODE_INSUFFICIENT_BALANCE_HINT } from "../lib/razorpay-refund-alert.js";
 
 const CLINIC = Object.freeze({
   id: "clinic-1",
@@ -33,10 +34,14 @@ function buildAppointment(overrides = {}) {
   };
 }
 
-function createFakeAppointmentRepo({ cancelViaDoctorDashboardImpl = null } = {}) {
+function createFakeAppointmentRepo({
+  cancelViaDoctorDashboardImpl = null,
+  findByIdForClinicImpl = null,
+} = {}) {
   const calls = {
     cancelViaDoctorDashboard: [],
     updateRefundFields: [],
+    findByIdForClinic: [],
   };
   return {
     calls,
@@ -44,6 +49,13 @@ function createFakeAppointmentRepo({ cancelViaDoctorDashboardImpl = null } = {})
       calls.cancelViaDoctorDashboard.push({ clinicId, appointmentId });
       if (cancelViaDoctorDashboardImpl) {
         return cancelViaDoctorDashboardImpl(clinicId, appointmentId);
+      }
+      return buildAppointment({ id: appointmentId });
+    },
+    async findByIdForClinic(clinicId, appointmentId) {
+      calls.findByIdForClinic.push({ clinicId, appointmentId });
+      if (findByIdForClinicImpl) {
+        return findByIdForClinicImpl(clinicId, appointmentId);
       }
       return buildAppointment({ id: appointmentId });
     },
@@ -333,4 +345,86 @@ test("finalizeAfterCancel: still attempts plain-text ack when session window loo
     1,
     "ack send is still attempted; failure is logged not skipped",
   );
+});
+
+test("retryFailedRefund: refunds failed appointment with fresh idempotency key", async () => {
+  const appointmentRepo = createFakeAppointmentRepo({
+    findByIdForClinicImpl: async () =>
+      buildAppointment({
+        refund_status: REFUND_STATUS.FAILED,
+        payment_status: "paid",
+        cancellation_reason: "patient_no_show",
+      }),
+  });
+  const razorpay = createFakeRazorpay();
+  const wa = createFakeWhatsApp();
+  const service = new AppointmentCancelRefundService(appointmentRepo, {
+    razorpayClient: razorpay,
+    whatsappClient: wa,
+  });
+
+  const result = await service.retryFailedRefund({
+    clinic: CLINIC,
+    appointmentId: "appt-1",
+  });
+
+  assert.equal(result.refund_status, REFUND_STATUS.COMPLETED);
+  assert.equal(result.payment_status, "refunded");
+  assert.equal(razorpay.createRefundCalls.length, 1);
+  assert.match(
+    razorpay.createRefundCalls[0].idempotencyKey,
+    /^appt_refund_retry_appt-1_\d+$/,
+  );
+  assert.equal(razorpay.createRefundCalls[0].notes.reason, "patient_no_show");
+  assert.equal(wa.sendTextCalls.length, 0, "retry must not re-ack the patient");
+  const statuses = appointmentRepo.calls.updateRefundFields.map((c) => c.fields.refundStatus);
+  assert.ok(statuses.includes(REFUND_STATUS.PROCESSING));
+  assert.ok(statuses.includes(REFUND_STATUS.COMPLETED));
+});
+
+test("retryFailedRefund: refuses when refund_status is not failed", async () => {
+  const appointmentRepo = createFakeAppointmentRepo({
+    findByIdForClinicImpl: async () =>
+      buildAppointment({ refund_status: REFUND_STATUS.COMPLETED }),
+  });
+  const razorpay = createFakeRazorpay();
+  const service = new AppointmentCancelRefundService(appointmentRepo, {
+    razorpayClient: razorpay,
+  });
+
+  await assert.rejects(
+    () => service.retryFailedRefund({ clinic: CLINIC, appointmentId: "appt-1" }),
+    (err) => err instanceof RefundRetryError && err.statusCode === 409,
+  );
+  assert.equal(razorpay.createRefundCalls.length, 0);
+});
+
+test("retryFailedRefund: rethrows RazorpaySendError so the API can surface the failure", async () => {
+  const appointmentRepo = createFakeAppointmentRepo({
+    findByIdForClinicImpl: async () =>
+      buildAppointment({
+        refund_status: REFUND_STATUS.FAILED,
+        payment_status: "paid",
+      }),
+  });
+  const razorpay = createFakeRazorpay({
+    createRefundImpl: async () => {
+      throw new RazorpaySendError("invalid request sent", {
+        hint: RAZORPAY_TEST_MODE_INSUFFICIENT_BALANCE_HINT,
+        razorpayTestMode: true,
+      });
+    },
+  });
+  const service = new AppointmentCancelRefundService(appointmentRepo, {
+    razorpayClient: razorpay,
+  });
+
+  await assert.rejects(
+    () => service.retryFailedRefund({ clinic: CLINIC, appointmentId: "appt-1" }),
+    (err) =>
+      err instanceof RazorpaySendError &&
+      err.details?.hint === RAZORPAY_TEST_MODE_INSUFFICIENT_BALANCE_HINT,
+  );
+  const last = appointmentRepo.calls.updateRefundFields.at(-1);
+  assert.equal(last.fields.refundStatus, REFUND_STATUS.FAILED);
 });

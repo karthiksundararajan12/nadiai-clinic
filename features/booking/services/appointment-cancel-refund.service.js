@@ -2,7 +2,8 @@
  * @fileoverview Shared post-cancel side effects for CONFIRMED appointments:
  * Razorpay refund, patient WhatsApp ack, and in-app appointment_cancelled
  * notification. Used by ReminderService (WhatsApp Cancel / no-show) and the
- * doctor dashboard cancel route — do not reimplement refund/ack elsewhere.
+ * doctor dashboard cancel / retry-refund routes — do not reimplement
+ * refund/ack elsewhere.
  */
 
 import {
@@ -12,9 +13,11 @@ import {
   DOCTOR_CANCELLED_DASHBOARD_REASON,
   PATIENT_CANCELLED_MENU_REASON,
 } from "../constants.js";
+import { RefundRetryError } from "../errors.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
 import { maskPhoneForLog } from "../lib/phone.js";
 import { isConversationExpired } from "../lib/conversation-expiry.js";
+import { enrichRefundFailureAlertFromError } from "../lib/razorpay-refund-alert.js";
 import { formatNotificationAmount } from "./in-app-notification.service.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
@@ -143,14 +146,80 @@ export class AppointmentCancelRefundService {
   }
 
   /**
+   * Doctor dashboard: retry Razorpay refund for an appointment whose prior
+   * attempt persisted refund_status=failed. Does not re-send patient WhatsApp
+   * or in-app cancel notifications — only the refund + DB fields.
+   *
+   * Uses a fresh idempotency key so a prior Razorpay 400 is not replayed from
+   * the original `appt_cancel_{id}` key after balance is topped up.
+   *
+   * @param {{
+   *   clinic: { id: string };
+   *   appointmentId: string;
+   *   log?: import("../logger.js").Logger;
+   * }} params
+   * @returns {Promise<object>} appointment with updated refund fields
+   */
+  async retryFailedRefund({ clinic, appointmentId, log = this._log }) {
+    const appointment = await this._appointmentRepo.findByIdForClinic(
+      clinic.id,
+      appointmentId,
+    );
+    if (!appointment) {
+      throw new RefundRetryError("Appointment not found", 404);
+    }
+    if (appointment.refund_status !== REFUND_STATUS.FAILED) {
+      throw new RefundRetryError(
+        `Refund can only be retried when refund_status is failed (current: ${appointment.refund_status ?? "null"})`,
+        409,
+        { refundStatus: appointment.refund_status ?? null },
+      );
+    }
+
+    const paymentId = appointment.razorpay_payment_id ?? null;
+    const paymentStatus = String(appointment.payment_status ?? "").toLowerCase();
+    const hasCapturedPayment =
+      Boolean(paymentId) && CAPTURED_PAYMENT_STATUSES.includes(paymentStatus);
+    if (!hasCapturedPayment) {
+      throw new RefundRetryError(
+        "Appointment has no captured Razorpay payment eligible for refund",
+        409,
+        { paymentStatus: appointment.payment_status ?? null, paymentId },
+      );
+    }
+
+    const reason =
+      appointment.cancellation_reason || "manual_refund_retry_dashboard";
+    const outcome = await this.refundAfterCancel({
+      clinicId: clinic.id,
+      appointment,
+      log,
+      reason,
+      idempotencyKey: `appt_refund_retry_${appointment.id}_${Date.now()}`,
+      throwOnFailure: true,
+    });
+
+    return {
+      ...appointment,
+      refund_status: outcome.refundStatus,
+      refund_id: outcome.refundId ?? appointment.refund_id ?? null,
+      refunded_at: outcome.refundedAt ?? appointment.refunded_at ?? null,
+      payment_status: outcome.paymentStatus ?? appointment.payment_status ?? null,
+    };
+  }
+
+  /**
    * Best-effort full refund after a cancel that may have a captured payment.
-   * Failures are logged and persisted as refund_status=failed — never rethrown.
+   * Failures are logged and persisted as refund_status=failed — never rethrown
+   * unless `throwOnFailure` is set (manual Retry Refund).
    *
    * @param {{
    *   clinicId: string;
    *   appointment: object;
    *   log: import("../logger.js").Logger;
    *   reason?: string;
+   *   idempotencyKey?: string|null;
+   *   throwOnFailure?: boolean;
    * }} params
    * @returns {Promise<{
    *   refundStatus: string;
@@ -165,6 +234,8 @@ export class AppointmentCancelRefundService {
     appointment,
     log,
     reason = "patient_cancelled_via_reminder",
+    idempotencyKey = null,
+    throwOnFailure = false,
   }) {
     const existing = appointment.refund_status ?? null;
     if (existing === REFUND_STATUS.COMPLETED || existing === REFUND_STATUS.PROCESSING) {
@@ -262,7 +333,7 @@ export class AppointmentCancelRefundService {
     try {
       const refund = await this._razorpayClient.createRefund({
         paymentId,
-        idempotencyKey: `appt_cancel_${appointment.id}`,
+        idempotencyKey: idempotencyKey ?? `appt_cancel_${appointment.id}`,
         notes: {
           appointment_id: appointment.id,
           clinic_id: clinicId,
@@ -312,12 +383,21 @@ export class AppointmentCancelRefundService {
         reason,
         error: err instanceof Error ? err.message : String(err),
       });
+      const enriched = enrichRefundFailureAlertFromError(
+        err,
+        "Razorpay refund failed after cancel — cancellation still stands",
+      );
       await alertOps({
-        title: "Razorpay refund failed after cancel — cancellation still stands",
+        title: enriched.title,
         step: OPS_ALERT_STEP.REFUND,
         error: err,
         clinicId,
-        extra: { appointmentId: appointment.id, paymentId, reason },
+        extra: {
+          appointmentId: appointment.id,
+          paymentId,
+          reason,
+          ...enriched.extraHint,
+        },
       });
       try {
         await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
@@ -337,6 +417,7 @@ export class AppointmentCancelRefundService {
           extra: { appointmentId: appointment.id, paymentId },
         });
       }
+      if (throwOnFailure) throw err;
       return { refundStatus: REFUND_STATUS.FAILED, refundInitiated: false };
     }
   }

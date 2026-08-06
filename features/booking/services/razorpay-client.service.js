@@ -17,6 +17,7 @@
 import { RazorpayCredentialsError, RazorpaySendError } from "../errors.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
+import { buildRefundApiFailureAlert } from "../lib/razorpay-refund-alert.js";
 
 const PAYMENT_LINKS_URL = "https://api.razorpay.com/v1/payment_links";
 const PAYMENTS_URL = "https://api.razorpay.com/v1/payments";
@@ -160,17 +161,27 @@ export class RazorpayClientService {
         status: response.status,
         error: payload?.error,
       });
-      await alertOps({
-        title: "Razorpay refund failed (API error)",
-        step: OPS_ALERT_STEP.RAZORPAY_SEND,
-        error: new Error(payload?.error?.description ?? `Razorpay refund API responded with ${response.status}`),
-        clinicId: notes?.clinic_id ?? null,
-        extra: { paymentId, appointmentId: notes?.appointment_id ?? null, status: response.status },
+      const alert = buildRefundApiFailureAlert({
+        keyId: this._keyId,
+        status: response.status,
+        errorPayload: payload?.error ?? null,
+        paymentId,
+        appointmentId: notes?.appointment_id ?? null,
       });
-      throw new RazorpaySendError(
-        payload?.error?.description ?? `Razorpay refund API responded with ${response.status}`,
-        payload?.error ?? null,
-      );
+      await alertOps({
+        title: alert.title,
+        step: OPS_ALERT_STEP.RAZORPAY_SEND,
+        error: new Error(alert.description),
+        clinicId: notes?.clinic_id ?? null,
+        extra: alert.extra,
+      });
+      throw new RazorpaySendError(alert.description, {
+        ...(payload?.error && typeof payload.error === "object" ? payload.error : {}),
+        httpStatus: response.status,
+        ...(alert.hint
+          ? { hint: alert.hint, razorpayTestMode: true }
+          : {}),
+      });
     }
 
     return {

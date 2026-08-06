@@ -132,6 +132,21 @@ export class RazorpaySendError extends BookingError {
   }
 }
 
+/**
+ * Doctor dashboard "Retry Refund" refused (wrong status, missing payment, etc.).
+ */
+export class RefundRetryError extends BookingError {
+  /**
+   * @param {string} message
+   * @param {number} [statusCode=409]
+   * @param {unknown} [details=null]
+   */
+  constructor(message, statusCode = 409, details = null) {
+    super(message, "REFUND_RETRY_ERROR", statusCode, details);
+    this.name = "RefundRetryError";
+  }
+}
+
 export class MissingConsultationFeeError extends BookingError {
   /** @param {string} doctorId */
   constructor(doctorId) {

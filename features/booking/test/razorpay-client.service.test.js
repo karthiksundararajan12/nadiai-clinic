@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { RazorpayClientService } from "../services/razorpay-client.service.js";
 import { RazorpayCredentialsError, RazorpaySendError } from "../errors.js";
+import { RAZORPAY_TEST_MODE_INSUFFICIENT_BALANCE_HINT } from "../lib/razorpay-refund-alert.js";
 
 test("RazorpayClientService: missing credentials throw RazorpayCredentialsError", () => {
   assert.throws(() => new RazorpayClientService({}), RazorpayCredentialsError);
@@ -67,6 +68,39 @@ test("createRefund: non-OK Razorpay response throws RazorpaySendError", async ()
     await assert.rejects(
       () => client.createRefund({ paymentId: "pay_1", idempotencyKey: "key-1" }),
       (err) => err instanceof RazorpaySendError && /already refunded/i.test(err.message),
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createRefund: test-mode 400 invalid request sent attaches balance hint on error details", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 400,
+    async json() {
+      return { error: { description: "invalid request sent", code: "BAD_REQUEST_ERROR" } };
+    },
+  });
+
+  try {
+    const client = new RazorpayClientService({
+      keyId: "rzp_test_ABC",
+      keySecret: "secret",
+    });
+    await assert.rejects(
+      () =>
+        client.createRefund({
+          paymentId: "pay_1",
+          idempotencyKey: "key-1",
+          notes: { appointment_id: "appt-1", clinic_id: "clinic-1" },
+        }),
+      (err) =>
+        err instanceof RazorpaySendError &&
+        err.message === "invalid request sent" &&
+        err.details?.hint === RAZORPAY_TEST_MODE_INSUFFICIENT_BALANCE_HINT &&
+        err.details?.httpStatus === 400,
     );
   } finally {
     globalThis.fetch = originalFetch;

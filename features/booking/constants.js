@@ -314,9 +314,12 @@ export const DOCTOR_CANCELLED_DASHBOARD_REASON = "doctor_cancelled_dashboard";
 export const PATIENT_CANCELLED_MENU_REASON = "patient_cancelled_menu";
 
 /**
- * Plain-text fallback when a contact messages while already booked
- * (conversation_state CONFIRMED). Free-form session message — not a Meta
- * template. Placeholders: {date}, {time} from the appointment's slot_start.
+ * Plain-text fallback when a contact messages while conversation_state is
+ * CONFIRMED (or a legacy REMINDER_SENT string). Free-form session message —
+ * not a Meta template. Copy is chosen from a fresh appointments.status read
+ * each time (never assume still confirmed from conversation_state alone).
+ *
+ * Placeholders: {date}, {time} from the appointment's slot_start.
  *
  * "cancel" cancels the appointment (ConversationStateService cancel path);
  * "menu" is a RESET_KEYWORDS conversation reset.
@@ -328,6 +331,12 @@ export const CONFIRMED_INBOUND_COPY = Object.freeze({
   WITHOUT_SLOT:
     "Your appointment is confirmed. " +
     "Reply 'cancel' to cancel or 'menu' to see options.",
+  CANCELLED:
+    "This appointment was cancelled. " +
+    "Reply 'menu' to see options or book a new appointment.",
+  NO_UPCOMING:
+    "You don't have an upcoming confirmed appointment. " +
+    "Reply 'menu' to see options.",
 });
 
 /**

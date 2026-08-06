@@ -11,6 +11,7 @@ import {
   ExternalLink,
   Mic,
   Plus,
+  RefreshCw,
   Trash2,
 } from "lucide-react";
 import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
@@ -40,10 +41,12 @@ import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
   cancelConfirmedAppointment,
+  retryFailedRefund,
   fetchAppointmentDeletionImpact,
   deleteAppointment,
 } from "@/features/appointments/appointments.client.js";
 import { shouldNudgeEarlyConsultation } from "@/features/appointments/consultation-time-gate.js";
+import { shouldShowRecordVitalsButton } from "@/features/appointments/record-vitals-gate.js";
 import { createVitals } from "@/features/vitals/vitals.client.js";
 import { cn } from "@/lib/utils";
 
@@ -180,6 +183,8 @@ function AppointmentsPageContent() {
   const [earlyConsultTarget, setEarlyConsultTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [retryRefundTarget, setRetryRefundTarget] = useState(null);
+  const [retryingRefund, setRetryingRefund] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteImpact, setDeleteImpact] = useState(null);
   const [deleteStep, setDeleteStep] = useState(1);
@@ -344,6 +349,30 @@ function AppointmentsPageContent() {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCancelling(false);
+    }
+  }
+
+  function openRetryRefundDialog(appointment) {
+    if (!appointment?.id || appointment.refundStatus !== "failed") return;
+    setActionError("");
+    setRetryRefundTarget(appointment);
+  }
+
+  async function confirmRetryRefund() {
+    if (!retryRefundTarget?.id) return;
+    setRetryingRefund(true);
+    setActionError("");
+    try {
+      await retryFailedRefund(retryRefundTarget.id);
+      setRetryRefundTarget(null);
+      if (detail?.id === retryRefundTarget.id) {
+        await openDetail(retryRefundTarget.id);
+      }
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setRetryingRefund(false);
     }
   }
 
@@ -793,7 +822,31 @@ function AppointmentsPageContent() {
                               </Button>
                             </>
                           ) : null}
-                          {appointment.patientId ? (
+                          {appointment.refundStatus === "failed" ? (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1 text-primary"
+                              title="Retry Razorpay refund"
+                              onClick={() =>
+                                openRetryRefundDialog({
+                                  id: appointment.id,
+                                  refundStatus: appointment.refundStatus,
+                                  patientName: appointment.patientName,
+                                  slotLabel: appointment.slotLabel,
+                                  amount: appointment.amount,
+                                })
+                              }
+                            >
+                              <RefreshCw className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                              Retry Refund
+                            </Button>
+                          ) : null}
+                          {shouldShowRecordVitalsButton({
+                            status: appointment.status,
+                            patientId: appointment.patientId,
+                          }) ? (
                             <Button
                               type="button"
                               variant="ghost"
@@ -942,7 +995,10 @@ function AppointmentsPageContent() {
               ) : null}
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
-                {detail.patient_id ? (
+                {shouldShowRecordVitalsButton({
+                  status: detail.status,
+                  patientId: detail.patient_id,
+                }) ? (
                   <Button
                     variant="outline"
                     size="sm"
@@ -997,6 +1053,28 @@ function AppointmentsPageContent() {
                     }
                   >
                     Cancel
+                  </Button>
+                ) : null}
+                {detail.refund_status === "failed" ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="gap-1 text-primary"
+                    onClick={() =>
+                      openRetryRefundDialog({
+                        id: detail.id,
+                        refundStatus: detail.refund_status,
+                        patientName: detail.patient_name,
+                        slotLabel:
+                          detail.date && detail.time
+                            ? `${detail.date} · ${detail.time}`
+                            : detail.slot_start,
+                        amount: detail.payment_amount,
+                      })
+                    }
+                  >
+                    <RefreshCw className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+                    Retry Refund
                   </Button>
                 ) : null}
                 {ACTIONABLE_STATUSES.has(detail.status) ? (
@@ -1439,6 +1517,56 @@ function AppointmentsPageContent() {
               onClick={confirmCancelAppointment}
             >
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(retryRefundTarget)}
+        onOpenChange={(open) => {
+          if (!open && !retryingRefund) setRetryRefundTarget(null);
+        }}
+      >
+        <DialogContent
+          onClose={() => {
+            if (!retryingRefund) setRetryRefundTarget(null);
+          }}
+          className="max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Retry refund?</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Re-attempt the Razorpay refund of{" "}
+            <span className="font-medium text-foreground">
+              {formatAmount(retryRefundTarget?.amount)}
+            </span>{" "}
+            for{" "}
+            <span className="font-medium text-foreground">
+              {retryRefundTarget?.patientName ?? "the patient"}
+            </span>
+            {retryRefundTarget?.slotLabel ? (
+              <>
+                {" "}
+                ({retryRefundTarget.slotLabel})
+              </>
+            ) : null}
+            . Use this after topping up Razorpay balance (common in test mode).
+          </p>
+          {actionError ? (
+            <p className="text-sm font-medium text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={retryingRefund}
+              onClick={() => setRetryRefundTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={retryingRefund} onClick={confirmRetryRefund}>
+              {retryingRefund ? "Retrying…" : "Retry Refund"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -120,6 +120,28 @@ test("create with appointmentId 404s when the appointment is not in the requesti
   );
 });
 
+test("create with appointmentId 409s when appointment status is not confirmed", async () => {
+  for (const status of ["completed", "cancelled"]) {
+    const { service, calls } = createService({
+      appointment: { ...APPOINTMENT, status },
+    });
+
+    await assert.rejects(
+      () =>
+        service.create(CLINIC_A, ACTOR, {
+          appointmentId: "appt-1",
+          temperatureCelsius: 37,
+        }),
+      (error) =>
+        error instanceof VitalsRequestError &&
+        error.statusCode === 409 &&
+        /confirmed/i.test(error.message),
+      `status=${status}`,
+    );
+    assert.equal(calls.create.length, 0, `status=${status}`);
+  }
+});
+
 test("create with bare patientId (no appointment) still works for direct entry", async () => {
   const { service, calls } = createService();
 

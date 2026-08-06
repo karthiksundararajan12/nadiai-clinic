@@ -5,6 +5,7 @@ import {
   cancelConfirmedAppointment,
   deleteAppointment,
   fetchAppointmentDeletionImpact,
+  retryFailedRefund,
 } from "./appointments.client.js";
 
 // Covers the redirect used by the dashboard "New Appointment" flow: after a
@@ -71,6 +72,49 @@ test("cancelConfirmedAppointment throws on non-OK response", async () => {
     await assert.rejects(
       () => cancelConfirmedAppointment("appt-1"),
       /Only confirmed appointments can be cancelled/,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("retryFailedRefund posts to /api/appointments/[id]/retry-refund", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { appointment: { id: "appt-1", refund_status: "completed" } };
+      },
+    };
+  };
+  try {
+    const result = await retryFailedRefund("appt-1");
+    assert.equal(calls[0].url, "/api/appointments/appt-1/retry-refund");
+    assert.equal(calls[0].opts.method, "POST");
+    assert.equal(result.refund_status, "completed");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("retryFailedRefund appends hint from failed response", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    async json() {
+      return {
+        error: "invalid request sent",
+        hint: "likely test-mode insufficient balance — check Razorpay dashboard",
+      };
+    },
+  });
+  try {
+    await assert.rejects(
+      () => retryFailedRefund("appt-1"),
+      /invalid request sent.*insufficient balance/i,
     );
   } finally {
     globalThis.fetch = originalFetch;

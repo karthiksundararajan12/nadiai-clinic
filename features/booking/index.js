@@ -338,6 +338,7 @@ export {
   WhatsAppCredentialsError,
   RazorpayCredentialsError,
   RazorpaySendError,
+  RefundRetryError,
   MissingConsultationFeeError,
   WorkerUnauthorizedError,
   DatabaseError,

@@ -48,6 +48,26 @@ export async function cancelConfirmedAppointment(appointmentId) {
 }
 
 /**
+ * Retry a failed Razorpay refund for a cancelled appointment
+ * (refund_status = failed).
+ *
+ * @param {string} appointmentId
+ * @returns {Promise<object>} appointment with updated refund fields
+ */
+export async function retryFailedRefund(appointmentId) {
+  const response = await fetch(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/retry-refund`,
+    { method: "POST" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const hint = typeof payload.hint === "string" && payload.hint ? ` (${payload.hint})` : "";
+    throw new Error((payload.error ?? "Failed to retry refund") + hint);
+  }
+  return payload.appointment;
+}
+
+/**
  * @param {string} appointmentId
  */
 export async function fetchAppointmentDeletionImpact(appointmentId) {

@@ -113,6 +113,7 @@ export {
   SavePrescriptionVersionSchema,
   ApprovePrescriptionSchema,
   RejectPrescriptionSchema,
+  LogPediatricDoseSchema,
 } from "./schemas.js";
 
 export { createLogger, scribeLogger } from "./logger.js";
@@ -152,6 +153,8 @@ export {
 export { PrescriptionRepository }      from "./repository/prescription.repository.js";
 export { PrescriptionService }         from "./services/prescription.service.js";
 export { PrescriptionReviewService }   from "./services/prescription-review.service.js";
+export { PediatricDosageRepository }   from "./repository/pediatric-dosage.repository.js";
+export { PediatricDosageService }      from "./services/pediatric-dosage.service.js";
 export { SOAPExportService }           from "./services/soap-export.service.js";
 export { AudioPlaybackService }        from "./services/audio-playback.service.js";
 
@@ -175,6 +178,8 @@ import { SOAPReviewService as _SOAPReviewService } from "./services/soap-review.
 import { PrescriptionRepository as _PrescRepo }     from "./repository/prescription.repository.js";
 import { PrescriptionService as _PrescService }       from "./services/prescription.service.js";
 import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescription-review.service.js";
+import { PediatricDosageRepository as _PedDoseRepo } from "./repository/pediatric-dosage.repository.js";
+import { PediatricDosageService as _PedDoseSvc } from "./services/pediatric-dosage.service.js";
 import { ConsultationHistoryService as _HistorySvc } from "./services/consultation-history.service.js";
 import { SOAPExportService as _ExportSvc } from "./services/soap-export.service.js";
 import { AudioPlaybackService as _AudioSvc } from "./services/audio-playback.service.js";
@@ -210,6 +215,8 @@ export function createScribeServices(supabaseClient) {
   const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc, appointmentRepo);
   const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
   const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
+  const pediatricDosageRepo = new _PedDoseRepo(supabase);
+  const pediatricDosageSvc = new _PedDoseSvc(sessionRepo, pediatricDosageRepo);
   const consultationHistorySvc = new _HistorySvc(sessionRepo, soapRepo, prescriptionRepo, auditSvc);
   const soapExportSvc = new _ExportSvc(sessionRepo, soapRepo, auditSvc);
   const audioPlaybackSvc = new _AudioSvc(sessionRepo, supabase);
@@ -223,6 +230,7 @@ export function createScribeServices(supabaseClient) {
     soapReviewService:           soapReviewSvc,
     prescriptionService:         prescriptionSvc,
     prescriptionReviewService:   prescriptionReviewSvc,
+    pediatricDosageService:      pediatricDosageSvc,
     consultationHistoryService:  consultationHistorySvc,
     soapExportService:           soapExportSvc,
     audioPlaybackService:        audioPlaybackSvc,

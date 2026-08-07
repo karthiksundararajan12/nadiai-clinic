@@ -145,6 +145,9 @@ export function ConsultationClinicalLayout({
             onUpdateFollowUpDays={prescriptionPanel.onUpdateFollowUpDays}
             onUpdateDiagnosis={prescriptionPanel.onUpdateDiagnosis}
             onUpdateInvestigations={prescriptionPanel.onUpdateInvestigations}
+            weightKg={prescriptionPanel.weightKg}
+            sessionId={sessionId}
+            onLogPediatricDose={prescriptionPanel.onLogPediatricDose}
           />
         )}
       </div>

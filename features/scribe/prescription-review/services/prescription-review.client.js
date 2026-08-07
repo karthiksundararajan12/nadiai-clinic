@@ -39,3 +39,17 @@ export async function approvePrescription(sessionId) {
     body: { create_version: true },
   });
 }
+
+/**
+ * Persist suggested / accepted pediatric dose for audit + traction tracking.
+ * Soft-fails in the UI — callers may ignore errors.
+ *
+ * @param {string} sessionId
+ * @param {Record<string, unknown>} payload
+ */
+export async function logPediatricDoseEvent(sessionId, payload) {
+  return requestJson(`/api/scribe/sessions/${sessionId}/prescription/pediatric-dose`, {
+    method: "POST",
+    body: payload,
+  });
+}

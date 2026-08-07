@@ -532,6 +532,21 @@ export const RejectPrescriptionSchema = z.object({
 
 /** @typedef {z.infer<typeof RejectPrescriptionSchema>} RejectPrescriptionInput */
 
+export const LogPediatricDoseSchema = z.object({
+  action: z.enum(["suggested", "accepted", "dismissed", "exceeds_max"]),
+  drug_name: z.string().min(1).max(200),
+  reference_drug_name: z.string().min(1).max(200).optional(),
+  weight_kg: z.number().positive().max(500),
+  medication_index: z.number().int().nonnegative().optional().nullable(),
+  suggested_dose_mg: z.number().nonnegative().optional().nullable(),
+  suggested_dose_ml: z.number().nonnegative().optional().nullable(),
+  suggested_dose_display: z.string().max(200).optional().nullable(),
+  confirmed_dose_display: z.string().max(200).optional().nullable(),
+  metadata: z.record(z.unknown()).optional().default({}),
+});
+
+/** @typedef {z.infer<typeof LogPediatricDoseSchema>} LogPediatricDoseInput */
+
 // ─────────────────────────────────────────────────────────────
 // SESSION FILTER (list endpoint)
 // GET /api/scribe/sessions?status=UPLOADED&page=2

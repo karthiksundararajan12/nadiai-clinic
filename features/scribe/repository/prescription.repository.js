@@ -9,11 +9,19 @@
  */
 
 import { BaseRepository } from "./base.repository.js";
+import { DatabaseError } from "../errors.js";
+import { formatPrescriptionNumber } from "../lib/prescription-pdf.js";
 
 export class PrescriptionRepository extends BaseRepository {
-  /** @param {import("@supabase/supabase-js").SupabaseClient} supabase */
-  constructor(supabase) {
+  /**
+   * @param {import("@supabase/supabase-js").SupabaseClient} supabase
+   * @param {import("@supabase/supabase-js").SupabaseClient} [adminDb]
+   *   Optional service-role client for RPCs granted only to service_role
+   *   (e.g. next_prescription_number).
+   */
+  constructor(supabase, adminDb = null) {
     super(supabase, "prescription_drafts");
+    this._adminDb = adminDb;
   }
 
   // ─────────────────────────────────────────────────────────────
@@ -93,7 +101,7 @@ export class PrescriptionRepository extends BaseRepository {
       () =>
         this._db
           .from("patients")
-          .select("id, full_name, age_years, gender, contact_phone")
+          .select("id, full_name, age_years, date_of_birth, gender, contact_phone")
           .eq("id", patientId)
           .eq("clinic_id", clinicId)
           .is("deleted_at", null)
@@ -105,6 +113,7 @@ export class PrescriptionRepository extends BaseRepository {
             id: row.id,
             name: row.full_name,
             age: row.age_years ?? null,
+            date_of_birth: row.date_of_birth ?? null,
             gender: row.gender ?? null,
             phone: row.contact_phone ?? null,
             // Legacy prompt/UI fields — not present on clinic-scoped patients.
@@ -295,6 +304,52 @@ export class PrescriptionRepository extends BaseRepository {
           .single(),
       "updatePrescriptionDraftFields",
     );
+  }
+
+  /**
+   * Atomically allocates the next sequential Rx number for a clinic via
+   * `next_prescription_number` (migration 20260807044255). Uses the
+   * service-role client when available (RPC is granted only to service_role).
+   *
+   * @param {string} clinicId
+   * @returns {Promise<{ prescriptionSeq: number; prescriptionNumber: string }>}
+   */
+  async allocateNextNumber(clinicId) {
+    const db = this._adminDb ?? this._db;
+    const { data, error } = await db.rpc("next_prescription_number", {
+      p_clinic_id: clinicId,
+    });
+    if (error) {
+      this._log.error("DB error during allocateNextNumber", {
+        operation: "allocateNextNumber",
+        table: "prescription_counters",
+        code: error.code,
+      });
+      throw new DatabaseError("allocateNextNumber", error);
+    }
+    const prescriptionSeq = Number(data);
+    return {
+      prescriptionSeq,
+      prescriptionNumber: formatPrescriptionNumber(prescriptionSeq),
+    };
+  }
+
+  /**
+   * @param {string} clinicId
+   * @returns {Promise<string|null>}
+   */
+  async getClinicPhone(clinicId) {
+    const db = this._adminDb ?? this._db;
+    const row = await this._runNullable(
+      () =>
+        db
+          .from("clinics")
+          .select("phone")
+          .eq("id", clinicId)
+          .single(),
+      "getClinicPhone",
+    );
+    return row?.phone ? String(row.phone) : null;
   }
 
   // ─────────────────────────────────────────────────────────────

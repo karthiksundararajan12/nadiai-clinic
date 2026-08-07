@@ -15,6 +15,8 @@ import {
   SETTINGS_HREF,
 } from "@/features/scribe/lib/prescription-registration-gate.js";
 import { isAiSuggestedMedication } from "@/features/scribe/lib/prescription-medication-suggestions.js";
+import { parseWeightKg } from "@/features/scribe/lib/pediatric-dosage/calculator.js";
+import { PediatricDoseSuggestion } from "./PediatricDoseSuggestion.jsx";
 
 export const PRESCRIPTION_FREQUENCY_OPTIONS = Object.freeze([
   "1-0-1",
@@ -50,7 +52,14 @@ export function PrescriptionDraftPanel({
   onUpdateFollowUpDays,
   onUpdateDiagnosis,
   onUpdateInvestigations,
+  weightKg,
+  sessionId,
+  onLogPediatricDose,
 }) {
+  const resolvedWeightKg =
+    parseWeightKg(weightKg) ??
+    parseWeightKg(patient?.vitals?.weight) ??
+    parseWeightKg(patient?.weightKg);
   const patientLabel = [
     patient?.name ?? "Patient",
     patient?.age != null ? `${patient.age}yr` : null,
@@ -159,6 +168,9 @@ export function PrescriptionDraftPanel({
                   onFocusDrugName={ensureDrugNamesLoaded}
                   onUpdate={onUpdateMedication}
                   onRemove={onRemoveMedication}
+                  weightKg={resolvedWeightKg}
+                  sessionId={sessionId}
+                  onLogPediatricDose={onLogPediatricDose}
                 />
               ))}
             </div>
@@ -252,6 +264,9 @@ function MedicationFields({
   onFocusDrugName,
   onUpdate,
   onRemove,
+  weightKg,
+  sessionId,
+  onLogPediatricDose,
 }) {
   const foodValue = FOOD_OPTIONS.some((opt) => opt.value === med.instructions)
     ? med.instructions
@@ -308,12 +323,20 @@ function MedicationFields({
             inputClassName="text-sm"
           />
         </Field>
-        <Field label="Dose">
+        <Field label="Dose" className="sm:col-span-2">
           <Input
             value={med.dosage}
             onChange={(e) => onUpdate(index, { ...med, dosage: e.target.value })}
             placeholder="500mg"
             className="text-sm"
+          />
+          <PediatricDoseSuggestion
+            drugName={med.name}
+            weightKg={weightKg}
+            medicationIndex={index}
+            sessionId={sessionId}
+            onAcceptDose={(dosage) => onUpdate(index, { ...med, dosage })}
+            onLogDoseEvent={onLogPediatricDose}
           />
         </Field>
         <Field label="Frequency">

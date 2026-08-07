@@ -28,6 +28,9 @@ import { deriveClinicalInsights } from "../lib/clinical-insights.js";
 import { attachPatientToSession } from "../services/patient.client.js";
 import { resolveSoapDisplayDate, resolveSoapDateLabel } from "../lib/format-datetime.js";
 import { usePrescriptionPanel } from "../../prescription-review/hooks/use-prescription-panel.js";
+import { logPediatricDoseEvent } from "../../prescription-review/services/prescription-review.client.js";
+import { parseVitalsFromObjective } from "../lib/vitals-objective.js";
+import { parseWeightKg } from "../../lib/pediatric-dosage/calculator.js";
 import { ConsultationToolbar } from "./ConsultationToolbar.jsx";
 import {
   canManualGenerateSOAP,
@@ -799,6 +802,28 @@ export function ConsultationWorkspace({
     [soap.draft],
   );
 
+  const consultationWeightKg = useMemo(() => {
+    const fromSoap = parseVitalsFromObjective(soap.draft?.objective)?.weight;
+    return (
+      parseWeightKg(fromSoap) ??
+      parseWeightKg(selectedPatient?.vitals?.weight) ??
+      parseWeightKg(selectedPatient?.weightKg) ??
+      null
+    );
+  }, [soap.draft?.objective, selectedPatient]);
+
+  const handleLogPediatricDose = useCallback(
+    async (payload) => {
+      if (!sessionId) return;
+      try {
+        await logPediatricDoseEvent(sessionId, payload);
+      } catch {
+        // Audit must not block prescription editing.
+      }
+    },
+    [sessionId],
+  );
+
   const soapReady =
     soapApproved ||
     approving ||
@@ -978,6 +1003,8 @@ export function ConsultationWorkspace({
           draft: prescription.draft,
           doctor: prescription.doctor,
           approvalError: prescription.approvalError,
+          weightKg: consultationWeightKg,
+          onLogPediatricDose: handleLogPediatricDose,
           onRetry: handlePrescriptionRetry,
           onEnterManually: handlePrescriptionEnterManual,
           onApprove: handlePrescriptionApprove,

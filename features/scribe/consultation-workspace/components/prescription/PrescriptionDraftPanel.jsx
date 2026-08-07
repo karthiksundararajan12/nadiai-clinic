@@ -15,17 +15,14 @@ import {
   SETTINGS_HREF,
 } from "@/features/scribe/lib/prescription-registration-gate.js";
 import { isAiSuggestedMedication } from "@/features/scribe/lib/prescription-medication-suggestions.js";
+import {
+  PRESCRIPTION_DURATION_PRESETS,
+  PRESCRIPTION_FREQUENCY_OPTIONS,
+  dosePresetsForMedicine,
+} from "@/features/scribe/lib/prescription-field-ranges.js";
+import { PrescriptionFieldChips } from "./PrescriptionFieldChips.jsx";
 
-export const PRESCRIPTION_FREQUENCY_OPTIONS = Object.freeze([
-  "1-0-1",
-  "1-1-1",
-  "1-0-0",
-  "0-0-1",
-  "OD",
-  "BD",
-  "TDS",
-  "SOS",
-]);
+export { PRESCRIPTION_FREQUENCY_OPTIONS };
 
 const FOOD_OPTIONS = [
   { value: "before food", label: "Before food" },
@@ -308,32 +305,31 @@ function MedicationFields({
             inputClassName="text-sm"
           />
         </Field>
-        <Field label="Dose">
-          <Input
-            value={med.dosage}
-            onChange={(e) => onUpdate(index, { ...med, dosage: e.target.value })}
-            placeholder="500mg"
-            className="text-sm"
+        <Field label="Dose" className="sm:col-span-2">
+          <PrescriptionFieldChips
+            value={med.dosage ?? ""}
+            onChange={(dosage) => onUpdate(index, { ...med, dosage })}
+            presets={dosePresetsForMedicine(med.name)}
+            placeholder="e.g. 500mg"
+            testId="prescription-dose-chips"
           />
         </Field>
-        <Field label="Frequency">
-          <Combobox
-            value={med.frequency}
-            onValueChange={(frequency) => onUpdate(index, { ...med, frequency })}
-            options={PRESCRIPTION_FREQUENCY_OPTIONS}
-            placeholder="1-0-1 / OD / BD…"
-            showAllOnEmpty
-            maxSuggestions={20}
-            emptyMessage="Use a custom frequency if needed."
-            inputClassName="text-sm"
+        <Field label="Frequency" className="sm:col-span-2">
+          <PrescriptionFieldChips
+            value={med.frequency ?? ""}
+            onChange={(frequency) => onUpdate(index, { ...med, frequency })}
+            presets={PRESCRIPTION_FREQUENCY_OPTIONS}
+            placeholder="e.g. OD / 1-0-1"
+            testId="prescription-frequency-chips"
           />
         </Field>
-        <Field label="Duration">
-          <Input
-            value={med.duration}
-            onChange={(e) => onUpdate(index, { ...med, duration: e.target.value })}
-            placeholder="5 days"
-            className="text-sm"
+        <Field label="Duration" className="sm:col-span-2">
+          <PrescriptionFieldChips
+            value={med.duration ?? ""}
+            onChange={(duration) => onUpdate(index, { ...med, duration })}
+            presets={PRESCRIPTION_DURATION_PRESETS}
+            placeholder="e.g. 5 days"
+            testId="prescription-duration-chips"
           />
         </Field>
         <Field label="Timing" className="sm:col-span-2">

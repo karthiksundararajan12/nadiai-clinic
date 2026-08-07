@@ -3,8 +3,11 @@
  *
  * Approves the prescription draft.
  * Creates a version snapshot and transitions session → PRESCRIPTION_APPROVED.
+ * Best-effort: generates Rx PDF (RX-######), uploads to prescriptions bucket,
+ * and sends Meta template `appt_prescription` + document (gated by
+ * WHATSAPP_TEMPLATES_LIVE until Meta approves the template).
  * Body (optional): { create_version?: boolean }
- * Returns: { session, draft, review, version }
+ * Returns: { session, draft, review, version, pdf }
  */
 
 import { NextResponse } from "next/server";

@@ -489,3 +489,41 @@ export const SCRIBE_STORAGE = Object.freeze({
   buildChunkPath: (prefix, chunkIndex, extension = "webm") =>
     `${prefix}/chunks/${String(chunkIndex).padStart(4, "0")}.${extension}`,
 });
+
+/**
+ * Private prescription PDF storage (migration 20260807044255).
+ * Full object ref: prescriptions/{clinic_id}/{appointment_id}.pdf
+ */
+export const PRESCRIPTION_STORAGE = Object.freeze({
+  BUCKET: "prescriptions",
+  SIGNED_URL_TTL_SECONDS: 60 * 60,
+  /**
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {string}
+   */
+  buildPath: (clinicId, appointmentId) =>
+    `${clinicId}/${appointmentId}.pdf`,
+});
+
+/**
+ * Meta WhatsApp UTILITY template for approved prescription PDFs.
+ *
+ * Same shape as `appt_invoice` (body-only, language `en`, {{1}} = appointment
+ * date/time). Submit in Meta Business Manager as `appt_prescription` — status
+ * starts PENDING until Meta approves. Live sends are gated by
+ * WHATSAPP_TEMPLATES_LIVE; until the template is approved, keep that flag
+ * false (or expect Meta rejections) and the send helper will stub/log.
+ *
+ * Proposed body (mirror invoice):
+ *   "Your prescription for the appointment on {{1}} is attached."
+ *
+ * PDF is attached as a follow-up free-form document (no DOCUMENT header),
+ * same as sendInvoiceDocument.
+ */
+export const PRESCRIPTION_WHATSAPP_TEMPLATE_NAME = "appt_prescription";
+
+export const PRESCRIPTION_WHATSAPP_TEMPLATE_BODY =
+  "Your prescription for the appointment on {{1}} is attached.";
+
+export const PRESCRIPTION_WHATSAPP_TEMPLATE_LANGUAGE_CODE = "en";

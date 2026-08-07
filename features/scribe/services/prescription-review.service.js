@@ -42,11 +42,18 @@ export class PrescriptionReviewService {
    * @param {import("../repository/session.repository.js").SessionRepository}         sessionRepository
    * @param {import("../repository/prescription.repository.js").PrescriptionRepository} prescriptionRepository
    * @param {import("./audit.service.js").AuditService}                                auditService
+   * @param {import("./prescription-pdf.service.js").PrescriptionPdfService|null}      [prescriptionPdfService]
    */
-  constructor(sessionRepository, prescriptionRepository, auditService) {
+  constructor(
+    sessionRepository,
+    prescriptionRepository,
+    auditService,
+    prescriptionPdfService = null,
+  ) {
     this._sessions      = sessionRepository;
     this._prescriptions = prescriptionRepository;
     this._audit         = auditService;
+    this._pdf           = prescriptionPdfService;
     this._log           = createLogger({ component: "PrescriptionReviewService" });
   }
 
@@ -300,7 +307,18 @@ export class PrescriptionReviewService {
       },
     });
 
-    return { session: updatedSession, draft: updatedDraft, review, version };
+    // Best-effort PDF generation + storage + WhatsApp send. Failures never
+    // roll back approval. (Appointment COMPLETED sync runs on SOAP approval.)
+    let pdf = null;
+    if (this._pdf) {
+      pdf = await this._pdf.deliverForApprovedDraft({
+        session: updatedSession,
+        draft: updatedDraft,
+        ctx,
+      });
+    }
+
+    return { session: updatedSession, draft: updatedDraft, review, version, pdf };
   }
 
   /**

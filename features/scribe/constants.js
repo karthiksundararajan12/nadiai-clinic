@@ -489,3 +489,19 @@ export const SCRIBE_STORAGE = Object.freeze({
   buildChunkPath: (prefix, chunkIndex, extension = "webm") =>
     `${prefix}/chunks/${String(chunkIndex).padStart(4, "0")}.${extension}`,
 });
+
+/**
+ * Private prescription PDF storage (migration 20260807043652).
+ * Full object ref: prescriptions/{clinic_id}/{appointment_id}.pdf
+ */
+export const PRESCRIPTION_STORAGE = Object.freeze({
+  BUCKET: "prescriptions",
+  SIGNED_URL_TTL_SECONDS: 60 * 60,
+  /**
+   * @param {string} clinicId
+   * @param {string} appointmentId  appointment id, or session id fallback
+   * @returns {string}
+   */
+  buildPath: (clinicId, appointmentId) =>
+    `${clinicId}/${appointmentId}.pdf`,
+});

@@ -39,6 +39,7 @@ export {
   AUDIT_ACTION,
   SCRIBE_LIMITS,
   SCRIBE_STORAGE,
+  PRESCRIPTION_STORAGE,
 } from "./constants.js";
 
 export {
@@ -152,6 +153,13 @@ export {
 export { PrescriptionRepository }      from "./repository/prescription.repository.js";
 export { PrescriptionService }         from "./services/prescription.service.js";
 export { PrescriptionReviewService }   from "./services/prescription-review.service.js";
+export { PrescriptionStorageService }  from "./services/prescription-storage.service.js";
+export { PrescriptionPdfService }      from "./services/prescription-pdf.service.js";
+export {
+  generatePrescriptionPdf,
+  buildPrescriptionDisplayFields,
+  formatPrescriptionNumber,
+} from "./lib/prescription-pdf.js";
 export { SOAPExportService }           from "./services/soap-export.service.js";
 export { AudioPlaybackService }        from "./services/audio-playback.service.js";
 
@@ -175,6 +183,8 @@ import { SOAPReviewService as _SOAPReviewService } from "./services/soap-review.
 import { PrescriptionRepository as _PrescRepo }     from "./repository/prescription.repository.js";
 import { PrescriptionService as _PrescService }       from "./services/prescription.service.js";
 import { PrescriptionReviewService as _PrescReviewSvc } from "./services/prescription-review.service.js";
+import { PrescriptionStorageService as _PrescStorage } from "./services/prescription-storage.service.js";
+import { PrescriptionPdfService as _PrescPdfSvc } from "./services/prescription-pdf.service.js";
 import { ConsultationHistoryService as _HistorySvc } from "./services/consultation-history.service.js";
 import { SOAPExportService as _ExportSvc } from "./services/soap-export.service.js";
 import { AudioPlaybackService as _AudioSvc } from "./services/audio-playback.service.js";
@@ -189,16 +199,27 @@ import { AppointmentRepository as _AppointmentRepo } from "../booking/repository
  * every table has auth.uid()-based policies. Falls back to the admin client
  * when no client is provided (requires a valid SUPABASE_SERVICE_ROLE_KEY JWT).
  *
+ * Prescription PDF upload + Rx number allocation always use the service-role
+ * admin client (private storage bucket + next_prescription_number RPC).
+ *
  * @param {import('@supabase/supabase-js').SupabaseClient} [supabaseClient]
  * @returns {{ sessionService: ScribeSessionService; auditService: AuditService }}
  */
 export function createScribeServices(supabaseClient) {
-  const supabase    = supabaseClient ?? getSupabaseAdminClient();
+  const supabase = supabaseClient ?? getSupabaseAdminClient();
+  // Service-role client for private prescription PDF uploads + Rx counters.
+  // Fall back to the request client when admin env is unavailable (tests).
+  let adminDb = supabase;
+  try {
+    adminDb = getSupabaseAdminClient();
+  } catch {
+    adminDb = supabase;
+  }
   const sessionRepo = new _SR(supabase);
   const transcriptionRepo = new _TR(supabase);
   const reviewRepo = new _RR(supabase);
   const soapRepo = new _SOAPRepo(supabase);
-  const prescriptionRepo = new _PrescRepo(supabase);
+  const prescriptionRepo = new _PrescRepo(supabase, adminDb);
   const auditRepo   = new _AR(supabase);
   const auditSvc    = new _AS(auditRepo);
   const sessionSvc  = new _SSS(sessionRepo, auditSvc);
@@ -209,7 +230,14 @@ export function createScribeServices(supabaseClient) {
   const appointmentRepo = new _AppointmentRepo(supabase);
   const soapReviewSvc = new _SOAPReviewService(sessionRepo, soapRepo, auditSvc, appointmentRepo);
   const prescriptionSvc       = new _PrescService(sessionRepo, prescriptionRepo, auditSvc);
-  const prescriptionReviewSvc = new _PrescReviewSvc(sessionRepo, prescriptionRepo, auditSvc);
+  const prescriptionStorage   = new _PrescStorage(adminDb);
+  const prescriptionPdfSvc    = new _PrescPdfSvc(prescriptionRepo, prescriptionStorage);
+  const prescriptionReviewSvc = new _PrescReviewSvc(
+    sessionRepo,
+    prescriptionRepo,
+    auditSvc,
+    prescriptionPdfSvc,
+  );
   const consultationHistorySvc = new _HistorySvc(sessionRepo, soapRepo, prescriptionRepo, auditSvc);
   const soapExportSvc = new _ExportSvc(sessionRepo, soapRepo, auditSvc);
   const audioPlaybackSvc = new _AudioSvc(sessionRepo, supabase);
@@ -223,6 +251,7 @@ export function createScribeServices(supabaseClient) {
     soapReviewService:           soapReviewSvc,
     prescriptionService:         prescriptionSvc,
     prescriptionReviewService:   prescriptionReviewSvc,
+    prescriptionPdfService:      prescriptionPdfSvc,
     consultationHistoryService:  consultationHistorySvc,
     soapExportService:           soapExportSvc,
     audioPlaybackService:        audioPlaybackSvc,

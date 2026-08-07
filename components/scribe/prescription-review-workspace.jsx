@@ -38,6 +38,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  PRESCRIPTION_DURATION_PRESETS,
+  PRESCRIPTION_FREQUENCY_OPTIONS,
+  dosePresetsForMedicine,
+} from "@/features/scribe/lib/prescription-field-ranges.js";
+import { PrescriptionFieldChips } from "@/features/scribe/consultation-workspace/components/prescription/PrescriptionFieldChips.jsx";
 
 // ─────────────────────────────────────────────────────────────
 // SAFETY HELPERS
@@ -210,19 +216,20 @@ function MedicationCard({ med, index, onChange, onRemove, readonly }) {
       </div>
 
       {isExpanded && (
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+        <div className="grid grid-cols-1 gap-2.5">
           {/* Dosage */}
           <LabeledField
             label="Dosage"
             highlight={flags.has("missingDosage")}
             required
           >
-            <Input
+            <PrescriptionFieldChips
               value={med.dosage ?? ""}
-              onChange={(e) => field("dosage")(e.target.value)}
-              placeholder="e.g. 500 mg"
+              onChange={field("dosage")}
+              presets={dosePresetsForMedicine(med.name)}
+              placeholder="e.g. 500mg"
               disabled={readonly}
-              className="h-7 text-sm"
+              testId="prescription-review-dose-chips"
             />
           </LabeledField>
 
@@ -232,12 +239,13 @@ function MedicationCard({ med, index, onChange, onRemove, readonly }) {
             highlight={flags.has("missingFrequency")}
             required
           >
-            <Input
+            <PrescriptionFieldChips
               value={med.frequency ?? ""}
-              onChange={(e) => field("frequency")(e.target.value)}
-              placeholder="e.g. Twice daily"
+              onChange={field("frequency")}
+              presets={PRESCRIPTION_FREQUENCY_OPTIONS}
+              placeholder="e.g. OD / 1-0-1"
               disabled={readonly}
-              className="h-7 text-sm"
+              testId="prescription-review-frequency-chips"
             />
           </LabeledField>
 
@@ -247,17 +255,18 @@ function MedicationCard({ med, index, onChange, onRemove, readonly }) {
             highlight={flags.has("missingDuration")}
             required
           >
-            <Input
+            <PrescriptionFieldChips
               value={med.duration ?? ""}
-              onChange={(e) => field("duration")(e.target.value)}
+              onChange={field("duration")}
+              presets={PRESCRIPTION_DURATION_PRESETS}
               placeholder="e.g. 5 days"
               disabled={readonly}
-              className="h-7 text-sm"
+              testId="prescription-review-duration-chips"
             />
           </LabeledField>
 
           {/* Instructions */}
-          <LabeledField label="Instructions" className="sm:col-span-3">
+          <LabeledField label="Instructions">
             <Input
               value={med.instructions ?? ""}
               onChange={(e) => field("instructions")(e.target.value)}

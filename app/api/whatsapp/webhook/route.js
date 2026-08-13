@@ -25,16 +25,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { NormalizedInboundMessageSchema, parseReminderReplyId, bookingLogger } from "@/features/booking/client";
 import {
-  createBookingServices,
-  verifyMetaSignature,
-  parseInboundWhatsAppWebhook,
-  NormalizedInboundMessageSchema,
-  parseReminderReplyId,
-  bookingLogger,
-  alertOps,
-  OPS_ALERT_STEP,
-} from "@/features/booking";
+  createBookingServices, verifyMetaSignature, parseInboundWhatsAppWebhook, alertOps, OPS_ALERT_STEP
+} from "@/features/booking/server-core";
 
 const log = bookingLogger.child({ component: "API /api/whatsapp/webhook" });
 

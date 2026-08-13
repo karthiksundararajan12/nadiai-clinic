@@ -6,12 +6,8 @@
  */
 
 import { NextResponse } from "next/server";
-import {
-  createScribeServices,
-  isScribeError,
-  scribeLogger,
-  toApiError,
-} from "@/features/scribe";
+import { isScribeError, scribeLogger, toApiError } from "@/features/scribe/client";
+import { createScribeServices } from "@/features/scribe/server-core";
 import { assertWorkerAuthorized } from "../../_helpers/worker-auth";
 
 export const maxDuration = 300;

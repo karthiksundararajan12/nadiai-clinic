@@ -4,7 +4,7 @@
  */
 
 import { NextResponse }                    from "next/server";
-import { toApiError, isScribeError, scribeLogger } from "@/features/scribe";
+import { toApiError, isScribeError, scribeLogger } from "@/features/scribe/client";
 import { resolveScribeContext }            from "../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions" });

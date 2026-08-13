@@ -57,6 +57,16 @@ export class PrescriptionReviewService {
     this._log           = createLogger({ component: "PrescriptionReviewService" });
   }
 
+  /**
+   * Late-bind PDF generation so non-PDF routes can construct services without
+   * pulling prescription-pdf.js / font assets into their NFT graph.
+   *
+   * @param {import("./prescription-pdf.service.js").PrescriptionPdfService} pdfService
+   */
+  attachPdfService(pdfService) {
+    this._pdf = pdfService;
+  }
+
   // ─────────────────────────────────────────────────────────────
   // PUBLIC API
   // ─────────────────────────────────────────────────────────────

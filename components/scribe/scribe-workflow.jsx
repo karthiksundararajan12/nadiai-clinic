@@ -16,7 +16,7 @@ import { PatientSelector } from "@/features/scribe/consultation-workspace/compon
 import { appointmentToPatientPrefill } from "@/features/appointments/appointment-prefill.js";
 import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
 import { Button } from "@/components/ui/button";
-import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe";
+import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe/client";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import { SCRIBE_LANGUAGE } from "@/features/scribe/constants.js";

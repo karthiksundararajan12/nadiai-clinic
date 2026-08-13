@@ -7,7 +7,7 @@
 
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseAdminClient }  from "@/lib/supabase/admin";
-import { createScribeServices }    from "@/features/scribe";
+import { createScribeServices }    from "@/features/scribe/server-core";
 
 /** @typedef {import("@/features/scribe/models/session.model.js").RequestContext} RequestContext */
 

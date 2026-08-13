@@ -11,7 +11,7 @@ import {
   isScribeError,
   scribeLogger,
   toApiError,
-} from "@/features/scribe";
+} from "@/features/scribe/client";
 import { resolveScribeContext } from "../../../../_helpers/context";
 
 const log = scribeLogger.child({ component: "API /api/scribe/sessions/[id]/uploads/retry" });

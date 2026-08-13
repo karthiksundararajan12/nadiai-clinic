@@ -7,14 +7,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  InvoiceRepository,
-  InvoiceStorageService,
-  PaymentDeleteService,
-  PaymentRequestError,
-  bookingLogger,
-} from "@/features/booking";
+  AppointmentRepository, InvoiceRepository, InvoiceStorageService, PaymentDeleteService, PaymentRequestError
+} from "@/features/booking/server-core";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 

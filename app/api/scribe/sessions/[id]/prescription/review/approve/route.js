@@ -9,7 +9,8 @@
  */
 
 import { NextResponse } from "next/server";
-import { isScribeError, scribeLogger, toApiError } from "@/features/scribe";
+import { isScribeError, scribeLogger, toApiError } from "@/features/scribe/client";
+import { attachPrescriptionPdf } from "@/features/scribe/server-pdf";
 import { resolveScribeContext } from "../../../../../_helpers/context";
 
 const log = scribeLogger.child({
@@ -22,6 +23,7 @@ export async function POST(request, { params }) {
     const scribe = await resolveScribeContext(request);
     if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { ctx, services } = scribe;
+    attachPrescriptionPdf(services);
 
     const body   = await request.json().catch(() => ({}));
     const result = await services.prescriptionReviewService.approve(id, body, ctx);

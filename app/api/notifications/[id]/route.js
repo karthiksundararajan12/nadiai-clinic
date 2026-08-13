@@ -1,10 +1,8 @@
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  NotificationRepository,
-  InAppNotificationService,
-  PatientRepository,
-  bookingLogger,
-} from "@/features/booking";
+  NotificationRepository, InAppNotificationService, PatientRepository
+} from "@/features/booking/server-core";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 

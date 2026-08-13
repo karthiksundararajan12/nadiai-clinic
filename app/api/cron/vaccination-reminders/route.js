@@ -29,14 +29,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger, isBookingError, toApiError } from "@/features/booking/client";
 import {
-  ClinicRepository,
-  PatientRepository,
-  WhatsAppClientService,
-  bookingLogger,
-  isBookingError,
-  toApiError,
-} from "@/features/booking";
+  ClinicRepository, PatientRepository, WhatsAppClientService
+} from "@/features/booking/server-core";
 import { VaccinationRepository } from "@/features/vaccinations/vaccination.repository";
 import { VaccinationReminderService } from "@/features/vaccinations/vaccination-reminder.service";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";

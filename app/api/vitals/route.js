@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  PatientRepository,
-  bookingLogger,
-} from "@/features/booking";
+  AppointmentRepository, PatientRepository
+} from "@/features/booking/server-core";
 import { VitalsRepository } from "@/features/vitals/vitals.repository";
 import { VitalsRequestError, VitalsService } from "@/features/vitals/vitals.service";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";

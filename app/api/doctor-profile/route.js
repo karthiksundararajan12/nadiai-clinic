@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  ClinicRepository,
-  DoctorProfileRepository,
-  bookingLogger,
-} from "@/features/booking";
+  ClinicRepository, DoctorProfileRepository
+} from "@/features/booking/server-core";
 import {
   DoctorProfileRequestError,
   DoctorProfileService,

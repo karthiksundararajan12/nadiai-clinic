@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  PaymentRepository,
-  PaymentsService,
-  bookingLogger,
-} from "@/features/booking";
+  PaymentRepository, PaymentsService
+} from "@/features/booking/server-core";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 

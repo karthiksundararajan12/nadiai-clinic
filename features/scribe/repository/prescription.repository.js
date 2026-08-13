@@ -10,7 +10,7 @@
 
 import { BaseRepository } from "./base.repository.js";
 import { DatabaseError } from "../errors.js";
-import { formatPrescriptionNumber } from "../lib/prescription-pdf.js";
+import { formatPrescriptionNumber } from "../lib/prescription-number.js";
 
 export class PrescriptionRepository extends BaseRepository {
   /**

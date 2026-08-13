@@ -13,11 +13,11 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  createBookingServices,
-  verifyRazorpaySignature,
-  bookingLogger,
-} from "@/features/booking";
+  createBookingServices, verifyRazorpaySignature
+} from "@/features/booking/server-core";
+import { attachInvoicePdf } from "@/features/booking/server-pdf";
 
 const log = bookingLogger.child({ component: "API /api/webhooks/razorpay" });
 
@@ -51,7 +51,8 @@ export async function POST(request) {
   }
 
   const eventLog = log.child({ razorpayEventId: eventId, razorpayEventType: eventType });
-  const { paymentWebhookService } = createBookingServices();
+  const services = attachInvoicePdf(createBookingServices());
+  const { paymentWebhookService } = services;
 
   try {
     const result = await paymentWebhookService.handleEvent({ eventId, eventType, payload: body });

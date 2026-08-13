@@ -6,13 +6,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  InvoiceRepository,
-  InvoiceStorageService,
-  PatientRepository,
-  bookingLogger,
-} from "@/features/booking";
+  AppointmentRepository, InvoiceRepository, InvoiceStorageService, PatientRepository
+} from "@/features/booking/server-core";
 import { PatientRequestError } from "@/features/patients/patients.service";
 import { PatientDeleteService } from "@/features/patients/patient-delete.service";
 import { VaccinationRepository } from "@/features/vaccinations/vaccination.repository";

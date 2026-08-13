@@ -5,7 +5,7 @@
 
 import { BaseRepository } from "./base.repository.js";
 import { DatabaseError } from "../errors.js";
-import { formatInvoiceNumber } from "../lib/invoice-pdf.js";
+import { formatInvoiceNumber } from "../lib/invoice-number.js";
 
 /**
  * @typedef {{

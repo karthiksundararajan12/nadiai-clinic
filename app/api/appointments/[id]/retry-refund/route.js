@@ -7,12 +7,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger, RefundRetryError, RazorpaySendError } from "@/features/booking/client";
 import {
-  createBookingServices,
-  bookingLogger,
-  RefundRetryError,
-  RazorpaySendError,
-} from "@/features/booking";
+  createBookingServices
+} from "@/features/booking/server-core";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 
 const log = bookingLogger.child({

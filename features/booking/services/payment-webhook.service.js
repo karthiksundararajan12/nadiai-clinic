@@ -70,6 +70,16 @@ export class PaymentWebhookService {
   }
 
   /**
+   * Late-bind invoice PDF generation so non-PDF routes can construct
+   * createBookingServices without pulling invoice-pdf.js / font assets.
+   *
+   * @param {import("./invoice.service.js").InvoiceService} invoiceService
+   */
+  attachInvoiceService(invoiceService) {
+    this._invoiceService = invoiceService;
+  }
+
+  /**
    * @param {{ eventId: string; eventType: string; payload: unknown }} params
    * @returns {Promise<{ handled: boolean; action: string; appointmentId?: string }>}
    */

@@ -28,13 +28,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { isBookingError, bookingLogger, toApiError, REMINDER_KIND } from "@/features/booking/client";
 import {
-  createBookingServices,
-  isBookingError,
-  bookingLogger,
-  toApiError,
-  REMINDER_KIND,
-} from "@/features/booking";
+  createBookingServices
+} from "@/features/booking/server-core";
 import { assertWorkerAuthorized } from "../../booking/_helpers/worker-auth";
 
 const log = bookingLogger.child({ component: "API /api/cron/booking-reminders" });

@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { PatientRepository, bookingLogger } from "@/features/booking";
+import { bookingLogger } from "@/features/booking/client";
+import {
+  PatientRepository
+} from "@/features/booking/server-core";
 import { VaccinationRepository } from "@/features/vaccinations/vaccination.repository";
 import {
   VaccinationRequestError,

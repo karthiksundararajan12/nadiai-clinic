@@ -17,14 +17,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger, isBookingError, toApiError } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  OpsAlertRepository,
-  DailyDigestService,
-  bookingLogger,
-  isBookingError,
-  toApiError,
-} from "@/features/booking";
+  AppointmentRepository, OpsAlertRepository, DailyDigestService
+} from "@/features/booking/server-core";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { assertWorkerAuthorized } from "../../booking/_helpers/worker-auth";
 

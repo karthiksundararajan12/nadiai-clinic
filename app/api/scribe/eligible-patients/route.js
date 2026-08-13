@@ -7,12 +7,14 @@
  */
 
 import { NextResponse } from "next/server";
-import { AppointmentRepository } from "@/features/booking";
+import {
+  AppointmentRepository
+} from "@/features/booking/server-core";
 import { SessionRepository } from "@/features/scribe/repository/session.repository.js";
 import { EligibleConsultationService } from "@/features/scribe/services/eligible-consultation.service.js";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
-import { scribeLogger } from "@/features/scribe";
+import { scribeLogger } from "@/features/scribe/client";
 
 const log = scribeLogger.child({ component: "API /api/scribe/eligible-patients" });
 

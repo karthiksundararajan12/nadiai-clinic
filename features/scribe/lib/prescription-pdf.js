@@ -1,3 +1,5 @@
+import "server-only";
+
 /**
  * @fileoverview Pure prescription PDF generation (pdf-lib — no headless browser).
  *
@@ -7,10 +9,11 @@
  *
  * Noto Sans is embedded (via @pdf-lib/fontkit) so Indian text / ₹ glyphs
  * render — Helvetica WinAnsi cannot encode them.
+ *
+ * Server-only: depends on node:fs. Never import from Client Components.
  */
 
 import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import fontkit from "@pdf-lib/fontkit";
 import { PDFDocument, rgb } from "pdf-lib";
@@ -26,10 +29,18 @@ const MUTED = rgb(0.4, 0.43, 0.46);
 const LINE = rgb(0.78, 0.8, 0.82);
 const WHITE = rgb(1, 1, 1);
 
-const FONTS_DIR_CANDIDATES = [
-  join(dirname(fileURLToPath(import.meta.url)), "../../booking/assets/fonts"),
-  join(process.cwd(), "features/booking/assets/fonts"),
-];
+// Per-file import.meta.url paths — statically traceable by Next NFT.
+// Do NOT use process.cwd() (over-traces the whole project).
+const FONT_URLS = {
+  "NotoSans-Regular.ttf": new URL(
+    "../../booking/assets/fonts/NotoSans-Regular.ttf",
+    import.meta.url,
+  ),
+  "NotoSans-Bold.ttf": new URL(
+    "../../booking/assets/fonts/NotoSans-Bold.ttf",
+    import.meta.url,
+  ),
+};
 
 /** @type {Map<string, Buffer>} */
 const fontBytesCache = new Map();
@@ -38,33 +49,21 @@ const fontBytesCache = new Map();
 function loadFontBytes(filename) {
   const cached = fontBytesCache.get(filename);
   if (cached) return cached;
-  let lastErr = null;
-  for (const dir of FONTS_DIR_CANDIDATES) {
-    try {
-      const bytes = readFileSync(join(dir, filename));
-      fontBytesCache.set(filename, bytes);
-      return bytes;
-    } catch (err) {
-      lastErr = err;
-    }
+  const url = FONT_URLS[filename];
+  if (!url) throw new Error(`Unknown prescription PDF font: ${filename}`);
+  try {
+    const bytes = readFileSync(fileURLToPath(url));
+    fontBytesCache.set(filename, bytes);
+    return bytes;
+  } catch (err) {
+    throw new Error(
+      `Prescription PDF font missing: ${filename} (${err instanceof Error ? err.message : String(err)})`,
+    );
   }
-  throw new Error(
-    `Prescription PDF font missing: ${filename} (${lastErr instanceof Error ? lastErr.message : String(lastErr)})`,
-  );
 }
 
-/**
- * Formats a per-clinic sequential sequence into a stable Rx number.
- * @param {number|bigint|string} seq
- * @returns {string}
- */
-export function formatPrescriptionNumber(seq) {
-  const n = Number(seq);
-  if (!Number.isFinite(n) || n < 1) {
-    throw new Error(`prescription sequence must be a positive integer, got ${seq}`);
-  }
-  return `RX-${String(Math.trunc(n)).padStart(6, "0")}`;
-}
+/** Re-export for callers that historically imported from this module. */
+export { formatPrescriptionNumber } from "./prescription-number.js";
 
 /** @param {Date} date */
 function formatConsultationDate(date) {

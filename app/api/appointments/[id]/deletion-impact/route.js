@@ -5,12 +5,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  InvoiceRepository,
-  InvoiceStorageService,
-  bookingLogger,
-} from "@/features/booking";
+  AppointmentRepository, InvoiceRepository, InvoiceStorageService
+} from "@/features/booking/server-core";
 import { AppointmentRequestError } from "@/features/appointments/appointments.service";
 import { AppointmentDeleteService } from "@/features/appointments/appointment-delete.service";
 import { SessionRepository } from "@/features/scribe/repository/session.repository";

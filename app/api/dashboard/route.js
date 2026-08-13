@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
+import { bookingLogger } from "@/features/booking/client";
 import {
-  AppointmentRepository,
-  PatientRepository,
-  bookingLogger,
-} from "@/features/booking";
-import { createScribeServices } from "@/features/scribe";
+  AppointmentRepository, PatientRepository
+} from "@/features/booking/server-core";
+import { createScribeServices } from "@/features/scribe/server-core";
 import { DashboardService } from "@/features/dashboard/dashboard.service";
 import { getSupabaseAdminClient } from "@/lib/supabase/admin";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";

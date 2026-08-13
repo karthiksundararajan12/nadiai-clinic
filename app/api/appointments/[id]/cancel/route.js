@@ -8,11 +8,10 @@
  */
 
 import { NextResponse } from "next/server";
+import { bookingLogger, APPOINTMENT_STATUS } from "@/features/booking/client";
 import {
-  createBookingServices,
-  bookingLogger,
-  APPOINTMENT_STATUS,
-} from "@/features/booking";
+  createBookingServices
+} from "@/features/booking/server-core";
 import { resolveRequestContext } from "@/app/api/scribe/_helpers/context";
 
 const log = bookingLogger.child({

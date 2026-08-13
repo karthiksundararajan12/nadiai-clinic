@@ -1,4 +1,4 @@
-import { WorkerUnauthorizedError } from "@/features/scribe";
+import { WorkerUnauthorizedError } from "@/features/scribe/client";
 
 /**
  * Validates a server-to-server worker request.

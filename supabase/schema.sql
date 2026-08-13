@@ -75,6 +75,10 @@ ALTER TABLE public.clinics
 
 ALTER TABLE public.clinics ENABLE ROW LEVEL SECURITY;
 
+-- Link each doctor to a clinic (must exist before RLS policies reference it)
+ALTER TABLE public.doctor_profiles
+  ADD COLUMN IF NOT EXISTS clinic_id UUID REFERENCES public.clinics(id) ON DELETE SET NULL;
+
 -- Allow doctors to see their clinic (via doctor_profiles.clinic_id)
 DROP POLICY IF EXISTS "Doctors can view their clinic" ON public.clinics;
 CREATE POLICY "Doctors can view their clinic"
@@ -87,10 +91,6 @@ CREATE POLICY "Doctors can view their clinic"
       AND dp.clinic_id = clinics.id
     )
   );
-
--- Link each doctor to a clinic
-ALTER TABLE public.doctor_profiles
-  ADD COLUMN IF NOT EXISTS clinic_id UUID REFERENCES public.clinics(id) ON DELETE SET NULL;
 
 -- Patients table
 CREATE TABLE IF NOT EXISTS public.patients (

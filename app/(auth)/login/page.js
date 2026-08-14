@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand-logo";
 import { Shield, Mic, CalendarDays, ArrowRight, Loader2 } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -50,20 +49,47 @@ function GoogleIcon() {
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const router = useRouter();
+
+  // OAuth leaves this page via full navigation. If the user returns via
+  // back/forward cache (or the redirect never fires), React state can still
+  // have loading === true — reset so the button is clickable again.
+  useEffect(() => {
+    const onPageShow = (event) => {
+      if (event.persisted) setLoading(false);
+    };
+    window.addEventListener("pageshow", onPageShow);
+    return () => window.removeEventListener("pageshow", onPageShow);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("error") === "auth_failed") {
+      setError("Sign-in failed. Please try again.");
+      setLoading(false);
+    }
+  }, []);
 
   const handleGoogleLogin = async () => {
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      setError(null);
       const supabase = getSupabaseBrowserClient();
-      const { error } = await supabase.auth.signInWithOAuth({
+      const { data, error: oauthError } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
           redirectTo: `${window.location.origin}/auth/callback`,
+          // Take control of navigation so we can reset loading if redirect
+          // never happens (misconfigured redirect URI, blocked navigation, etc.).
+          skipBrowserRedirect: true,
         },
       });
-      if (error) throw error;
+      if (oauthError) throw oauthError;
+      if (!data?.url) {
+        throw new Error("Failed to start Google sign-in. Please try again.");
+      }
+      // replace() drops this loading page from history so Back won't restore
+      // a stuck "Signing in..." snapshot.
+      window.location.replace(data.url);
     } catch (err) {
       setError(err.message || "Failed to sign in. Please try again.");
       setLoading(false);

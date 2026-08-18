@@ -1,6 +1,10 @@
 -- =============================================
--- Nadi AI - Complete Database Schema
--- Run this in Supabase SQL Editor
+-- Nadi AI - Database schema REFERENCE SNAPSHOT
+-- =============================================
+-- DO NOT run this file in the Supabase SQL Editor to bootstrap a project.
+-- Source of truth: supabase/migrations via `supabase db push` (or migration up).
+-- This file is a hand-synced snapshot for reading/diffing only. If it drifts
+-- from migrations, update it from migrations — never the other way around.
 -- =============================================
 
 -- Doctor Profiles table for onboarding and user data
@@ -20,6 +24,7 @@ CREATE TABLE IF NOT EXISTS public.doctor_profiles (
   working_hours_end TEXT DEFAULT '18:00',
   reminders_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   default_scribe_language TEXT NOT NULL DEFAULT 'hinglish',
+  avatar_url TEXT,
   whatsapp_phone_number_id TEXT,
   onboarding_complete BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMPTZ DEFAULT now(),
@@ -55,6 +60,8 @@ CREATE TABLE IF NOT EXISTS public.clinics (
   whatsapp_setup_requested_at TIMESTAMPTZ,
   whatsapp_verified_at TIMESTAMPTZ,
   whatsapp_setup_error TEXT,
+  reminder_24h_offset_minutes INTEGER NOT NULL DEFAULT 1440,
+  reminder_2h_offset_minutes INTEGER NOT NULL DEFAULT 120,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
@@ -105,6 +112,16 @@ CREATE TABLE IF NOT EXISTS public.patients (
   status TEXT DEFAULT 'active',
   last_visit DATE,
   next_appointment DATE,
+  clinic_id UUID REFERENCES public.clinics(id),
+  contact_phone TEXT,
+  full_name TEXT,
+  date_of_birth DATE,
+  date_of_birth_is_approximate BOOLEAN NOT NULL DEFAULT FALSE,
+  age_years INTEGER,
+  relationship_to_contact TEXT,
+  consent_given BOOLEAN NOT NULL DEFAULT FALSE,
+  consent_given_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
@@ -114,6 +131,22 @@ ALTER TABLE public.patients ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Doctors can manage their own patients"
   ON public.patients FOR ALL
   USING (auth.uid() = doctor_id);
+
+-- Conversation state (WhatsApp booking bot — see migration 040)
+CREATE TABLE IF NOT EXISTS public.conversation_state (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  clinic_id UUID NOT NULL REFERENCES public.clinics(id) ON DELETE CASCADE,
+  contact_phone TEXT NOT NULL,
+  current_state TEXT NOT NULL,
+  context JSONB NOT NULL DEFAULT '{}'::jsonb,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  last_message_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT conversation_state_clinic_contact_key UNIQUE (clinic_id, contact_phone)
+);
+
+ALTER TABLE public.conversation_state ENABLE ROW LEVEL SECURITY;
 
 -- Appointments table
 CREATE TABLE IF NOT EXISTS public.appointments (
@@ -161,11 +194,28 @@ CREATE TABLE IF NOT EXISTS public.scribe_sessions (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   patient_id UUID REFERENCES public.patients(id) ON DELETE SET NULL,
+  clinic_id UUID REFERENCES public.clinics(id) ON DELETE SET NULL,
+  appointment_id UUID REFERENCES public.appointments(id) ON DELETE SET NULL,
   language TEXT DEFAULT 'hinglish',
   transcription JSONB DEFAULT '[]',
   clinical_note TEXT,
   duration INTEGER DEFAULT 0,
-  created_at TIMESTAMPTZ DEFAULT now()
+  status TEXT NOT NULL DEFAULT 'CREATED',
+  upload_progress SMALLINT NOT NULL DEFAULT 0,
+  audio_storage_prefix TEXT,
+  audio_total_chunks INTEGER,
+  audio_confirmed_chunks INTEGER NOT NULL DEFAULT 0,
+  audio_duration_seconds INTEGER,
+  audio_size_bytes BIGINT,
+  edited_transcript JSONB,
+  speaker_corrections JSONB,
+  error_message TEXT,
+  is_finalized BOOLEAN NOT NULL DEFAULT FALSE,
+  signed_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  deleted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
 ALTER TABLE public.scribe_sessions ENABLE ROW LEVEL SECURITY;

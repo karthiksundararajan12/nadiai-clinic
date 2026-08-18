@@ -62,6 +62,8 @@ CREATE TABLE IF NOT EXISTS public.clinics (
   whatsapp_setup_error TEXT,
   reminder_24h_offset_minutes INTEGER NOT NULL DEFAULT 1440,
   reminder_2h_offset_minutes INTEGER NOT NULL DEFAULT 120,
+  address TEXT,
+  phone TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 

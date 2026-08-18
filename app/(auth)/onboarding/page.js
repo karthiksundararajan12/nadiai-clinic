@@ -117,7 +117,7 @@ export default function OnboardingPage() {
       <div className="w-full border-b border-border bg-card/50 glass">
         <div className="mx-auto flex max-w-2xl items-center justify-between px-6 py-4">
           <div>
-            <BrandLogo size="sm" showText className="items-start" />
+            <BrandLogo size="sm" showText />
             <p className="mt-1 text-[11px] text-muted-foreground">Doctor Onboarding</p>
           </div>
           <div className="flex items-center gap-1.5">

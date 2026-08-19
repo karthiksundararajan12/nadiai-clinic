@@ -47,6 +47,14 @@ export async function GET(request) {
 
   const expectedToken = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN;
 
+  // TEMP debug — remove after Preview verify-token diagnosis
+  console.log("[whatsapp webhook GET debug]", {
+    expectedToken: `[${expectedToken}]`,
+    incomingToken: `[${token}]`,
+    mode: `[${mode}]`,
+    challengePresent: Boolean(challenge),
+  });
+
   if (mode === "subscribe" && expectedToken && token === expectedToken) {
     log.info("Webhook verification succeeded");
     return new NextResponse(challenge ?? "", { status: 200 });

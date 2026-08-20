@@ -104,8 +104,8 @@ CREATE POLICY "Doctors can view their clinic"
 -- Patients table
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
+  doctor_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  name TEXT,
   age INTEGER,
   gender TEXT,
   phone TEXT,

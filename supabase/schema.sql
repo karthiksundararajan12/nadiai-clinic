@@ -153,13 +153,13 @@ ALTER TABLE public.conversation_state ENABLE ROW LEVEL SECURITY;
 -- Appointments table
 CREATE TABLE IF NOT EXISTS public.appointments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  doctor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  doctor_id UUID NOT NULL REFERENCES public.doctor_profiles(id) ON DELETE CASCADE,
   patient_id UUID REFERENCES public.patients(id) ON DELETE SET NULL,
   clinic_id UUID REFERENCES public.clinics(id),
   contact_phone TEXT,
-  patient_name TEXT NOT NULL,
-  date DATE NOT NULL,
-  time TEXT NOT NULL,
+  patient_name TEXT,
+  date DATE,
+  time TEXT,
   duration INTEGER DEFAULT 30,
   type TEXT DEFAULT 'Consultation',
   status TEXT DEFAULT 'scheduled',

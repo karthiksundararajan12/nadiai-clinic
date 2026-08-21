@@ -147,7 +147,7 @@ function AppointmentsPageContent() {
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("all");
+  const [status, setStatus] = useState("confirmed");
   const [range, setRange] = useState("all");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");

@@ -4,19 +4,16 @@ import {
   PATIENT_STATUS_CONFIG,
 } from "@/lib/constants";
 
+export const STATUS_PILL_BASE =
+  "inline-flex items-center rounded-full border px-3 py-1 text-caption font-medium";
+
 export function StatusBadge({ status, className }) {
   const config =
     APPOINTMENT_STATUS_CONFIG[status] ?? PATIENT_STATUS_CONFIG[status];
   if (!config) return null;
 
   return (
-    <span
-      className={cn(
-        "inline-flex items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
-        config.color,
-        className
-      )}
-    >
+    <span className={cn(STATUS_PILL_BASE, config.color, className)}>
       {config.label}
     </span>
   );

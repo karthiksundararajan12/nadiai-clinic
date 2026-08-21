@@ -31,6 +31,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { STATUS_PILL_BASE } from "@/components/shared/status-badge";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -52,10 +53,10 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_PILL = {
-  paid: "border-success/30 bg-success/10 text-success",
-  failed: "border-destructive/30 bg-destructive/10 text-destructive",
-  refunded: "border-border bg-muted text-muted-foreground",
-  pending: "border-warning/30 bg-warning/10 text-warning",
+  paid: "border-status-confirmed-border bg-status-confirmed-bg text-status-confirmed",
+  failed: "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled",
+  refunded: "border-status-completed-border bg-status-completed-bg text-status-completed",
+  pending: "border-status-pending-border bg-status-pending-bg text-status-pending",
 };
 
 export default function PaymentsPage() {
@@ -216,7 +217,7 @@ export default function PaymentsPage() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+              <Label>Status</Label>
               <Select value={status} onValueChange={updateStatus}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -248,7 +249,7 @@ export default function PaymentsPage() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Date</Label>
+              <Label>Date</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -282,7 +283,7 @@ export default function PaymentsPage() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
+                  <Label>From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -294,7 +295,7 @@ export default function PaymentsPage() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
+                  <Label>To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -309,17 +310,17 @@ export default function PaymentsPage() {
             )}
           </div>
 
-          <p className="text-sm font-medium text-muted-foreground">
+          <p className="text-body font-medium text-muted-foreground">
             {loading ? "Loading…" : `${total} payment${total === 1 ? "" : "s"}`}
           </p>
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-destructive">{error.message}</p>
+          <p className="text-body font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
+          <p className="py-8 text-center text-body font-medium text-muted-foreground">
             Loading payments…
           </p>
         ) : payments.length === 0 ? (
@@ -329,10 +330,10 @@ export default function PaymentsPage() {
             description="Try adjusting search or filters. Captured Razorpay payments appear here."
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[960px] text-left text-base">
-                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[960px] text-left text-body">
+                <thead className="border-b border-border bg-muted/40 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Patient</th>
                     <th className="px-4 py-3 font-semibold">Appointment</th>
@@ -359,15 +360,15 @@ export default function PaymentsPage() {
                       <td className="px-4 py-3">
                         <span
                           className={cn(
-                            "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                            STATUS_PILL_BASE,
                             STATUS_PILL[payment.paymentStatus] ??
-                              "border-border bg-muted text-muted-foreground",
+                              "border-status-completed-border bg-status-completed-bg text-status-completed",
                           )}
                         >
                           {payment.paymentStatusLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs font-medium text-muted-foreground">
+                      <td className="px-4 py-3 font-mono text-caption font-medium text-muted-foreground">
                         {payment.razorpayPaymentId ?? "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -377,14 +378,14 @@ export default function PaymentsPage() {
                               type="button"
                               onClick={() => openInvoice(payment)}
                               disabled={openingInvoice === payment.appointmentId}
-                              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline disabled:opacity-60"
+              className="inline-flex items-center gap-1 text-body font-medium text-primary hover:underline disabled:opacity-60"
                             >
                               <FileText className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                               {payment.invoiceNumber}
                               <ExternalLink className={`${ICON_SIZE_SM} opacity-70`} strokeWidth={ICON_STROKE} />
                             </button>
                           ) : (
-                            <span className="text-sm font-medium text-muted-foreground">
+                            <span className="text-body font-medium text-muted-foreground">
                               {payment.invoiceNumber}
                             </span>
                           )
@@ -392,7 +393,7 @@ export default function PaymentsPage() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
+                      <td className="px-4 py-3 text-caption font-medium text-muted-foreground">
                         <div title={formatAbsolute(payment.createdAt)}>
                           {formatRelative(payment.createdAt)}
                         </div>
@@ -417,7 +418,7 @@ export default function PaymentsPage() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-caption font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">
@@ -464,7 +465,7 @@ export default function PaymentsPage() {
             </DialogTitle>
           </DialogHeader>
           {deleteStep === 1 ? (
-            <div className="space-y-2 text-sm text-muted-foreground">
+            <div className="space-y-2 text-body text-muted-foreground">
               <p>
                 Permanently remove the accounting record for{" "}
                 <span className="font-medium text-foreground">
@@ -489,13 +490,13 @@ export default function PaymentsPage() {
               </p>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               Confirm permanent removal of this accounting record. This cannot be
               undone.
             </p>
           )}
           {deleteError ? (
-            <p className="text-sm font-medium text-destructive">{deleteError}</p>
+            <p className="text-body font-medium text-destructive">{deleteError}</p>
           ) : null}
           <DialogFooter>
             <Button variant="outline" disabled={deleting} onClick={closeDeleteDialog}>

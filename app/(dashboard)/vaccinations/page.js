@@ -26,6 +26,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatDateOnly } from "@/lib/date-only";
 import { SpecializationRouteGuard } from "@/components/layout/specialization-route-guard";
+import { STATUS_PILL_BASE } from "@/components/shared/status-badge";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
@@ -49,14 +50,15 @@ const STATUS_OPTIONS = [
 ];
 
 const STATUS_PILL = {
-  pending: "border-warning/30 bg-warning/10 text-warning",
-  reminder_sent: "border-primary/30 bg-primary/10 text-primary",
-  completed: "border-success/30 bg-success/10 text-success",
-  overdue: "border-destructive/30 bg-destructive/10 text-destructive",
+  pending: "border-status-pending-border bg-status-pending-bg text-status-pending",
+  reminder_sent: "border-primary/20 bg-primary-soft text-primary",
+  completed: "border-status-confirmed-border bg-status-confirmed-bg text-status-confirmed",
+  overdue: "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled",
   // Distinct from `overdue` — this is a permanent send failure (exceeded
   // max retry attempts) needing manual follow-up, not just a due-date
   // that's passed. See VaccinationReminderService._claimAndSend.
-  reminder_failed: "border-destructive/50 bg-destructive/20 text-destructive",
+  reminder_failed:
+    "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled font-semibold",
 };
 
 export default function VaccinationsPage() {
@@ -164,7 +166,7 @@ function VaccinationsPageContent() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+              <Label>Status</Label>
               <Select value={status} onValueChange={updateStatus}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -196,7 +198,7 @@ function VaccinationsPageContent() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Due date</Label>
+              <Label>Due date</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -230,7 +232,7 @@ function VaccinationsPageContent() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
+                  <Label>From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -242,7 +244,7 @@ function VaccinationsPageContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
+                  <Label>To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -258,12 +260,12 @@ function VaccinationsPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-body font-medium text-muted-foreground">
               {loading ? "Loading…" : `${total} vaccination${total === 1 ? "" : "s"}`}
             </p>
             <Link
               href="/vaccinations/new"
-              className={cn(buttonVariants({ size: "sm" }), "gap-1.5")}
+              className={cn(buttonVariants({ size: "sm" }), "gap-2")}
             >
               <Plus className="h-3.5 w-3.5" />
               Add vaccination
@@ -272,11 +274,11 @@ function VaccinationsPageContent() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-destructive">{error.message}</p>
+          <p className="text-body font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
+          <p className="py-8 text-center text-body font-medium text-muted-foreground">
             Loading vaccinations…
           </p>
         ) : vaccinations.length === 0 ? (
@@ -289,16 +291,16 @@ function VaccinationsPageContent() {
                 href="/vaccinations/new"
                 className={cn(buttonVariants({ size: "sm" }))}
               >
-                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                <Plus className="mr-2 h-4 w-4" />
                 Add vaccination
               </Link>
             }
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[840px] text-left text-base">
-                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[840px] text-left text-body">
+                <thead className="border-b border-border bg-muted/40 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Patient</th>
                     <th className="px-4 py-3 font-semibold">Vaccine</th>
@@ -318,7 +320,7 @@ function VaccinationsPageContent() {
                         {vaccination.vaccineName}
                       </td>
                       <td className="px-4 py-3 text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-2">
                           <span>{formatDateOnly(vaccination.dueDate)}</span>
                           {vaccination.patientDateOfBirthIsApproximate && <ApproximateDobBadge />}
                         </div>
@@ -326,20 +328,20 @@ function VaccinationsPageContent() {
                       <td className="px-4 py-3">
                         <span
                           className={cn(
-                            "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                            STATUS_PILL_BASE,
                             STATUS_PILL[vaccination.status] ??
-                              "border-border bg-muted text-muted-foreground",
+                              "border-status-completed-border bg-status-completed-bg text-status-completed",
                           )}
                         >
                           {vaccination.statusLabel}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
+                      <td className="px-4 py-3 text-caption font-medium text-muted-foreground">
                         {vaccination.reminderSentAt
                           ? formatDateTime(vaccination.reminderSentAt)
                           : "—"}
                       </td>
-                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
+                      <td className="px-4 py-3 text-caption font-medium text-muted-foreground">
                         {formatDateTime(vaccination.createdAt)}
                       </td>
                     </tr>
@@ -349,7 +351,7 @@ function VaccinationsPageContent() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-caption font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">

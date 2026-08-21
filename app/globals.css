@@ -7,20 +7,22 @@
  * Nadi clinical design tokens
  * ─────────────────────────
  * surface / paper  #FFFFFF  app backgrounds (white)
- * ink              #1A2332  foreground
- * primary          #36347E  logo indigo (from public/logo.png)
- * primary-hover    #2C2B67  darker indigo for button hover
- * primary-active   #312F71
- * muted            #F9FAFB  gray-50 — hover / icon wells only, not panels
+ * heading          #1A2332  titles / section headings
+ * body             #374151  foreground (gray-700)
+ * muted            #6B7280  secondary text (gray-500)
+ * primary          #35327E  logo indigo circle mean (public/logo.png; not #36347E)
+ * primary-hover    #2B2967  one shade darker than primary
+ * primary-soft     #EBEBF2  ~10% primary on white
  * success          #2D6A4F
- * warning          #7A5200
+ * warning          #7A5200  (legacy token; status pending uses --status-pending)
  * danger           #B42318
  */
 :root {
   --radius: 0.5rem;
+  --heading: #1a2332;
 
   --background: #ffffff;
-  --foreground: #1a2332;
+  --foreground: #374151;
 
   --card: #ffffff;
   --card-foreground: #1a2332;
@@ -28,11 +30,12 @@
   --popover: #ffffff;
   --popover-foreground: #1a2332;
 
-  --primary: #36347e;
+  --primary: #35327e;
   --clinical: var(--primary);
   --clinical-foreground: #ffffff;
-  --primary-hover: #2c2b67;
+  --primary-hover: #2b2967;
   --primary-active: #312f71;
+  --primary-soft: #ebebf2;
   --primary-foreground: #ffffff;
 
   --secondary: #f9fafb;
@@ -52,6 +55,20 @@
 
   --warning: #7a5200;
   --warning-foreground: #7a5200;
+
+  --status-confirmed: #2d6a4f;
+  --status-confirmed-bg: #ecfdf5;
+  --status-confirmed-bg-hover: #d1fae5;
+  --status-confirmed-border: #a7f3d0;
+  --status-cancelled: #b42318;
+  --status-cancelled-bg: #fef2f2;
+  --status-cancelled-border: #fecaca;
+  --status-pending: #b45309;
+  --status-pending-bg: #fffbeb;
+  --status-pending-border: #fde68a;
+  --status-completed: #4b5563;
+  --status-completed-bg: #f9fafb;
+  --status-completed-border: #e5e7eb;
 
   --border: #e5e7eb;
   --input: #e5e7eb;
@@ -74,6 +91,8 @@
 
   --shadow-clinical: 0 1px 2px rgb(26 35 50 / 0.04),
     0 1px 3px rgb(26 35 50 / 0.06);
+  --shadow-md: 0 4px 12px rgb(26 35 50 / 0.08),
+    0 12px 28px rgb(26 35 50 / 0.12);
 }
 
 .dark {
@@ -89,8 +108,10 @@
   --primary: #7b79c7;
   --clinical: var(--primary);
   --clinical-foreground: #0f1117;
+  --heading: #f3f4f6;
   --primary-hover: #6a68b8;
   --primary-active: #5c5aa8;
+  --primary-soft: #25273c;
   --primary-foreground: #0f1117;
 
   --secondary: #1e2230;
@@ -130,8 +151,24 @@
   --chart-4: #f07167;
   --chart-5: #9ca3af;
 
+  --status-confirmed: #6ee7b7;
+  --status-confirmed-bg: #1a2e26;
+  --status-confirmed-bg-hover: #214036;
+  --status-confirmed-border: #2d6a4f;
+  --status-cancelled: #f07167;
+  --status-cancelled-bg: #2c1818;
+  --status-cancelled-border: #7f2d2d;
+  --status-pending: #fbbf24;
+  --status-pending-bg: #2c2414;
+  --status-pending-border: #854d0e;
+  --status-completed: #9ca3af;
+  --status-completed-bg: #1e2230;
+  --status-completed-border: #2a2f3d;
+
   --shadow-clinical: 0 1px 2px rgb(0 0 0 / 0.2),
     0 1px 3px rgb(0 0 0 / 0.3);
+  --shadow-md: 0 4px 12px rgb(0 0 0 / 0.35),
+    0 12px 28px rgb(0 0 0 / 0.45);
 }
 
 @theme inline {
@@ -141,12 +178,27 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-heading: var(--heading);
   --color-primary: var(--primary);
   --color-clinical: var(--clinical);
   --color-clinical-foreground: var(--clinical-foreground);
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
+  --color-primary-soft: var(--primary-soft);
   --color-primary-foreground: var(--primary-foreground);
+  --color-status-confirmed: var(--status-confirmed);
+  --color-status-confirmed-bg: var(--status-confirmed-bg);
+  --color-status-confirmed-bg-hover: var(--status-confirmed-bg-hover);
+  --color-status-confirmed-border: var(--status-confirmed-border);
+  --color-status-cancelled: var(--status-cancelled);
+  --color-status-cancelled-bg: var(--status-cancelled-bg);
+  --color-status-cancelled-border: var(--status-cancelled-border);
+  --color-status-pending: var(--status-pending);
+  --color-status-pending-bg: var(--status-pending-bg);
+  --color-status-pending-border: var(--status-pending-border);
+  --color-status-completed: var(--status-completed);
+  --color-status-completed-bg: var(--status-completed-bg);
+  --color-status-completed-border: var(--status-completed-border);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -175,14 +227,20 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --radius-sm: calc(var(--radius) - 2px);
+  --radius-sm: var(--radius);
   --radius-md: var(--radius);
-  --radius-lg: calc(var(--radius) + 2px);
-  --radius-xl: calc(var(--radius) + 6px);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
   --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-ibm-plex), var(--font-source-sans), ui-sans-serif, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
   --shadow-clinical: var(--shadow-clinical);
+  --shadow-sm: var(--shadow-clinical);
+  --shadow-md: var(--shadow-md);
+  --text-title: 1.5rem;
+  --text-heading: 1.125rem;
+  --text-body: 0.875rem;
+  --text-caption: 0.75rem;
 }
 
 @layer base {
@@ -232,6 +290,21 @@
     font-family: var(--font-display);
     font-weight: 600;
     letter-spacing: -0.01em;
+  }
+
+  /* --text-heading (size) and --color-heading (color) both generate `text-heading`. */
+  .type-title {
+    font-size: var(--text-title);
+    line-height: 2rem;
+    font-weight: 600;
+    color: var(--heading);
+  }
+
+  .type-heading {
+    font-size: var(--text-heading);
+    line-height: 1.75rem;
+    font-weight: 600;
+    color: var(--heading);
   }
 
   .shadow-clinical {

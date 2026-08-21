@@ -5,7 +5,7 @@ function Card({ className, ...props }) {
     <div
       data-slot="card"
       className={cn(
-        "rounded-xl border border-border bg-card text-card-foreground shadow-clinical",
+        "rounded-lg border border-border bg-card text-card-foreground shadow-sm",
         className
       )}
       {...props}
@@ -17,7 +17,7 @@ function CardHeader({ className, ...props }) {
   return (
     <div
       data-slot="card-header"
-      className={cn("flex flex-col gap-1.5 p-6", className)}
+      className={cn("flex flex-col gap-2 p-6", className)}
       {...props}
     />
   );
@@ -27,7 +27,7 @@ function CardTitle({ className, ...props }) {
   return (
     <h3
       data-slot="card-title"
-      className={cn("text-lg font-bold leading-none tracking-tight", className)}
+      className={cn("type-heading font-display leading-none tracking-tight", className)}
       {...props}
     />
   );
@@ -37,7 +37,7 @@ function CardDescription({ className, ...props }) {
   return (
     <p
       data-slot="card-description"
-      className={cn("text-sm font-medium text-muted-foreground", className)}
+      className={cn("text-caption font-medium text-muted-foreground", className)}
       {...props}
     />
   );

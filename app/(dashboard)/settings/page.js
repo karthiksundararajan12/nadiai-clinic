@@ -287,19 +287,19 @@ export default function SettingsPage() {
       <div className="flex-1 p-6">
         <Tabs defaultValue="profile" className="space-y-6">
           <TabsList>
-            <TabsTrigger value="profile" className="gap-1.5">
+            <TabsTrigger value="profile" className="gap-2">
               <User className="h-3.5 w-3.5" />
               Profile
             </TabsTrigger>
-            <TabsTrigger value="clinic" className="gap-1.5">
+            <TabsTrigger value="clinic" className="gap-2">
               <Building className="h-3.5 w-3.5" />
               Clinic
             </TabsTrigger>
-            <TabsTrigger value="notifications" className="gap-1.5">
+            <TabsTrigger value="notifications" className="gap-2">
               <Bell className="h-3.5 w-3.5" />
               Notifications
             </TabsTrigger>
-            <TabsTrigger value="preferences" className="gap-1.5">
+            <TabsTrigger value="preferences" className="gap-2">
               <Palette className="h-3.5 w-3.5" />
               Preferences
             </TabsTrigger>
@@ -316,17 +316,17 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || profileError) && (
-                    <p className="text-sm font-medium text-destructive">
+                    <p className="text-body font-medium text-destructive">
                       {profileError || profileSettingsLoadError?.message}
                     </p>
                   )}
                   {profileSuccess && (
-                    <p className="text-sm font-medium text-emerald-700">{profileSuccess}</p>
+                    <p className="text-body font-medium text-status-confirmed">{profileSuccess}</p>
                   )}
                   <div className="flex items-center gap-4 mb-6">
                     <Avatar className="h-20 w-20">
                       <AvatarImage src={avatarUrl ?? undefined} alt="Profile photo" />
-                      <AvatarFallback className="text-xl">
+                      <AvatarFallback className="type-heading">
                         {profileInitials(profileForm.fullName)}
                       </AvatarFallback>
                     </Avatar>
@@ -343,23 +343,23 @@ export default function SettingsPage() {
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="gap-1.5"
+                        className="gap-2"
                         disabled={profileSettingsLoading || photoUploading}
                         onClick={handleUploadPhotoClick}
                       >
                         <Camera className="h-3.5 w-3.5" />
                         {photoUploading ? "Uploading…" : "Upload profile photo"}
                       </Button>
-                      <p className="text-xs font-medium text-muted-foreground mt-1.5">
+                      <p className="text-caption font-medium text-muted-foreground mt-2">
                         JPG, PNG, or WebP. Max 2MB.
                       </p>
                       {photoError && (
-                        <p className="mt-1.5 text-xs font-medium text-destructive">
+                        <p className="mt-2 text-caption font-medium text-destructive">
                           {photoError}
                         </p>
                       )}
                       {photoSuccess && (
-                        <p className="mt-1.5 text-xs font-medium text-emerald-700">
+                        <p className="mt-2 text-caption font-medium text-status-confirmed">
                           {photoSuccess}
                         </p>
                       )}
@@ -445,7 +445,7 @@ export default function SettingsPage() {
                   <div className="flex justify-end pt-2">
                     <Button
                       size="sm"
-                      className="gap-1.5"
+                      className="gap-2"
                       onClick={handleSaveProfile}
                       disabled={
                         profileSettingsLoading ||
@@ -466,42 +466,42 @@ export default function SettingsPage() {
               <div className="space-y-6">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Account Status</CardTitle>
+                    <CardTitle>Account Status</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">
+                      <span className="text-body font-medium text-muted-foreground">
                         Plan
                       </span>
                       <Badge>Professional</Badge>
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">
+                      <span className="text-body font-medium text-muted-foreground">
                         Status
                       </span>
                       <StatusBadge status="active" />
                     </div>
                     <Separator />
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-muted-foreground">
+                      <span className="text-body font-medium text-muted-foreground">
                         Joined
                       </span>
-                      <span className="text-sm font-medium">Jan 2026</span>
+                      <span className="text-body font-medium">Jan 2026</span>
                     </div>
                   </CardContent>
                 </Card>
 
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-base">Security</CardTitle>
+                    <CardTitle>Security</CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
-                    <Button variant="outline" size="sm" className="w-full gap-1.5">
+                    <Button variant="outline" size="sm" className="w-full gap-2">
                       <Shield className="h-3.5 w-3.5" />
                       Change Password
                     </Button>
-                    <Button variant="outline" size="sm" className="w-full gap-1.5">
+                    <Button variant="outline" size="sm" className="w-full gap-2">
                       Enable 2FA
                     </Button>
                   </CardContent>
@@ -521,12 +521,12 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || feeError) && (
-                    <p className="text-sm font-medium text-destructive">
+                    <p className="text-body font-medium text-destructive">
                       {feeError || profileSettingsLoadError.message}
                     </p>
                   )}
                   {feeSuccess && (
-                    <p className="text-sm font-medium text-emerald-700">{feeSuccess}</p>
+                    <p className="text-body font-medium text-status-confirmed">{feeSuccess}</p>
                   )}
                   <div className="max-w-xs space-y-2">
                     <Label htmlFor="consultation-fee">Fee per consultation</Label>
@@ -542,7 +542,7 @@ export default function SettingsPage() {
                         placeholder="e.g. 500"
                         value={feeInput}
                         disabled={profileSettingsLoading || feeSaving}
-                        className="pl-9"
+                        className="pl-8"
                         onChange={(e) => {
                           setFeeInput(e.target.value);
                           setFeeSuccess("");
@@ -550,14 +550,14 @@ export default function SettingsPage() {
                         }}
                       />
                     </div>
-                    <p className="text-xs font-medium text-muted-foreground">
+                    <p className="text-caption font-medium text-muted-foreground">
                       Set to ₹0 for free consultations. Whole rupees only.
                     </p>
                   </div>
                   <div className="flex justify-end">
                     <Button
                       size="sm"
-                      className="gap-1.5"
+                      className="gap-2"
                       onClick={handleSaveConsultationFee}
                       disabled={profileSettingsLoading || feeSaving || feeInput === ""}
                     >
@@ -577,12 +577,12 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {(profileSettingsLoadError || clinicError) && (
-                  <p className="text-sm font-medium text-destructive">
+                  <p className="text-body font-medium text-destructive">
                     {clinicError || profileSettingsLoadError?.message}
                   </p>
                 )}
                 {clinicSuccess && (
-                  <p className="text-sm font-medium text-emerald-700">{clinicSuccess}</p>
+                  <p className="text-body font-medium text-status-confirmed">{clinicSuccess}</p>
                 )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -630,12 +630,12 @@ export default function SettingsPage() {
                 <Separator />
 
                 <div>
-                  <h4 className="text-sm font-semibold mb-1">Working Hours</h4>
-                  <p className="mb-3 text-xs font-medium text-muted-foreground">
+                  <h4 className="type-heading mb-1">Working Hours</h4>
+                  <p className="mb-3 text-caption font-medium text-muted-foreground">
                     Used for WhatsApp booking slot generation. The same hours apply every day — per-day schedules (e.g. closed Sundays) are not supported yet.
                   </p>
                   <div className="flex items-center gap-4 rounded-lg border border-border p-3">
-                    <span className="w-40 text-sm font-medium">Daily</span>
+                    <span className="w-40 text-body font-medium">Daily</span>
                     <div className="flex items-center gap-2">
                       <Input
                         type="time"
@@ -651,7 +651,7 @@ export default function SettingsPage() {
                           setClinicError("");
                         }}
                       />
-                      <span className="text-sm font-medium text-muted-foreground">to</span>
+                      <span className="text-body font-medium text-muted-foreground">to</span>
                       <Input
                         type="time"
                         value={clinicForm.workingHoursEnd}
@@ -673,7 +673,7 @@ export default function SettingsPage() {
                 <div className="flex justify-end pt-2">
                   <Button
                     size="sm"
-                    className="gap-1.5"
+                    className="gap-2"
                     onClick={handleSaveClinicSettings}
                     disabled={profileSettingsLoading || clinicSaving || !clinicForm.name.trim()}
                   >
@@ -696,19 +696,19 @@ export default function SettingsPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {(profileSettingsLoadError || remindersError) && (
-                  <p className="text-sm font-medium text-destructive">
+                  <p className="text-body font-medium text-destructive">
                     {remindersError || profileSettingsLoadError?.message}
                   </p>
                 )}
                 {remindersSuccess && (
-                  <p className="text-sm font-medium text-emerald-700">{remindersSuccess}</p>
+                  <p className="text-body font-medium text-status-confirmed">{remindersSuccess}</p>
                 )}
 
                 <div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Appointment Reminders</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Appointment Reminders</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         Send WhatsApp reminders to patients T-24h and T-2h before their visit
                       </p>
                     </div>
@@ -724,8 +724,8 @@ export default function SettingsPage() {
                 <div>
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Scribe Completion</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Scribe Completion</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         Notify when AI clinical notes are ready
                       </p>
                     </div>
@@ -747,19 +747,19 @@ export default function SettingsPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {(profileSettingsLoadError || scribeLanguageError) && (
-                    <p className="text-sm font-medium text-destructive">
+                    <p className="text-body font-medium text-destructive">
                       {scribeLanguageError || profileSettingsLoadError?.message}
                     </p>
                   )}
                   {scribeLanguageSuccess && (
-                    <p className="text-sm font-medium text-emerald-700">{scribeLanguageSuccess}</p>
+                    <p className="text-body font-medium text-status-confirmed">{scribeLanguageSuccess}</p>
                   )}
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="flex items-center gap-3">
                       <Globe className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-semibold">Default Scribe Language</p>
-                        <p className="text-xs font-medium text-muted-foreground">
+                        <p className="text-body font-semibold">Default Scribe Language</p>
+                        <p className="text-caption font-medium text-muted-foreground">
                           Pre-selected on the Scribe page — you can still change it per session
                         </p>
                       </div>
@@ -773,8 +773,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Date Format</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Date Format</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         How dates are displayed
                       </p>
                     </div>
@@ -783,8 +783,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Time Zone</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Time Zone</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         Your local time zone
                       </p>
                     </div>
@@ -802,8 +802,8 @@ export default function SettingsPage() {
                     <div className="flex items-center gap-3">
                       <Palette className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="text-sm font-semibold">Theme</p>
-                        <p className="text-xs font-medium text-muted-foreground">
+                        <p className="text-body font-semibold">Theme</p>
+                        <p className="text-caption font-medium text-muted-foreground">
                           Use the sun/moon icon in the top bar to switch between light and dark mode
                         </p>
                       </div>
@@ -815,8 +815,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Compact Mode</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Compact Mode</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         Reduce spacing for more content
                       </p>
                     </div>
@@ -825,8 +825,8 @@ export default function SettingsPage() {
                   <Separator />
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-sm font-semibold">Sidebar Collapsed</p>
-                      <p className="text-xs font-medium text-muted-foreground">
+                      <p className="text-body font-semibold">Sidebar Collapsed</p>
+                      <p className="text-caption font-medium text-muted-foreground">
                         Start with collapsed sidebar
                       </p>
                     </div>

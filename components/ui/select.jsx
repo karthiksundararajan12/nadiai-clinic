@@ -32,7 +32,7 @@ function SelectTrigger({ className, children, open, onClick, ...props }) {
     <button
       type="button"
       className={cn(
-        "flex h-9 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 py-2 text-base font-medium placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-8 w-full items-center justify-between rounded-lg border border-input bg-transparent px-3 py-2 text-body font-medium placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/30 disabled:cursor-not-allowed disabled:opacity-50",
         className
       )}
       onClick={onClick}
@@ -54,7 +54,7 @@ function SelectContent({ className, children, open, ...props }) {
   return (
     <div
       className={cn(
-        "absolute z-[100] mt-1 w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95",
+        "absolute z-[100] mt-1 w-full rounded-lg border bg-popover p-1 text-popover-foreground shadow-sm animate-in fade-in-0 zoom-in-95",
         className
       )}
       {...props}
@@ -69,8 +69,8 @@ function SelectItem({ className, value, selected, onSelect, children, ...props }
     <button
       type="button"
       className={cn(
-        "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 px-2 text-base font-medium outline-none hover:bg-accent/10 focus:bg-accent/10",
-        selected && "bg-primary/5 text-primary",
+        "relative flex w-full cursor-pointer select-none items-center rounded-lg px-2 py-2 text-body font-medium outline-none hover:bg-primary-soft hover:text-primary focus:bg-primary-soft",
+        selected && "bg-primary-soft text-primary",
         className
       )}
       onClick={() => onSelect?.(value)}

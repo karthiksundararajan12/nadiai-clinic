@@ -72,14 +72,14 @@ export function Sidebar({ collapsed, onToggle }) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-gray-200 bg-white text-gray-900 shadow-sm transition-all duration-300 dark:border-gray-800 dark:bg-gray-950 dark:text-gray-100",
+        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-background text-foreground shadow-sm transition-all duration-300",
         collapsed ? "w-[68px]" : "w-[260px]"
       )}
     >
       <div
         className={cn(
-          "flex items-center border-b border-gray-200 px-3 dark:border-gray-800",
-          collapsed ? "h-14" : "h-14"
+          "flex items-center border-b border-border px-4 py-4",
+          collapsed && "justify-center px-3"
         )}
       >
         <BrandLogo
@@ -88,7 +88,7 @@ export function Sidebar({ collapsed, onToggle }) {
         />
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-4 px-3 scrollbar-thin">
+      <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">
         <ul className="flex flex-col gap-1">
           {visibleNavItems.map((item) => {
             const Icon = ICON_MAP[item.icon];
@@ -103,10 +103,10 @@ export function Sidebar({ collapsed, onToggle }) {
                   navigateIfAllowed(item.href, event);
                 }}
                 className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
+                  "group flex items-center gap-3 rounded-lg px-3 py-2 text-body font-medium transition-colors",
                   isActive
-                    ? "bg-primary/10 text-primary dark:bg-primary/15"
-                    : "text-gray-500 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary",
+                    ? "bg-primary-soft text-primary"
+                    : "text-muted-foreground hover:bg-primary-soft hover:text-primary",
                   collapsed && "justify-center px-0"
                 )}
               >
@@ -116,7 +116,7 @@ export function Sidebar({ collapsed, onToggle }) {
                       ICON_SIZE_NAV,
                       isActive
                         ? "text-primary"
-                        : "text-gray-400 group-hover:text-gray-900 dark:text-gray-500 dark:group-hover:text-gray-100"
+                        : "text-muted-foreground group-hover:text-primary"
                     )}
                     strokeWidth={ICON_STROKE}
                   />
@@ -127,7 +127,7 @@ export function Sidebar({ collapsed, onToggle }) {
                     {item.badge && (
                       <Badge
                         variant="accent"
-                        className="h-5 px-1.5 text-[10px] font-semibold"
+                        className="h-5 px-2 text-caption font-semibold"
                       >
                         {item.badge}
                       </Badge>
@@ -152,8 +152,8 @@ export function Sidebar({ collapsed, onToggle }) {
         </ul>
       </nav>
 
-      <div className="border-t border-gray-200 p-3 dark:border-gray-800">
-        <Separator className="mb-3 bg-gray-200 dark:bg-gray-800" />
+      <div className="border-t border-border p-3">
+        <Separator className="mb-3 bg-border" />
         <div
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2",
@@ -162,17 +162,17 @@ export function Sidebar({ collapsed, onToggle }) {
         >
           <Avatar className="h-8 w-8">
             <AvatarImage src={avatarUrl ?? undefined} alt={displayName} />
-            <AvatarFallback className="text-xs font-semibold">
+            <AvatarFallback className="text-caption font-semibold">
               {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
             <div className="flex flex-1 flex-col min-w-0">
-              <span className="text-base font-medium text-gray-900 truncate dark:text-gray-100">
+              <span className="truncate text-body font-medium [color:var(--heading)]">
                 {displayName}
               </span>
               {specialization && (
-                <span className="text-xs font-medium text-gray-500 truncate dark:text-gray-400">
+                <span className="text-caption font-medium text-muted-foreground truncate">
                   {specialization}
                 </span>
               )}
@@ -182,7 +182,7 @@ export function Sidebar({ collapsed, onToggle }) {
             <Tooltip content="Sign out" side="top">
               <button
                 onClick={handleSignOut}
-                className="rounded-md p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 transition-colors dark:text-gray-500 dark:hover:bg-red-950 dark:hover:text-red-400"
+                className="rounded-lg p-2 text-muted-foreground hover:bg-status-cancelled-bg hover:text-status-cancelled transition-colors"
               >
                 <LogOut className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
               </button>
@@ -193,7 +193,7 @@ export function Sidebar({ collapsed, onToggle }) {
 
       <button
         onClick={onToggle}
-        className="absolute -right-3 top-14 flex h-6 w-6 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-400 shadow-sm hover:bg-gray-100 hover:text-gray-900 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+        className="absolute -right-3 top-16 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:bg-primary-soft hover:text-primary"
       >
         {collapsed ? (
           <ChevronRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />

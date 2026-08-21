@@ -40,12 +40,12 @@ export function MobileNav({ open, onClose }) {
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="fixed inset-0 bg-black/50 glass" onClick={onClose} />
-      <div className="fixed inset-y-0 left-0 w-[280px] bg-white text-gray-900 shadow-xl animate-in slide-in-from-left dark:bg-gray-950 dark:text-gray-100">
-        <div className="flex h-14 items-center justify-between border-b border-gray-200 px-4 dark:border-gray-800">
+      <div className="fixed inset-y-0 left-0 w-[280px] bg-background text-foreground shadow-sm animate-in slide-in-from-left">
+        <div className="flex items-center justify-between border-b border-border px-4 py-4">
           <BrandLogo size="md" />
           <button
             onClick={onClose}
-            className="rounded-md p-1 text-gray-400 hover:text-gray-900 dark:text-gray-500 dark:hover:text-gray-100"
+            className="rounded-lg p-2 text-muted-foreground hover:bg-primary-soft hover:text-primary"
           >
             <X className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
           </button>
@@ -65,10 +65,10 @@ export function MobileNav({ open, onClose }) {
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-base font-medium transition-colors",
+                      "flex items-center gap-3 rounded-lg px-3 py-2 text-body font-medium transition-colors",
                       isActive
-                        ? "bg-primary/10 text-primary dark:bg-primary/15"
-                        : "text-gray-500 hover:bg-primary/5 hover:text-primary dark:text-gray-400 dark:hover:bg-primary/10 dark:hover:text-primary"
+                        ? "bg-primary-soft text-primary"
+                        : "text-muted-foreground hover:bg-primary-soft hover:text-primary"
                     )}
                   >
                     {Icon && (
@@ -77,7 +77,7 @@ export function MobileNav({ open, onClose }) {
                           ICON_SIZE_NAV,
                           isActive
                             ? "text-primary"
-                            : "text-gray-400 dark:text-gray-500"
+                            : "text-muted-foreground"
                         )}
                         strokeWidth={ICON_STROKE}
                       />
@@ -86,7 +86,7 @@ export function MobileNav({ open, onClose }) {
                     {item.badge && (
                       <Badge
                         variant="accent"
-                        className="h-5 px-1.5 text-[10px] font-semibold"
+                        className="h-5 px-2 text-caption font-semibold"
                       >
                         {item.badge}
                       </Badge>

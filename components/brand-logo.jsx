@@ -2,10 +2,10 @@ import Image from "next/image";
 import { cn } from "@/lib/utils";
 
 const SIZE_STYLES = {
-  sm: { image: "h-9 w-9", text: "text-sm" },
-  md: { image: "h-11 w-11", text: "text-base" },
-  lg: { image: "h-12 w-12", text: "text-lg" },
-  xl: { image: "h-14 w-14", text: "text-xl" },
+  sm: { image: "h-8 w-8", text: "text-caption" },
+  md: { image: "h-12 w-12", text: "text-body" },
+  lg: { image: "h-12 w-12", text: "type-heading" },
+  xl: { image: "h-16 w-16", text: "type-title" },
 };
 
 export function BrandLogo({
@@ -25,7 +25,7 @@ export function BrandLogo({
   return (
     <div
       className={cn(
-        "flex items-center gap-2.5",
+        "flex items-center gap-2",
         isStacked
           ? "flex-col"
           : isIconOnly
@@ -65,7 +65,7 @@ export function BrandLogo({
       {showText && (
         <span
           className={cn(
-            "font-display font-semibold text-foreground",
+            "font-display font-semibold [color:var(--heading)]",
             styles.text,
             textClassName,
           )}

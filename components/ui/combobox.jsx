@@ -111,12 +111,12 @@ function Combobox({
         />
       </div>
       {(showEmptyQueryHint || showNoMatches || showOptions) && (
-        <div className="absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md animate-in fade-in-0 zoom-in-95">
+        <div className="absolute z-[100] mt-1 max-h-64 w-full overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-sm animate-in fade-in-0 zoom-in-95">
           {showEmptyQueryHint && (
-            <p className="px-2 py-1.5 text-sm font-medium text-muted-foreground">{emptyQueryHint}</p>
+            <p className="px-2 py-2 text-caption font-medium text-muted-foreground">{emptyQueryHint}</p>
           )}
           {showNoMatches && (
-            <p className="px-2 py-1.5 text-sm font-medium text-muted-foreground">{emptyMessage}</p>
+            <p className="px-2 py-2 text-caption font-medium text-muted-foreground">{emptyMessage}</p>
           )}
           {showOptions &&
             filteredOptions.map((option) => (
@@ -124,8 +124,8 @@ function Combobox({
                 key={option}
                 type="button"
                 className={cn(
-                  "relative flex w-full cursor-pointer select-none items-center rounded-md py-1.5 px-2 text-base font-medium outline-none hover:bg-accent/10 focus:bg-accent/10",
-                  option === value && "bg-primary/5 text-primary"
+                  "relative flex w-full cursor-pointer select-none items-center rounded-lg px-2 py-2 text-body font-medium outline-none hover:bg-primary-soft hover:text-primary focus:bg-primary-soft",
+                  option === value && "bg-primary-soft text-primary"
                 )}
                 onClick={() => {
                   onValueChange(option);

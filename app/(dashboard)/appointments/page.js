@@ -18,7 +18,7 @@ import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Header } from "@/components/layout/header";
 import { SearchInput } from "@/components/shared/search-input";
 import { EmptyState } from "@/components/shared/empty-state";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { StatusBadge, STATUS_PILL_BASE } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -81,19 +81,19 @@ const STATUS_OPTIONS = [
 ];
 
 const PAYMENT_STATUS_PILL = {
-  paid: "border-success/30 bg-success/10 text-success",
-  failed: "border-destructive/30 bg-destructive/10 text-destructive",
-  refunded: "border-border bg-muted text-muted-foreground",
-  pending: "border-warning/30 bg-warning/10 text-warning",
-  not_required: "border-border bg-muted text-muted-foreground",
+  paid: "border-status-confirmed-border bg-status-confirmed-bg text-status-confirmed",
+  failed: "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled",
+  refunded: "border-status-completed-border bg-status-completed-bg text-status-completed",
+  pending: "border-status-pending-border bg-status-pending-bg text-status-pending",
+  not_required: "border-status-completed-border bg-status-completed-bg text-status-completed",
 };
 
 const REFUND_STATUS_PILL = {
-  completed: "border-success/30 bg-success/10 text-success",
-  processing: "border-warning/30 bg-warning/10 text-warning",
-  pending: "border-warning/30 bg-warning/10 text-warning",
-  failed: "border-destructive/30 bg-destructive/10 text-destructive",
-  not_applicable: "border-border bg-muted text-muted-foreground",
+  completed: "border-status-confirmed-border bg-status-confirmed-bg text-status-confirmed",
+  processing: "border-status-pending-border bg-status-pending-bg text-status-pending",
+  pending: "border-status-pending-border bg-status-pending-bg text-status-pending",
+  failed: "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled",
+  not_applicable: "border-status-completed-border bg-status-completed-bg text-status-completed",
 };
 
 const ACTIONABLE_STATUSES = new Set([
@@ -129,7 +129,7 @@ export default function AppointmentsPage() {
             title="Appointments"
             subtitle="Clinic schedule, payment, and refund status"
           />
-          <p className="p-6 text-sm font-medium text-muted-foreground">Loading appointments…</p>
+          <p className="p-6 text-body font-medium text-muted-foreground">Loading appointments…</p>
         </>
       }
     >
@@ -551,7 +551,7 @@ function AppointmentsPageContent() {
             />
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Status</Label>
+              <Label>Status</Label>
               <Select value={status} onValueChange={updateStatus}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -583,7 +583,7 @@ function AppointmentsPageContent() {
             </div>
 
             <div className="space-y-1">
-              <Label className="text-xs font-medium text-muted-foreground">Slot date</Label>
+              <Label>Slot date</Label>
               <Select value={range} onValueChange={updateRange}>
                 {({ open, setOpen, value, onValueChange }) => (
                   <>
@@ -617,7 +617,7 @@ function AppointmentsPageContent() {
             {range === "custom" && (
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">From</Label>
+                  <Label>From</Label>
                   <Input
                     type="date"
                     value={from}
@@ -629,7 +629,7 @@ function AppointmentsPageContent() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-xs font-medium text-muted-foreground">To</Label>
+                  <Label>To</Label>
                   <Input
                     type="date"
                     value={to}
@@ -645,12 +645,12 @@ function AppointmentsPageContent() {
           </div>
 
           <div className="flex items-center gap-3">
-            <p className="text-sm font-medium text-muted-foreground">
+            <p className="text-body font-medium text-muted-foreground">
               {loading ? "Loading…" : `${total} appointment${total === 1 ? "" : "s"}`}
             </p>
             <Button
               size="sm"
-              className="gap-1.5"
+              className="gap-2"
               onClick={async () => {
                 setFormError("");
                 setDialogOpen(true);
@@ -668,11 +668,11 @@ function AppointmentsPageContent() {
         </div>
 
         {error && (
-          <p className="text-sm font-medium text-destructive">{error.message}</p>
+          <p className="text-body font-medium text-destructive">{error.message}</p>
         )}
 
         {loading ? (
-          <p className="py-16 text-center text-sm font-medium text-muted-foreground">
+          <p className="py-8 text-center text-body font-medium text-muted-foreground">
             Loading appointments…
           </p>
         ) : appointments.length === 0 ? (
@@ -682,10 +682,10 @@ function AppointmentsPageContent() {
             description="Try adjusting search or filters. Booked appointments appear here."
           />
         ) : (
-          <div className="overflow-hidden rounded-xl border border-border bg-white">
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left text-base">
-                <thead className="border-b border-border bg-muted/40 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              <table className="w-full min-w-[1100px] text-left text-body">
+                <thead className="border-b border-border bg-muted/40 text-caption font-semibold uppercase tracking-wide text-muted-foreground">
                   <tr>
                     <th className="px-4 py-3 font-semibold">Patient</th>
                     <th className="px-4 py-3 font-semibold">Slot</th>
@@ -707,7 +707,7 @@ function AppointmentsPageContent() {
                       ref={highlighted ? highlightRef : null}
                       className={cn(
                         appointment.status === "confirmed"
-                          ? "bg-primary/5 hover:bg-primary/10"
+                          ? "bg-status-confirmed-bg hover:bg-status-confirmed-bg-hover"
                           : "hover:bg-muted/30",
                         highlighted && "ring-2 ring-inset ring-primary",
                       )}
@@ -715,7 +715,7 @@ function AppointmentsPageContent() {
                       <td className="px-4 py-3 font-medium text-foreground">
                         <div>{appointment.patientName}</div>
                         {appointment.contactPhone ? (
-                          <div className="mt-0.5 text-xs font-medium text-muted-foreground">
+                          <div className="mt-1 text-caption font-medium text-muted-foreground">
                             {formatPhoneForDisplay(appointment.contactPhone)}
                           </div>
                         ) : null}
@@ -732,9 +732,9 @@ function AppointmentsPageContent() {
                         appointment.paymentStatusLabel !== "—" ? (
                           <span
                             className={cn(
-                              "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                              STATUS_PILL_BASE,
                               PAYMENT_STATUS_PILL[appointment.paymentStatus] ??
-                                "border-border bg-muted text-muted-foreground",
+                                "border-status-completed-border bg-status-completed-bg text-status-completed",
                             )}
                           >
                             {appointment.paymentStatusLabel}
@@ -752,9 +752,9 @@ function AppointmentsPageContent() {
                         appointment.refundStatus !== "not_applicable" ? (
                           <span
                             className={cn(
-                              "inline-flex rounded-full border px-2.5 py-0.5 text-[11px] font-medium",
+                              STATUS_PILL_BASE,
                               REFUND_STATUS_PILL[appointment.refundStatus] ??
-                                "border-border bg-muted text-muted-foreground",
+                                "border-status-completed-border bg-status-completed-bg text-status-completed",
                             )}
                           >
                             {appointment.refundStatusLabel}
@@ -763,7 +763,7 @@ function AppointmentsPageContent() {
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs font-medium text-muted-foreground">
+                      <td className="px-4 py-3 text-caption font-medium text-muted-foreground">
                         <div title={formatAbsolute(appointment.createdAt)}>
                           {formatRelative(appointment.createdAt)}
                         </div>
@@ -891,7 +891,7 @@ function AppointmentsPageContent() {
             </div>
 
             <div className="flex items-center justify-between border-t border-border px-4 py-3">
-              <p className="text-xs font-medium text-muted-foreground">
+              <p className="text-caption font-medium text-muted-foreground">
                 Showing {pageStart}–{pageEnd} of {total}
               </p>
               <div className="flex items-center gap-2">
@@ -929,21 +929,21 @@ function AppointmentsPageContent() {
             <DialogTitle>Appointment detail</DialogTitle>
           </DialogHeader>
           {detailLoading ? (
-            <p className="py-8 text-center text-sm font-medium text-muted-foreground">
+            <p className="py-8 text-center text-body font-medium text-muted-foreground">
               Loading…
             </p>
           ) : detailError ? (
-            <p className="text-sm font-medium text-destructive">{detailError}</p>
+            <p className="text-body font-medium text-destructive">{detailError}</p>
           ) : detail ? (
             <div className="space-y-4 py-2">
               <div>
-                <p className="text-base font-medium text-foreground">
+                <p className="text-body font-medium text-foreground">
                   {detail.patient_name}
                 </p>
                 {detail.contact_phone ? (
                   <a
                     href={`tel:+${normalizePhoneForWhatsApp(detail.contact_phone)}`}
-                    className="text-sm font-medium text-muted-foreground hover:underline"
+                    className="text-body font-medium text-muted-foreground hover:underline"
                   >
                     {formatPhoneForDisplay(detail.contact_phone)}
                   </a>
@@ -952,24 +952,24 @@ function AppointmentsPageContent() {
 
               <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Slot</dt>
-                  <dd className="mt-0.5 text-foreground">
+                  <dt className="text-caption font-medium text-muted-foreground">Slot</dt>
+                  <dd className="mt-1 text-foreground">
                     {detail.date} · {detail.time}
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Duration</dt>
-                  <dd className="mt-0.5 text-foreground">{detail.duration} min</dd>
+                  <dt className="text-caption font-medium text-muted-foreground">Duration</dt>
+                  <dd className="mt-1 text-foreground">{detail.duration} min</dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Status</dt>
+                  <dt className="text-caption font-medium text-muted-foreground">Status</dt>
                   <dd className="mt-1">
                     <StatusBadge status={detail.status} />
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-muted-foreground">Payment</dt>
-                  <dd className="mt-0.5 text-foreground">
+                  <dt className="text-caption font-medium text-muted-foreground">Payment</dt>
+                  <dd className="mt-1 text-foreground">
                     {detail.payment_status &&
                     detail.payment_status !== "not_required"
                       ? formatPaymentStatusLabel(detail.payment_status)
@@ -981,8 +981,8 @@ function AppointmentsPageContent() {
                 </div>
                 {detail.status === "cancelled" ? (
                   <div className="col-span-2">
-                    <dt className="text-xs font-medium text-muted-foreground">Refund</dt>
-                    <dd className="mt-0.5 text-foreground">
+                    <dt className="text-caption font-medium text-muted-foreground">Refund</dt>
+                    <dd className="mt-1 text-foreground">
                       {detail.refund_status ?? "—"}
                       {detail.refund_id ? ` · ${detail.refund_id}` : ""}
                     </dd>
@@ -991,7 +991,7 @@ function AppointmentsPageContent() {
               </dl>
 
               {actionError ? (
-                <p className="text-sm font-medium text-destructive">{actionError}</p>
+                <p className="text-body font-medium text-destructive">{actionError}</p>
               ) : null}
 
               <div className="flex flex-wrap gap-2 border-t border-border pt-4">
@@ -1157,7 +1157,7 @@ function AppointmentsPageContent() {
                 )}
               </Select>
               {patients.length === 0 && (
-                <p className="text-xs font-medium text-muted-foreground">
+                <p className="text-caption font-medium text-muted-foreground">
                   Add a patient before creating an appointment.
                 </p>
               )}
@@ -1186,7 +1186,7 @@ function AppointmentsPageContent() {
               </div>
             </div>
             {formError && (
-              <p className="text-sm font-medium text-destructive">{formError}</p>
+              <p className="text-body font-medium text-destructive">{formError}</p>
             )}
           </div>
           <DialogFooter>
@@ -1215,7 +1215,7 @@ function AppointmentsPageContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {rescheduleTarget && (
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className="text-body font-medium text-muted-foreground">
                 {rescheduleTarget.patient_name} — currently {rescheduleTarget.date}{" "}
                 at {rescheduleTarget.time}
               </p>
@@ -1250,7 +1250,7 @@ function AppointmentsPageContent() {
               </div>
             </div>
             {rescheduleError && (
-              <p className="text-sm font-medium text-destructive">{rescheduleError}</p>
+              <p className="text-body font-medium text-destructive">{rescheduleError}</p>
             )}
           </div>
           <DialogFooter>
@@ -1282,7 +1282,7 @@ function AppointmentsPageContent() {
           </DialogHeader>
           <div className="grid gap-4 py-4">
             {vitalsTarget ? (
-              <p className="text-sm font-medium text-muted-foreground">
+              <p className="text-body font-medium text-muted-foreground">
                 For {vitalsTarget.patientName} — linked to this appointment.
               </p>
             ) : null}
@@ -1425,11 +1425,11 @@ function AppointmentsPageContent() {
                 }
               />
             </div>
-            <p className="text-xs font-medium text-muted-foreground">
+            <p className="text-caption font-medium text-muted-foreground">
               All fields are optional — enter at least one reading or a note.
             </p>
             {vitalsError ? (
-              <p className="text-sm font-medium text-destructive">{vitalsError}</p>
+              <p className="text-body font-medium text-destructive">{vitalsError}</p>
             ) : null}
           </div>
           <DialogFooter>
@@ -1454,7 +1454,7 @@ function AppointmentsPageContent() {
           <DialogHeader>
             <DialogTitle>Start consultation early?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             This appointment is for{" "}
             <span className="font-medium text-foreground">
               {earlyConsultTarget?.slotLabel ?? "the scheduled time"}
@@ -1485,7 +1485,7 @@ function AppointmentsPageContent() {
           <DialogHeader>
             <DialogTitle>Cancel appointment?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Cancel this appointment for{" "}
             <span className="font-medium text-foreground">
               {cancelTarget?.patientName ?? "the patient"}
@@ -1501,7 +1501,7 @@ function AppointmentsPageContent() {
             to the patient.
           </p>
           {actionError ? (
-            <p className="text-sm font-medium text-destructive">{actionError}</p>
+            <p className="text-body font-medium text-destructive">{actionError}</p>
           ) : null}
           <DialogFooter>
             <Button
@@ -1537,7 +1537,7 @@ function AppointmentsPageContent() {
           <DialogHeader>
             <DialogTitle>Retry refund?</DialogTitle>
           </DialogHeader>
-          <p className="text-sm text-muted-foreground">
+          <p className="text-body text-muted-foreground">
             Re-attempt the Razorpay refund of{" "}
             <span className="font-medium text-foreground">
               {formatAmount(retryRefundTarget?.amount)}
@@ -1555,7 +1555,7 @@ function AppointmentsPageContent() {
             . Use this after topping up Razorpay balance (common in test mode).
           </p>
           {actionError ? (
-            <p className="text-sm font-medium text-destructive">{actionError}</p>
+            <p className="text-body font-medium text-destructive">{actionError}</p>
           ) : null}
           <DialogFooter>
             <Button
@@ -1585,13 +1585,13 @@ function AppointmentsPageContent() {
             </DialogTitle>
           </DialogHeader>
           {deleteLoading ? (
-            <p className="text-sm text-muted-foreground">Checking linked records…</p>
+            <p className="text-body text-muted-foreground">Checking linked records…</p>
           ) : deleteImpact?.blocked ? (
-            <p className="text-sm text-destructive">
+            <p className="text-body text-destructive">
               {deleteImpact.blockReason}
             </p>
           ) : deleteStep === 1 ? (
-            <div className="space-y-3 text-sm text-muted-foreground">
+            <div className="space-y-3 text-body text-muted-foreground">
               <p>
                 Permanently delete the appointment for{" "}
                 <span className="font-medium text-foreground">
@@ -1623,13 +1623,13 @@ function AppointmentsPageContent() {
               </ul>
             </div>
           ) : (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-body text-muted-foreground">
               This cannot be undone. Linked invoices and scribe sessions will be
               permanently removed.
             </p>
           )}
           {actionError ? (
-            <p className="text-sm font-medium text-destructive">{actionError}</p>
+            <p className="text-body font-medium text-destructive">{actionError}</p>
           ) : null}
           <DialogFooter>
             <Button

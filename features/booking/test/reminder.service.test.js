@@ -486,6 +486,40 @@ test("runReminderSweep: cancels expired CONFIRMED without Scribe session as pati
   );
 });
 
+test("runReminderSweep: pay_at_clinic no-show cancels without calling Razorpay refund", async () => {
+  const noShow = buildAppointment({
+    id: "appt-pac-noshow",
+    slot_start: "2020-01-01T09:00:00.000Z",
+    slot_end: "2020-01-01T09:30:00.000Z",
+    payment_method: "pay_at_clinic",
+    payment_status: "pay_at_clinic",
+    payment_amount: 750,
+    razorpay_payment_id: null,
+    doctor_id: "doctor-1",
+  });
+  const { calls, clinicRepository, appointmentRepository, patientRepository } = createFakeRepos({
+    findExpiredConfirmedResult: [noShow],
+  });
+  const wa = createFakeWhatsAppClient();
+  const doctorNotifier = createFakeDoctorNotifier();
+  const razorpay = createFakeRazorpayClient();
+  const inApp = createFakeInAppNotificationService();
+  const scribe = createFakeScribeSessionRepo({ completedAppointmentIds: [] });
+  const service = new ReminderService(clinicRepository, appointmentRepository, patientRepository, wa, doctorNotifier, {
+    scribeSessionRepository: scribe,
+    razorpayClient: razorpay,
+    inAppNotificationService: inApp,
+  });
+
+  const summary = await service.runReminderSweep();
+
+  assert.equal(summary.cancelledNoShow, 1);
+  assert.equal(calls.cancelViaNoShow.length, 1);
+  assert.equal(razorpay.createRefundCalls.length, 0);
+  assert.equal(wa.sendTextCalls.length, 1);
+  assert.doesNotMatch(wa.sendTextCalls[0].body, /refunded/);
+});
+
 test("runReminderSweep: splits a mixed expired batch into completes and no-shows", async () => {
   const done = buildAppointment({ id: "appt-done", slot_end: "2020-01-01T00:00:00.000Z" });
   const missed = buildAppointment({

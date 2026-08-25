@@ -5,6 +5,7 @@ import {
   CONVERSATION_STATE,
   SLOT_SELECTION_STEP,
   OVERLAP_CONFIRM_INTENT,
+  PAYMENT_METHOD_INTENT,
   START_MENU_INTENT,
   HANDOFF_REASON,
   SLOT_SEARCH_DAYS_AHEAD,
@@ -115,10 +116,14 @@ function createFakeAppointmentRepo({
 } = {}) {
   const createCalls = [];
   const rescheduleCalls = [];
+  const confirmPayAtClinicCalls = [];
   let idCounter = 1;
+  /** @type {object|null} */
+  let lastCreated = null;
   return {
     createCalls,
     rescheduleCalls,
+    confirmPayAtClinicCalls,
     async findTakenSlotStarts() {
       return takenIsos;
     },
@@ -128,7 +133,26 @@ function createFakeAppointmentRepo({
     async createIfAvailable(data) {
       createCalls.push(data);
       if (createIfAvailableImpl) return createIfAvailableImpl(data, createCalls.length);
-      return { row: { id: `appt-${idCounter++}`, ...data }, conflict: null };
+      lastCreated = { id: `appt-${idCounter++}`, ...data };
+      return { row: lastCreated, conflict: null };
+    },
+    async findByIdForClinic(clinicId, appointmentId) {
+      if (lastCreated && lastCreated.id === appointmentId) return lastCreated;
+      return lastCreated ? { ...lastCreated, id: appointmentId, clinic_id: clinicId } : null;
+    },
+    async confirmPayAtClinic(clinicId, appointmentId) {
+      confirmPayAtClinicCalls.push({ clinicId, appointmentId });
+      if (!lastCreated) return null;
+      lastCreated = {
+        ...lastCreated,
+        id: appointmentId,
+        clinic_id: clinicId,
+        status: "confirmed",
+        payment_status: "pay_at_clinic",
+        payment_method: "pay_at_clinic",
+        hold_expires_at: null,
+      };
+      return lastCreated;
     },
     async rescheduleConfirmedSlot(clinicId, appointmentId, slotStart, slotEnd) {
       rescheduleCalls.push({ clinicId, appointmentId, slotStart, slotEnd });
@@ -528,7 +552,7 @@ test("AWAITING_SELECTION: choosing a free slot with no doctor fee books directly
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
 });
 
-test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to PAYMENT_PENDING with a real Razorpay link for the doctor's real fee", async () => {
+test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to PAYMENT_PENDING with Pay Online vs Pay at Clinic (no Razorpay yet)", async () => {
   const row = rowAwaitingSelection();
   const before = Date.now();
   const { service, repo, wa, appointmentRepo, razorpay } = makeService({ row, doctor: DOCTOR_PAID });
@@ -544,22 +568,92 @@ test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to 
   assert.equal(repo.row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
   assert.equal(appointmentRepo.createCalls[0].status, "payment_pending");
   assert.equal(appointmentRepo.createCalls[0].payment_status, "pending");
-  // Real per-doctor fee lookup — not a hardcoded placeholder.
+  assert.equal(appointmentRepo.createCalls[0].payment_method, "online");
   assert.equal(appointmentRepo.createCalls[0].payment_amount, DOCTOR_PAID.consultation_fee);
+  assert.equal(repo.row.context.awaitingPaymentMethodChoice, true);
+  assert.equal(razorpay.calls.length, 0, "Razorpay link must not be created until Pay Online is selected");
 
-  assert.equal(razorpay.calls.length, 1);
-  assert.equal(razorpay.calls[0].amountRupees, DOCTOR_PAID.consultation_fee);
-  assert.equal(razorpay.calls[0].referenceId, result.appointmentId);
-  assert.deepEqual(razorpay.calls[0].notes, { appointment_id: result.appointmentId, clinic_id: CLINIC.id });
-
-  assert.match(wa.calls[0].body, new RegExp(`₹${DOCTOR_PAID.consultation_fee}`));
-  assert.match(wa.calls[0].body, /rzp\.io\/i\/plink_1/);
-  assert.match(wa.calls[0].body, new RegExp(`${SLOT_HOLD_DURATION_MINUTES} minutes`));
+  assert.equal(wa.calls[0].type, "buttons");
+  assert.deepEqual(
+    wa.calls[0].opts.buttons.map((b) => b.id),
+    [PAYMENT_METHOD_INTENT.ONLINE, PAYMENT_METHOD_INTENT.AT_CLINIC],
+  );
+  assert.match(wa.calls[0].opts.bodyText, new RegExp(`₹${DOCTOR_PAID.consultation_fee}`));
+  assert.match(wa.calls[0].opts.bodyText, new RegExp(`${SLOT_HOLD_DURATION_MINUTES} minutes`));
+  assert.equal(wa.calls[0].opts.bodyText.includes("Buttons:"), false);
 
   const holdExpiresAt = new Date(appointmentRepo.createCalls[0].hold_expires_at).getTime();
   const expectedMinMs = before + SLOT_HOLD_DURATION_MINUTES * 60 * 1000;
   const expectedMaxMs = Date.now() + SLOT_HOLD_DURATION_MINUTES * 60 * 1000;
   assert.ok(holdExpiresAt >= expectedMinMs && holdExpiresAt <= expectedMaxMs, "hold_expires_at should be ~SLOT_HOLD_DURATION_MINUTES from now");
+});
+
+test("PAYMENT_PENDING: Pay Online creates a Razorpay link and sends the existing payment message", async () => {
+  const row = rowAwaitingSelection();
+  const { service, repo, wa, razorpay } = makeService({ row, doctor: DOCTOR_PAID });
+
+  await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
+    row: repo.row,
+  });
+  wa.calls.length = 0;
+
+  const result = await service.handlePaymentPendingReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.pay-online",
+      type: "button_reply",
+      replyId: PAYMENT_METHOD_INTENT.ONLINE,
+    }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "PAYMENT_LINK_SENT");
+  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(repo.row.context.awaitingPaymentMethodChoice, false);
+  assert.equal(razorpay.calls.length, 1);
+  assert.equal(razorpay.calls[0].amountRupees, DOCTOR_PAID.consultation_fee);
+  assert.equal(razorpay.calls[0].referenceId, result.appointmentId);
+  assert.deepEqual(razorpay.calls[0].notes, { appointment_id: result.appointmentId, clinic_id: CLINIC.id });
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, new RegExp(`₹${DOCTOR_PAID.consultation_fee}`));
+  assert.match(wa.calls[0].body, /rzp\.io\/i\/plink_1/);
+  assert.match(wa.calls[0].body, new RegExp(`${SLOT_HOLD_DURATION_MINUTES} minutes`));
+});
+
+test("PAYMENT_PENDING: Pay at Clinic confirms without Razorpay and does not say payment received", async () => {
+  const row = rowAwaitingSelection();
+  const { service, repo, wa, razorpay, appointmentRepo } = makeService({ row, doctor: DOCTOR_PAID });
+
+  await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
+    row: repo.row,
+  });
+  wa.calls.length = 0;
+
+  const result = await service.handlePaymentPendingReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.pay-clinic",
+      type: "button_reply",
+      replyId: PAYMENT_METHOD_INTENT.AT_CLINIC,
+    }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
+  assert.equal(result.currentState, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(razorpay.calls.length, 0);
+  assert.equal(appointmentRepo.confirmPayAtClinicCalls.length, 1);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /confirmed/i);
+  assert.match(wa.calls[0].body, /pay at the clinic/i);
+  assert.equal(/payment received/i.test(wa.calls[0].body), false);
+  assert.equal(wa.calls[0].body.includes("Buttons:"), false);
+  assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
 });
 
 test("AWAITING_SELECTION: a doctor with no consultation_fee configured hands off instead of silently defaulting an amount", async () => {

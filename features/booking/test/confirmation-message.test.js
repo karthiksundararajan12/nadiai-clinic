@@ -45,3 +45,9 @@ test("PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED plain-text fallback has no button c
 test("SLOT_SELECTION_COPY.CONFIRMED (fee-free path) has no button commentary", () => {
   assertNoMetaCommentary("SLOT_SELECTION CONFIRMED", SLOT_SELECTION_COPY.CONFIRMED);
 });
+
+test("SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED has no payment-received wording and no button commentary", () => {
+  assertNoMetaCommentary("PAY_AT_CLINIC_CONFIRMED", SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED);
+  assert.match(SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED, /pay at the clinic/i);
+  assert.equal(/payment received/i.test(SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED), false);
+});

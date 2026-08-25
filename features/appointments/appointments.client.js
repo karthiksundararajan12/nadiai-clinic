@@ -48,6 +48,24 @@ export async function cancelConfirmedAppointment(appointmentId) {
 }
 
 /**
+ * Records in-person payment for a confirmed pay-at-clinic appointment.
+ *
+ * @param {string} appointmentId
+ * @returns {Promise<object>} updated appointment
+ */
+export async function markPayAtClinicAsPaid(appointmentId) {
+  const response = await fetch(
+    `/api/appointments/${encodeURIComponent(appointmentId)}/mark-paid`,
+    { method: "POST" },
+  );
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload.error ?? "Failed to mark appointment as paid");
+  }
+  return payload.appointment;
+}
+
+/**
  * Retry a failed Razorpay refund for a cancelled appointment
  * (refund_status = failed).
  *

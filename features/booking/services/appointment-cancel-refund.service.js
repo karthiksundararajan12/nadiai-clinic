@@ -254,10 +254,22 @@ export class AppointmentCancelRefundService {
 
     const paymentId = appointment.razorpay_payment_id ?? null;
     const paymentStatus = String(appointment.payment_status ?? "").toLowerCase();
+    const paymentMethod = String(appointment.payment_method ?? "").toLowerCase();
+    const isPayAtClinic =
+      paymentMethod === "pay_at_clinic" || paymentStatus === "pay_at_clinic";
     const hasCapturedPayment =
-      Boolean(paymentId) && CAPTURED_PAYMENT_STATUSES.includes(paymentStatus);
+      !isPayAtClinic &&
+      Boolean(paymentId) &&
+      CAPTURED_PAYMENT_STATUSES.includes(paymentStatus);
 
     if (!hasCapturedPayment) {
+      if (isPayAtClinic) {
+        log.info("Skipping Razorpay refund — pay-at-clinic appointment was never charged online", {
+          appointmentId: appointment.id,
+          paymentMethod: appointment.payment_method ?? null,
+          paymentStatus: appointment.payment_status ?? null,
+        });
+      }
       try {
         await this._appointmentRepo.updateRefundFields(clinicId, appointment.id, {
           refundStatus: REFUND_STATUS.NOT_APPLICABLE,

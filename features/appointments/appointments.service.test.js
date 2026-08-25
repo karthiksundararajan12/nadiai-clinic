@@ -32,6 +32,7 @@ function createService({
   cancelResult,
   rescheduleResult,
   findByIdResult,
+  markPaidResult,
 } = {}) {
   const calls = {
     list: [],
@@ -41,6 +42,7 @@ function createService({
     reschedule: [],
     findById: [],
     findAllForClinic: [],
+    markPaid: [],
   };
   const appointmentRepository = {
     async findForClinic(clinicId, filters) {
@@ -76,6 +78,18 @@ function createService({
     async rescheduleFromDashboard(clinicId, appointmentId, slotStart, slotEnd) {
       calls.reschedule.push({ clinicId, appointmentId, slotStart, slotEnd });
       return rescheduleResult ?? { row: { id: appointmentId }, conflict: null };
+    },
+    async markPayAtClinicAsPaid(clinicId, appointmentId, markedBy) {
+      calls.markPaid.push({ clinicId, appointmentId, markedBy });
+      if (markPaidResult === undefined) {
+        return {
+          id: appointmentId,
+          payment_status: "paid",
+          payment_method: "pay_at_clinic",
+          marked_by: markedBy,
+        };
+      }
+      return markPaidResult;
     },
   };
   const patientRepository = {
@@ -238,6 +252,27 @@ test("surfaces slot conflicts and non-cancellable states", async () => {
   const notCancellable = createService({ cancelResult: null });
   await assert.rejects(
     () => notCancellable.service.cancel("clinic-1", "appointment-1"),
+    (error) =>
+      error instanceof AppointmentRequestError && error.statusCode === 409,
+  );
+});
+
+test("markPayAtClinicAsPaid records paid via the repository with actor id", async () => {
+  const { service, calls } = createService();
+  const result = await service.markPayAtClinicAsPaid("clinic-1", "appt-1", "user-1");
+  assert.deepEqual(calls.markPaid[0], {
+    clinicId: "clinic-1",
+    appointmentId: "appt-1",
+    markedBy: "user-1",
+  });
+  assert.equal(result.payment_status, "paid");
+  assert.equal(result.marked_by, "user-1");
+});
+
+test("markPayAtClinicAsPaid returns 409 when the appointment is not pay_at_clinic", async () => {
+  const { service } = createService({ markPaidResult: null });
+  await assert.rejects(
+    () => service.markPayAtClinicAsPaid("clinic-1", "appt-1", "user-1"),
     (error) =>
       error instanceof AppointmentRequestError && error.statusCode === 409,
   );

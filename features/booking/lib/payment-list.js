@@ -19,6 +19,7 @@ export const PAYMENT_STATUS_LABEL = Object.freeze({
   failed: "Failed",
   refunded: "Refunded",
   pending: "Pending",
+  pay_at_clinic: "Pay at clinic",
 });
 
 /**

@@ -135,6 +135,10 @@ function createFakeSlotSelectionService() {
       calls.push({ method: "handleReply", contactPhone: message.contactPhone });
       return { handled: true, action: "SLOT_SELECTION_REPLY", currentState: row.current_state };
     },
+    async handlePaymentPendingReply({ message, row }) {
+      calls.push({ method: "handlePaymentPendingReply", contactPhone: message.contactPhone });
+      return { handled: true, action: "PAYMENT_PENDING_REPLY", currentState: row.current_state };
+    },
     async enterRescheduleFlow({ message, appointment }) {
       calls.push({
         method: "enterRescheduleFlow",
@@ -1017,6 +1021,35 @@ test("inbound message while SLOT_SELECTION dispatches to SlotSelectionService.ha
   assert.equal(slotSvc.calls[0].method, "handleReply");
 });
 
+test("inbound message while PAYMENT_PENDING dispatches to SlotSelectionService.handlePaymentPendingReply", async () => {
+  const repo = createFakeConversationRepo();
+  const wa = createFakeWhatsAppClient();
+  const slotSvc = createFakeSlotSelectionService();
+  const service = new ConversationStateService(
+    repo, wa, createDoctorNotifier(createFakeDoctorProfileRepo(), wa),
+    createFakePatientCollectionService(), slotSvc,
+  );
+
+  repo.rows.set("clinic-1:919876543210", {
+    id: "row-1",
+    clinic_id: "clinic-1",
+    contact_phone: "919876543210",
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: { last_wa_message_id: "wamid.0", awaitingPaymentMethodChoice: true },
+    retry_count: 0,
+    last_message_at: new Date().toISOString(),
+  });
+
+  const result = await service.processInboundMessage({
+    clinic: CLINIC,
+    message: buildMessage({ waMessageId: "wamid.1", type: "button_reply", replyId: "booking_pay_at_clinic" }),
+  });
+
+  assert.equal(result.action, "PAYMENT_PENDING_REPLY");
+  assert.equal(slotSvc.calls.length, 1);
+  assert.equal(slotSvc.calls[0].method, "handlePaymentPendingReply");
+});
+
 test("a message for a state with no handler yet is safely no-op'd", async () => {
   const repo = createFakeConversationRepo();
   const wa = createFakeWhatsAppClient();
@@ -1029,7 +1062,7 @@ test("a message for a state with no handler yet is safely no-op'd", async () => 
     id: "row-1",
     clinic_id: "clinic-1",
     contact_phone: "919876543210",
-    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    current_state: CONVERSATION_STATE.HUMAN_HANDOFF,
     context: {},
     retry_count: 0,
     last_message_at: new Date().toISOString(),

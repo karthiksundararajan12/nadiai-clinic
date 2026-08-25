@@ -194,6 +194,37 @@ test("cancelFromDoctorDashboard: unpaid appointment uses cancellation-only ack",
   assert.match(wa.sendTextCalls[0].body, new RegExp(REMINDER_COPY.CANCEL_ACK.slice(0, 20)));
 });
 
+test("cancelFromDoctorDashboard: pay_at_clinic skips Razorpay refund even after marked paid", async () => {
+  const appointmentRepo = createFakeAppointmentRepo({
+    cancelViaDoctorDashboardImpl: async () =>
+      buildAppointment({
+        payment_method: "pay_at_clinic",
+        payment_status: "paid",
+        razorpay_payment_id: null,
+        payment_amount: 750,
+      }),
+  });
+  const razorpay = createFakeRazorpay();
+  const wa = createFakeWhatsApp();
+  const inApp = createFakeInApp();
+  const service = new AppointmentCancelRefundService(appointmentRepo, {
+    razorpayClient: razorpay,
+    whatsappClient: wa,
+    inAppNotificationService: inApp,
+  });
+
+  const result = await service.cancelFromDoctorDashboard({
+    clinic: CLINIC,
+    appointmentId: "appt-1",
+  });
+
+  assert.equal(razorpay.createRefundCalls.length, 0);
+  assert.equal(result.refund_status, REFUND_STATUS.NOT_APPLICABLE);
+  assert.equal(wa.sendTextCalls.length, 1);
+  assert.ok(!wa.sendTextCalls[0].body.includes("refund of"));
+  assert.equal(inApp.createAppointmentCancelledCalls.length, 1);
+});
+
 test("cancelFromDoctorDashboard: Razorpay failure still cancels and skips refund ack wording", async () => {
   const appointmentRepo = createFakeAppointmentRepo();
   const razorpay = createFakeRazorpay({

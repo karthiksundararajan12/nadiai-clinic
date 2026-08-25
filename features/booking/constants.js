@@ -384,6 +384,35 @@ export const OVERLAP_CONFIRM_INTENT = Object.freeze({
   NO:  "booking_overlap_confirm_no",
 });
 
+/** Interactive button ids for PAYMENT_PENDING "Pay Online" vs "Pay at Clinic". */
+export const PAYMENT_METHOD_INTENT = Object.freeze({
+  ONLINE:    "booking_pay_online",
+  AT_CLINIC: "booking_pay_at_clinic",
+});
+
+/**
+ * appointments.payment_method — how the consultation fee is collected.
+ * @enum {string}
+ */
+export const PAYMENT_METHOD = Object.freeze({
+  ONLINE:        "online",
+  PAY_AT_CLINIC: "pay_at_clinic",
+});
+
+/**
+ * appointments.payment_status values written by the booking bot / dashboard.
+ * (`captured` is accepted as a Razorpay alias of `paid` — see CAPTURED_PAYMENT_STATUSES.)
+ * @enum {string}
+ */
+export const PAYMENT_STATUS = Object.freeze({
+  PENDING:       "pending",
+  PAID:          "paid",
+  FAILED:        "failed",
+  REFUNDED:      "refunded",
+  NOT_REQUIRED:  "not_required",
+  PAY_AT_CLINIC: "pay_at_clinic",
+});
+
 /**
  * No per-clinic timezone config exists yet (ARCHITECTURE.md open decision
  * #1) — every clinic is assumed to operate on India Standard Time, a fixed
@@ -443,9 +472,24 @@ export const SLOT_SELECTION_COPY = Object.freeze({
   GENERIC_HANDOFF:
     "Something went wrong on our end — connecting you with our clinic staff to help directly.",
   /**
+   * Shown after a paid slot is held, before a Razorpay link is created.
+   * Patient chooses Pay Online vs Pay at Clinic.
+   */
+  PAYMENT_METHOD_PROMPT:
+    "Your slot on {slotLabel} is reserved for {patientName}. " +
+    "How would you like to pay ₹{amount}?\n" +
+    "This reservation expires in {holdMinutes} minutes.",
+  PAYMENT_METHOD_ONLINE_LABEL: "Pay Online",
+  PAYMENT_METHOD_AT_CLINIC_LABEL: "Pay at Clinic",
+  PAYMENT_METHOD_REPROMPT: "Sorry, please choose one of the two options above.",
+  PAYMENT_METHOD_HOLD_EXPIRED:
+    "This reservation has expired, so the slot was released. " +
+    "Send us any message whenever you'd like to book again.",
+  /**
    * {paymentLink} is a real, payable Razorpay Payment Link (Session 4 —
    * see RazorpayClientService). {amount} is the doctor's real
    * consultation_fee (see lib/consultation-fee.js), not a placeholder.
+   * Sent only after the patient chooses Pay Online.
    */
   PAYMENT_PENDING_MESSAGE:
     "Your slot on {slotLabel} is reserved for {patientName}. " +
@@ -453,6 +497,13 @@ export const SLOT_SELECTION_COPY = Object.freeze({
     "This reservation expires in {holdMinutes} minutes if payment isn't completed.",
   CONFIRMED:
     "You're confirmed! {patientName} is booked with {clinicName} on {slotLabel}. See you then!",
+  /**
+   * Pay-at-clinic confirmation — must not say payment was received.
+   * Placeholders: {patientName}, {clinicName}, {slotLabel}.
+   */
+  PAY_AT_CLINIC_CONFIRMED:
+    "You're confirmed! {patientName} is booked with {clinicName} on {slotLabel}. " +
+    "Please pay at the clinic during your visit. See you then!",
 });
 
 /**

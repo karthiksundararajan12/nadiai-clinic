@@ -17,11 +17,7 @@
  *     appointments row when context.appointmentId is PAYMENT_PENDING or
  *     CONFIRMED (incl. post-reminder), then resets conversation_state.
  *     Without a cancellable appointment it falls back to the reset path.
- *   - Post-booking fallback for CONFIRMED (and legacy/stray REMINDER_SENT
- *     current_state strings): unrecognized inbound gets a plain-text
- *     confirmation reminder with the appointment date/time — not a silent
- *     no-op.
- * Doctor HUMAN_HANDOFF notifications are shared across every state via
+ * START behavior:
  * DoctorNotificationService (see that file) rather than owned here, since
  * SLOT_SELECTION can also trigger a handoff (no doctor configured / no open
  * slots).
@@ -164,6 +160,10 @@ export class ConversationStateService {
 
     if (row.current_state === CONVERSATION_STATE.SLOT_SELECTION) {
       return this._slotSvc.handleReply({ clinic, message, row, log });
+    }
+
+    if (row.current_state === CONVERSATION_STATE.PAYMENT_PENDING) {
+      return this._slotSvc.handlePaymentPendingReply({ clinic, message, row, log });
     }
 
     if (CONFIRMED_INBOUND_FALLBACK_STATES.includes(row.current_state)) {

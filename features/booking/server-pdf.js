@@ -45,6 +45,9 @@ export function attachInvoicePdf(services) {
   );
   services.invoiceService = invoiceService;
   services.paymentWebhookService.attachInvoiceService(invoiceService);
+  if (typeof services.slotSelectionService?.attachInvoiceService === "function") {
+    services.slotSelectionService.attachInvoiceService(invoiceService);
+  }
   return services;
 }
 

@@ -70,8 +70,13 @@ export class InvoiceService {
    *     slot_start: string;
    *     payment_amount?: number|string|null;
    *     razorpay_payment_id?: string|null;
+   *     payment_method?: string|null;
+   *     payment_status?: string|null;
+   *     paid_at?: string|null;
    *   };
-   *   razorpayPaymentId: string;
+   *   razorpayPaymentId?: string|null;
+   *   forceRegenerate?: boolean;
+   *   sendWhatsApp?: boolean;
    * }} params
    * @returns {Promise<{
    *   invoiceNumber: string;
@@ -80,7 +85,13 @@ export class InvoiceService {
    *   reused: boolean;
    * }|null>}
    */
-  async deliverForConfirmedAppointment({ clinicId, appointment, razorpayPaymentId }) {
+  async deliverForConfirmedAppointment({
+    clinicId,
+    appointment,
+    razorpayPaymentId = null,
+    forceRegenerate = false,
+    sendWhatsApp = true,
+  }) {
     const log = this._log.child({
       clinicId,
       appointmentId: appointment.id,
@@ -99,7 +110,7 @@ export class InvoiceService {
     let pdfUrl;
     let reused = false;
 
-    if (existing) {
+    if (existing && !forceRegenerate) {
       reused = true;
       invoiceNumber = existing.invoice_number;
       storagePath = existing.storage_path;
@@ -109,13 +120,15 @@ export class InvoiceService {
         storagePath,
       });
     } else {
-      const allocated = await this._invoiceRepo.allocateNextNumber(clinicId);
+      const allocated = existing
+        ? { invoiceNumber: existing.invoice_number, invoiceSeq: existing.invoice_seq }
+        : await this._invoiceRepo.allocateNextNumber(clinicId);
       invoiceNumber = allocated.invoiceNumber;
 
       const pdfBytes = await this._buildPdfBytes({
         clinic,
         appointment,
-        razorpayPaymentId,
+        razorpayPaymentId: razorpayPaymentId ?? appointment.razorpay_payment_id ?? "",
         invoiceNumber,
       });
 
@@ -132,40 +145,45 @@ export class InvoiceService {
           ? null
           : Number(appointment.payment_amount);
 
-      await this._invoiceRepo.insert({
-        clinicId,
-        appointmentId: appointment.id,
-        invoiceNumber,
-        invoiceSeq: allocated.invoiceSeq,
-        razorpayPaymentId,
-        storagePath,
-        amount: amount != null && Number.isFinite(amount) ? amount : null,
-      });
+      if (!existing) {
+        await this._invoiceRepo.insert({
+          clinicId,
+          appointmentId: appointment.id,
+          invoiceNumber,
+          invoiceSeq: allocated.invoiceSeq,
+          razorpayPaymentId,
+          storagePath,
+          amount: amount != null && Number.isFinite(amount) ? amount : null,
+        });
+      }
 
-      log.info("Generated and stored consultation invoice PDF", {
+      log.info(existing ? "Regenerated consultation invoice PDF" : "Generated and stored consultation invoice PDF", {
         invoiceNumber,
         storagePath,
+        forceRegenerate,
       });
     }
 
-    if (clinic.whatsapp_phone_number_id && appointment.contact_phone) {
-      const bodyParams = [formatSlotLabel(new Date(appointment.slot_start))];
-      await this._sendInvoiceDocument(
-        clinic.whatsapp_phone_number_id,
-        appointment.contact_phone,
-        pdfUrl,
-        {
-          whatsappClient: this._wa,
-          bodyParams,
-          filename: `${invoiceNumber}.pdf`,
-          templatesLive: this._templatesLive,
-        },
-      );
-    } else {
-      log.warn("Skipping invoice WhatsApp send — missing phone_number_id or contact phone", {
-        hasPhoneNumberId: Boolean(clinic.whatsapp_phone_number_id),
-        hasContactPhone: Boolean(appointment.contact_phone),
-      });
+    if (sendWhatsApp) {
+      if (clinic.whatsapp_phone_number_id && appointment.contact_phone) {
+        const bodyParams = [formatSlotLabel(new Date(appointment.slot_start))];
+        await this._sendInvoiceDocument(
+          clinic.whatsapp_phone_number_id,
+          appointment.contact_phone,
+          pdfUrl,
+          {
+            whatsappClient: this._wa,
+            bodyParams,
+            filename: `${invoiceNumber}.pdf`,
+            templatesLive: this._templatesLive,
+          },
+        );
+      } else {
+        log.warn("Skipping invoice WhatsApp send — missing phone_number_id or contact phone", {
+          hasPhoneNumberId: Boolean(clinic.whatsapp_phone_number_id),
+          hasContactPhone: Boolean(appointment.contact_phone),
+        });
+      }
     }
 
     return { invoiceNumber, storagePath, pdfUrl, reused };
@@ -192,6 +210,9 @@ export class InvoiceService {
       consultationAmount: appointment.payment_amount,
       razorpayPaymentId,
       invoiceNumber,
+      paymentMethod: appointment.payment_method ?? null,
+      paymentStatus: appointment.payment_status ?? null,
+      paidAt: appointment.paid_at ?? null,
     });
   }
 }

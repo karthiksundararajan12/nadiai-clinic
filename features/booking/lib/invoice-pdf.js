@@ -106,6 +106,9 @@ function formatAmounts(amountRaw) {
  *   razorpayPaymentId: string;
  *   invoiceNumber: string;
  *   invoiceDate?: string|Date|null;
+ *   paymentMethod?: string|null;
+ *   paymentStatus?: string|null;
+ *   paidAt?: string|Date|null;
  * }} fields
  */
 export function buildInvoiceDisplayFields(fields) {
@@ -122,6 +125,7 @@ export function buildInvoiceDisplayFields(fields) {
 
   const amounts = formatAmounts(fields.consultationAmount);
   const doctorName = fields.doctorName?.trim() || "NA";
+  const paymentDisplay = resolvePayAtClinicPaymentDisplay(fields);
 
   return {
     title: "INVOICE",
@@ -146,14 +150,65 @@ export function buildInvoiceDisplayFields(fields) {
       doctorName === "NA"
         ? "Consultation"
         : `Consultation with ${doctorName}`,
-    razorpayPaymentId: fields.razorpayPaymentId?.trim() || "NA",
-    paymentMethod: "Paid via Razorpay",
+    razorpayPaymentId: paymentDisplay.razorpayPaymentId,
+    paymentIdLine: paymentDisplay.paymentIdLine,
+    paymentMethod: paymentDisplay.paymentMethod,
+    paidOnLine: paymentDisplay.paidOnLine,
     // GST not configured per clinic yet — leave blank/NA, never invent a GSTIN.
     gstin: "NA",
     cgst: "NA",
     sgst: "NA",
     gstNote: "GST: NA",
     thankYou: "Thank you for choosing us. We look forward to seeing you.",
+  };
+}
+
+/**
+ * @param {{
+ *   paymentMethod?: string|null;
+ *   paymentStatus?: string|null;
+ *   paidAt?: string|Date|null;
+ *   razorpayPaymentId?: string|null;
+ * }} fields
+ */
+function resolvePayAtClinicPaymentDisplay(fields) {
+  const method = String(fields.paymentMethod ?? "").toLowerCase();
+  const status = String(fields.paymentStatus ?? "").toLowerCase();
+  const isPayAtClinic = method === "pay_at_clinic" || status === "pay_at_clinic";
+
+  if (!isPayAtClinic) {
+    const razorpayPaymentId = fields.razorpayPaymentId?.trim() || "NA";
+    return {
+      razorpayPaymentId,
+      paymentIdLine: `Payment ID: ${razorpayPaymentId}`,
+      paymentMethod: "Paid via Razorpay",
+      paidOnLine: null,
+    };
+  }
+
+  if (status === "paid") {
+    const paidAtRaw = fields.paidAt
+      ? fields.paidAt instanceof Date
+        ? fields.paidAt
+        : new Date(fields.paidAt)
+      : null;
+    const paidOnLine =
+      paidAtRaw && !Number.isNaN(paidAtRaw.getTime())
+        ? `Paid on: ${formatInvoiceDate(paidAtRaw)}`
+        : null;
+    return {
+      razorpayPaymentId: "NA",
+      paymentIdLine: null,
+      paymentMethod: "Paid at Clinic",
+      paidOnLine,
+    };
+  }
+
+  return {
+    razorpayPaymentId: "NA",
+    paymentIdLine: null,
+    paymentMethod: "Payment: Pay at Clinic",
+    paidOnLine: null,
   };
 }
 
@@ -506,14 +561,16 @@ export async function generateInvoicePdf(fields) {
     color: ACCENT,
   });
   y -= 14;
-  page.drawText(`Payment ID: ${display.razorpayPaymentId}`, {
-    x: MARGIN,
-    y,
-    size: 9,
-    font,
-    color: TEXT,
-  });
-  y -= 12;
+  if (display.paymentIdLine) {
+    page.drawText(display.paymentIdLine, {
+      x: MARGIN,
+      y,
+      size: 9,
+      font,
+      color: TEXT,
+    });
+    y -= 12;
+  }
   page.drawText(display.paymentMethod, {
     x: MARGIN,
     y,
@@ -522,6 +579,16 @@ export async function generateInvoicePdf(fields) {
     color: TEXT,
   });
   y -= 12;
+  if (display.paidOnLine) {
+    page.drawText(display.paidOnLine, {
+      x: MARGIN,
+      y,
+      size: 9,
+      font,
+      color: TEXT,
+    });
+    y -= 12;
+  }
   page.drawText(display.gstNote, {
     x: MARGIN,
     y,

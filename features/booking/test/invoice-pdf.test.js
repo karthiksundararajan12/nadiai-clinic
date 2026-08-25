@@ -50,6 +50,8 @@ test("buildInvoiceDisplayFields: maps all required invoice fields and leaves GST
   assert.equal(display.lineItemDescription, "Consultation with Dr. Rao");
   assert.equal(display.razorpayPaymentId, "pay_ABC123");
   assert.equal(display.paymentMethod, "Paid via Razorpay");
+  assert.equal(display.paymentIdLine, "Payment ID: pay_ABC123");
+  assert.equal(display.paidOnLine, null);
   assert.equal(display.gstin, "NA");
   assert.equal(display.cgst, "NA");
   assert.equal(display.sgst, "NA");
@@ -69,6 +71,32 @@ test("buildInvoiceDisplayFields: does not invent a GSTIN when address/amount mis
   assert.equal(display.gstin, "NA");
   assert.equal(display.gstNote, "GST: NA");
   assert.equal(display.gstin.includes("29"), false);
+});
+
+test("buildInvoiceDisplayFields: unpaid pay-at-clinic shows Payment: Pay at Clinic and no Razorpay id", () => {
+  const display = buildInvoiceDisplayFields({
+    ...BASE_FIELDS,
+    razorpayPaymentId: "",
+    paymentMethod: "pay_at_clinic",
+    paymentStatus: "pay_at_clinic",
+  });
+  assert.equal(display.paymentMethod, "Payment: Pay at Clinic");
+  assert.equal(display.paymentIdLine, null);
+  assert.equal(display.razorpayPaymentId, "NA");
+  assert.equal(display.paidOnLine, null);
+});
+
+test("buildInvoiceDisplayFields: paid pay-at-clinic shows Paid at Clinic with paid_at date", () => {
+  const display = buildInvoiceDisplayFields({
+    ...BASE_FIELDS,
+    razorpayPaymentId: "",
+    paymentMethod: "pay_at_clinic",
+    paymentStatus: "paid",
+    paidAt: "2026-08-25T04:30:00.000Z",
+  });
+  assert.equal(display.paymentMethod, "Paid at Clinic");
+  assert.equal(display.paymentIdLine, null);
+  assert.equal(display.paidOnLine, "Paid on: 25 Aug 2026");
 });
 
 test("generateInvoicePdf: produces a valid PDF loadable by pdf-lib", async () => {

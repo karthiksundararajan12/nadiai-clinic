@@ -134,6 +134,55 @@ test("InvoiceService.deliverForConfirmedAppointment: generates PDF, uploads, rec
   assert.equal(sendCalls[0].opts.templatesLive, true);
 });
 
+test("InvoiceService.deliverForConfirmedAppointment: forceRegenerate overwrites PDF without allocating a new number", async () => {
+  const { service, allocateCalls, insertCalls, uploadCalls, sendCalls } = makeDeps({
+    existingInvoice: {
+      invoice_number: "INV-000003",
+      invoice_seq: 3,
+      storage_path: "invoices/clinic-1/appt-1.pdf",
+      razorpay_payment_id: null,
+    },
+  });
+
+  const result = await service.deliverForConfirmedAppointment({
+    clinicId: "clinic-1",
+    appointment: {
+      ...APPOINTMENT,
+      payment_method: "pay_at_clinic",
+      payment_status: "paid",
+      paid_at: "2026-08-25T04:30:00.000Z",
+    },
+    razorpayPaymentId: null,
+    forceRegenerate: true,
+    sendWhatsApp: true,
+  });
+
+  assert.equal(result.reused, false);
+  assert.equal(result.invoiceNumber, "INV-000003");
+  assert.equal(allocateCalls.length, 0);
+  assert.equal(insertCalls.length, 0);
+  assert.equal(uploadCalls.length, 1);
+  assert.equal(sendCalls.length, 1);
+});
+
+test("InvoiceService.deliverForConfirmedAppointment: sendWhatsApp false skips Meta send", async () => {
+  const { service, sendCalls, insertCalls } = makeDeps();
+
+  await service.deliverForConfirmedAppointment({
+    clinicId: "clinic-1",
+    appointment: {
+      ...APPOINTMENT,
+      payment_method: "pay_at_clinic",
+      payment_status: "pay_at_clinic",
+    },
+    razorpayPaymentId: null,
+    sendWhatsApp: false,
+  });
+
+  assert.equal(insertCalls.length, 1);
+  assert.equal(sendCalls.length, 0);
+});
+
 test("InvoiceService.deliverForConfirmedAppointment: reuses existing invoice without allocating a new number", async () => {
   const { service, allocateCalls, insertCalls, sendCalls } = makeDeps({
     existingInvoice: {

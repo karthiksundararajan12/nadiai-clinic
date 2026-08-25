@@ -38,10 +38,11 @@
  *                                  HANDOFF_REASON.MISSING_CONSULTATION_FEE)
  *          prepayment required -> PAYMENT_PENDING, stamp
  *                                  hold_expires_at = now() + SLOT_HOLD_DURATION_MINUTES,
- *                                  create a real Razorpay Payment Link
- *                                  (RazorpayClientService) for the doctor's
- *                                  actual fee — see PaymentWebhookService
- *                                  for the webhook that confirms it
+ *                                  prompt Pay Online vs Pay at Clinic.
+ *                                  Pay Online creates a Razorpay Payment Link
+ *                                  (RazorpayClientService) — see PaymentWebhookService.
+ *                                  Pay at Clinic confirms immediately with
+ *                                  payment_status/payment_method = pay_at_clinic.
  *          else                -> CONFIRMED directly
  *
  * PAYMENT_PENDING holds: a slot with a still-active hold is excluded from
@@ -63,6 +64,9 @@ import {
   SHARED_BOOKING_COPY,
   START_MENU_INTENT,
   OVERLAP_CONFIRM_INTENT,
+  PAYMENT_METHOD_INTENT,
+  PAYMENT_METHOD,
+  PAYMENT_STATUS,
   APPOINTMENT_STATUS,
   HANDOFF_REASON,
   SLOT_SEARCH_DAYS_AHEAD,
@@ -98,7 +102,10 @@ export class SlotSelectionService {
    * @param {import("./whatsapp-client.service.js").WhatsAppClientService} whatsappClient
    * @param {import("./doctor-notification.service.js").DoctorNotificationService} doctorNotificationService
    * @param {import("./razorpay-client.service.js").RazorpayClientService} razorpayClient
-   * @param {{ inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null }} [opts]
+   * @param {{
+   *   inAppNotificationService?: import("./in-app-notification.service.js").InAppNotificationService|null;
+   *   invoiceService?: import("./invoice.service.js").InvoiceService|null;
+   * }} [opts]
    */
   constructor(
     conversationRepo,
@@ -107,7 +114,7 @@ export class SlotSelectionService {
     whatsappClient,
     doctorNotificationService,
     razorpayClient,
-    { inAppNotificationService = null } = {},
+    { inAppNotificationService = null, invoiceService = null } = {},
   ) {
     this._repo            = conversationRepo;
     this._appointmentRepo = appointmentRepo;
@@ -116,7 +123,18 @@ export class SlotSelectionService {
     this._doctorNotifier  = doctorNotificationService;
     this._razorpay        = razorpayClient;
     this._inAppNotificationService = inAppNotificationService;
+    this._invoiceService  = invoiceService;
     this._log             = createLogger({ component: "SlotSelectionService" });
+  }
+
+  /**
+   * Late-bind invoice PDF generation so the WhatsApp webhook can construct
+   * createBookingServices without pulling invoice-pdf.js / font assets.
+   *
+   * @param {import("./invoice.service.js").InvoiceService} invoiceService
+   */
+  attachInvoiceService(invoiceService) {
+    this._invoiceService = invoiceService;
   }
 
   /**
@@ -583,7 +601,8 @@ export class SlotSelectionService {
       slot_end: slot.slotEnd,
       status: initialStatus,
       wa_message_id: message.waMessageId,
-      payment_status: requiresPrepayment ? "pending" : "not_required",
+      payment_status: requiresPrepayment ? PAYMENT_STATUS.PENDING : PAYMENT_STATUS.NOT_REQUIRED,
+      payment_method: PAYMENT_METHOD.ONLINE,
       payment_amount: requiresPrepayment ? fee.feeRupees : null,
       hold_expires_at: holdExpiresAt,
     });
@@ -710,6 +729,159 @@ export class SlotSelectionService {
   async _transitionToPaymentPending({ clinic, message, row, appointment, feeRupees, log }) {
     assertValidConversationTransition(row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
 
+    const updated = await this._repo.update(row.id, {
+      current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+      retry_count: 0,
+      context: this._touch(row.context, message.waMessageId, {
+        appointmentId: appointment.id,
+        feeRupees,
+        awaitingPaymentMethodChoice: true,
+        paymentLinkId: null,
+      }),
+      last_message_at: new Date().toISOString(),
+    });
+
+    await this._sendPaymentMethodChoice({
+      clinic,
+      contactPhone: message.contactPhone,
+      appointment,
+      patientName: row.context?.selectedPatientName ?? "the patient",
+      feeRupees,
+    });
+
+    log.info("Booked slot, transitioned SLOT_SELECTION -> PAYMENT_PENDING; awaiting Pay Online vs Pay at Clinic", {
+      contactPhone: message.contactPhone,
+      appointmentId: appointment.id,
+    });
+    return {
+      handled: true,
+      action: "TRANSITIONED_TO_PAYMENT_PENDING",
+      currentState: updated.current_state,
+      appointmentId: appointment.id,
+    };
+  }
+
+  /**
+   * PAYMENT_PENDING inbound: Pay Online (Razorpay link) vs Pay at Clinic
+   * (confirm without charging). Reset/cancel confirmation is intercepted
+   * earlier in ConversationStateService.
+   */
+  async handlePaymentPendingReply({ clinic, message, row, log = this._log }) {
+    if (!row.context?.awaitingPaymentMethodChoice) {
+      log.info("PAYMENT_PENDING inbound with no payment-method choice pending — no-op", {
+        contactPhone: message.contactPhone,
+        appointmentId: row.context?.appointmentId ?? null,
+      });
+      await this._repo.update(row.id, {
+        context: this._touch(row.context, message.waMessageId),
+        last_message_at: new Date().toISOString(),
+      });
+      return {
+        handled: true,
+        action: "PAYMENT_PENDING_NOOP",
+        currentState: CONVERSATION_STATE.PAYMENT_PENDING,
+      };
+    }
+
+    const replyId = message.type === "button_reply" ? message.replyId : null;
+    if (replyId !== PAYMENT_METHOD_INTENT.ONLINE && replyId !== PAYMENT_METHOD_INTENT.AT_CLINIC) {
+      await this._repo.update(row.id, {
+        context: this._touch(row.context, message.waMessageId),
+        last_message_at: new Date().toISOString(),
+      });
+      await this._wa.sendInteractiveButtons(clinic.whatsapp_phone_number_id, message.contactPhone, {
+        bodyText: SLOT_SELECTION_COPY.PAYMENT_METHOD_REPROMPT,
+        buttons: this._paymentMethodButtons(),
+      });
+      return {
+        handled: true,
+        action: "PAYMENT_METHOD_REPROMPTED",
+        currentState: CONVERSATION_STATE.PAYMENT_PENDING,
+      };
+    }
+
+    const appointmentId = row.context?.appointmentId ?? null;
+    const held = appointmentId
+      ? await this._loadActivePaymentPendingHold(clinic.id, appointmentId)
+      : null;
+    if (!held) {
+      return this._expirePaymentPendingHold({ clinic, message, row, log });
+    }
+
+    if (replyId === PAYMENT_METHOD_INTENT.ONLINE) {
+      return this._sendRazorpayPaymentLink({
+        clinic,
+        message,
+        row,
+        appointment: held,
+        feeRupees: row.context?.feeRupees ?? held.payment_amount,
+        log,
+      });
+    }
+
+    return this._confirmPayAtClinic({ clinic, message, row, appointment: held, log });
+  }
+
+  _paymentMethodButtons() {
+    return [
+      { id: PAYMENT_METHOD_INTENT.ONLINE, title: SLOT_SELECTION_COPY.PAYMENT_METHOD_ONLINE_LABEL },
+      { id: PAYMENT_METHOD_INTENT.AT_CLINIC, title: SLOT_SELECTION_COPY.PAYMENT_METHOD_AT_CLINIC_LABEL },
+    ];
+  }
+
+  async _sendPaymentMethodChoice({ clinic, contactPhone, appointment, patientName, feeRupees }) {
+    const bodyText = SLOT_SELECTION_COPY.PAYMENT_METHOD_PROMPT
+      .replace("{slotLabel}", formatSlotLabel(new Date(appointment.slot_start)))
+      .replace("{patientName}", patientName)
+      .replace("{amount}", String(feeRupees))
+      .replace("{holdMinutes}", String(SLOT_HOLD_DURATION_MINUTES));
+    await this._wa.sendInteractiveButtons(clinic.whatsapp_phone_number_id, contactPhone, {
+      bodyText,
+      buttons: this._paymentMethodButtons(),
+    });
+  }
+
+  /**
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async _loadActivePaymentPendingHold(clinicId, appointmentId) {
+    const appointment = await this._appointmentRepo.findByIdForClinic(clinicId, appointmentId);
+    if (!appointment || appointment.status !== APPOINTMENT_STATUS.PAYMENT_PENDING) {
+      return null;
+    }
+    if (appointment.hold_expires_at && new Date(appointment.hold_expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+    return appointment;
+  }
+
+  async _expirePaymentPendingHold({ clinic, message, row, log }) {
+    assertValidConversationTransition(row.current_state, CONVERSATION_STATE.START);
+    await this._repo.update(row.id, {
+      current_state: CONVERSATION_STATE.START,
+      retry_count: 0,
+      context: { last_wa_message_id: message.waMessageId },
+      last_message_at: new Date().toISOString(),
+    });
+    await this._wa.sendText(
+      clinic.whatsapp_phone_number_id,
+      message.contactPhone,
+      SLOT_SELECTION_COPY.PAYMENT_METHOD_HOLD_EXPIRED,
+    );
+    log.info("PAYMENT_PENDING hold expired or missing — reset conversation to START", {
+      contactPhone: message.contactPhone,
+      appointmentId: row.context?.appointmentId ?? null,
+    });
+    return {
+      handled: true,
+      action: "PAYMENT_PENDING_HOLD_EXPIRED",
+      currentState: CONVERSATION_STATE.START,
+    };
+  }
+
+  async _sendRazorpayPaymentLink({ clinic, message, row, appointment, feeRupees, log }) {
     const paymentLink = await this._razorpay.createPaymentLink({
       amountRupees: feeRupees,
       referenceId: appointment.id,
@@ -723,6 +895,8 @@ export class SlotSelectionService {
       context: this._touch(row.context, message.waMessageId, {
         appointmentId: appointment.id,
         paymentLinkId: paymentLink.id,
+        awaitingPaymentMethodChoice: false,
+        feeRupees,
       }),
       last_message_at: new Date().toISOString(),
     });
@@ -735,17 +909,84 @@ export class SlotSelectionService {
       .replace("{holdMinutes}", String(SLOT_HOLD_DURATION_MINUTES));
     await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
 
-    log.info("Booked slot, transitioned SLOT_SELECTION -> PAYMENT_PENDING with a real Razorpay payment link", {
+    log.info("Pay Online selected — sent Razorpay payment link", {
       contactPhone: message.contactPhone,
       appointmentId: appointment.id,
       paymentLinkId: paymentLink.id,
     });
     return {
       handled: true,
-      action: "TRANSITIONED_TO_PAYMENT_PENDING",
+      action: "PAYMENT_LINK_SENT",
       currentState: updated.current_state,
       appointmentId: appointment.id,
     };
+  }
+
+  async _confirmPayAtClinic({ clinic, message, row, appointment, log }) {
+    const confirmed = await this._appointmentRepo.confirmPayAtClinic(clinic.id, appointment.id);
+    if (!confirmed) {
+      return this._expirePaymentPendingHold({ clinic, message, row, log });
+    }
+
+    assertValidConversationTransition(row.current_state, CONVERSATION_STATE.CONFIRMED);
+    const updated = await this._repo.update(row.id, {
+      current_state: CONVERSATION_STATE.CONFIRMED,
+      retry_count: 0,
+      context: this._touch(row.context, message.waMessageId, {
+        appointmentId: confirmed.id,
+        awaitingPaymentMethodChoice: false,
+        paymentLinkId: null,
+      }),
+      last_message_at: new Date().toISOString(),
+    });
+
+    const body = SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED
+      .replace("{patientName}", row.context?.selectedPatientName ?? "Your patient")
+      .replace("{clinicName}", clinic.name ?? "the clinic")
+      .replace("{slotLabel}", formatSlotLabel(new Date(confirmed.slot_start)));
+    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
+
+    await this._deliverPayAtClinicInvoice({ clinicId: clinic.id, appointment: confirmed, log });
+
+    log.info("Pay at Clinic selected — confirmed appointment without Razorpay", {
+      contactPhone: message.contactPhone,
+      appointmentId: confirmed.id,
+    });
+    return {
+      handled: true,
+      action: "PAY_AT_CLINIC_CONFIRMED",
+      currentState: updated.current_state,
+      appointmentId: confirmed.id,
+    };
+  }
+
+  /**
+   * Best-effort unpaid pay-at-clinic invoice. Failures are logged only.
+   */
+  async _deliverPayAtClinicInvoice({ clinicId, appointment, log }) {
+    if (!this._invoiceService) return;
+    try {
+      await this._invoiceService.deliverForConfirmedAppointment({
+        clinicId,
+        appointment,
+        razorpayPaymentId: null,
+        sendWhatsApp: false,
+      });
+    } catch (err) {
+      log.error("Failed to generate invoice after pay-at-clinic confirm", {
+        clinicId,
+        appointmentId: appointment.id,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      await alertOps({
+        title: "Invoice generation failed after pay-at-clinic confirm",
+        step: OPS_ALERT_STEP.INVOICE_DELIVERY,
+        error: err,
+        clinicId,
+        patientId: appointment.patient_id ?? null,
+        extra: { appointmentId: appointment.id },
+      });
+    }
   }
 
   async _transitionToConfirmed({ clinic, message, row, appointment, log }) {

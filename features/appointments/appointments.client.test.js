@@ -5,6 +5,7 @@ import {
   cancelConfirmedAppointment,
   deleteAppointment,
   fetchAppointmentDeletionImpact,
+  markPayAtClinicAsPaid,
   retryFailedRefund,
 } from "./appointments.client.js";
 
@@ -73,6 +74,28 @@ test("cancelConfirmedAppointment throws on non-OK response", async () => {
       () => cancelConfirmedAppointment("appt-1"),
       /Only confirmed appointments can be cancelled/,
     );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("markPayAtClinicAsPaid posts to /api/appointments/[id]/mark-paid", async () => {
+  const originalFetch = globalThis.fetch;
+  const calls = [];
+  globalThis.fetch = async (url, opts) => {
+    calls.push({ url, opts });
+    return {
+      ok: true,
+      async json() {
+        return { appointment: { id: "appt-1", payment_status: "paid" } };
+      },
+    };
+  };
+  try {
+    const result = await markPayAtClinicAsPaid("appt-1");
+    assert.equal(calls[0].url, "/api/appointments/appt-1/mark-paid");
+    assert.equal(calls[0].opts.method, "POST");
+    assert.equal(result.payment_status, "paid");
   } finally {
     globalThis.fetch = originalFetch;
   }

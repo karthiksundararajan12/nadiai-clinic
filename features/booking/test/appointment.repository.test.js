@@ -452,6 +452,71 @@ test("confirmPayment: a non-constraint DB error throws DatabaseError instead of 
 });
 
 // ─────────────────────────────────────────────────────────────
+// confirmPayAtClinic / markPayAtClinicAsPaid
+// ─────────────────────────────────────────────────────────────
+
+test("confirmPayAtClinic: sets confirmed + pay_at_clinic and clears the hold", async () => {
+  const confirmedRow = {
+    id: "appt-1",
+    status: "confirmed",
+    payment_status: "pay_at_clinic",
+    payment_method: "pay_at_clinic",
+  };
+  const db = createFakeSupabaseClient({ data: confirmedRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.confirmPayAtClinic("clinic-1", "appt-1");
+
+  assert.deepEqual(result, confirmedRow);
+  assert.equal(db.lastBuilder.updatedWith.status, "confirmed");
+  assert.equal(db.lastBuilder.updatedWith.payment_status, "pay_at_clinic");
+  assert.equal(db.lastBuilder.updatedWith.payment_method, "pay_at_clinic");
+  assert.equal(db.lastBuilder.updatedWith.hold_expires_at, null);
+
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "payment_pending"));
+});
+
+test("confirmPayAtClinic: expired hold matches nothing and returns null", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.confirmPayAtClinic("clinic-1", "appt-1");
+  assert.equal(result, null);
+});
+
+test("markPayAtClinicAsPaid: sets paid, paid_at, marked_by when payment_status is pay_at_clinic", async () => {
+  const paidRow = {
+    id: "appt-1",
+    status: "confirmed",
+    payment_status: "paid",
+    paid_at: "2026-08-25T04:30:00.000Z",
+    marked_by: "user-1",
+  };
+  const db = createFakeSupabaseClient({ data: paidRow, error: null });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.markPayAtClinicAsPaid("clinic-1", "appt-1", "user-1");
+
+  assert.deepEqual(result, paidRow);
+  assert.equal(db.lastBuilder.updatedWith.payment_status, "paid");
+  assert.equal(db.lastBuilder.updatedWith.marked_by, "user-1");
+  assert.ok(typeof db.lastBuilder.updatedWith.paid_at === "string");
+
+  const eqArgs = db.lastBuilder.calls.filter((c) => c.method === "eq").map((c) => c.args);
+  assert.ok(eqArgs.some(([col, val]) => col === "status" && val === "confirmed"));
+  assert.ok(eqArgs.some(([col, val]) => col === "payment_status" && val === "pay_at_clinic"));
+});
+
+test("markPayAtClinicAsPaid: returns null when the appointment is no longer pay_at_clinic", async () => {
+  const db = createFakeSupabaseClient({ data: null, error: { code: "PGRST116" } });
+  const repo = new AppointmentRepository(db);
+
+  const result = await repo.markPayAtClinicAsPaid("clinic-1", "appt-1", "user-1");
+  assert.equal(result, null);
+});
+
+// ─────────────────────────────────────────────────────────────
 // releaseFailedHold — Razorpay "payment.failed"
 // ─────────────────────────────────────────────────────────────
 

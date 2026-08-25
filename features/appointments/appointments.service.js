@@ -82,6 +82,9 @@ function formatAppointment(appointment) {
     type: null,
     status: appointment.status,
     payment_status: appointment.payment_status,
+    payment_method: appointment.payment_method ?? null,
+    paid_at: appointment.paid_at ?? null,
+    marked_by: appointment.marked_by ?? null,
     payment_amount: appointment.payment_amount ?? null,
     refund_status: appointment.refund_status ?? null,
     refund_id: appointment.refund_id ?? null,
@@ -180,6 +183,8 @@ export class AppointmentsService {
         status: row.status,
         statusLabel: formatAppointmentStatusLabel(row.status),
         paymentStatus: row.payment_status,
+        paymentMethod: row.payment_method ?? null,
+        paidAt: row.paid_at ?? null,
         paymentStatusLabel:
           !row.payment_status || row.payment_status === "not_required"
             ? "—"
@@ -329,6 +334,31 @@ export class AppointmentsService {
       );
     }
     return result.row;
+  }
+
+  /**
+   * Records in-person payment for a confirmed pay-at-clinic appointment.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @param {string} markedBy resolveRequestContext.actorId
+   */
+  async markPayAtClinicAsPaid(clinicId, appointmentId, markedBy) {
+    if (!markedBy) {
+      throw new AppointmentRequestError("markedBy is required");
+    }
+    const updated = await this._appointments.markPayAtClinicAsPaid(
+      clinicId,
+      appointmentId,
+      markedBy,
+    );
+    if (!updated) {
+      throw new AppointmentRequestError(
+        "Only confirmed pay-at-clinic appointments can be marked as paid",
+        409,
+      );
+    }
+    return updated;
   }
 }
 

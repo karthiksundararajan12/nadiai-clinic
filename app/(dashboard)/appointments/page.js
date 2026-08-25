@@ -41,6 +41,7 @@ import {
   buildHighlightRedirectPath,
   fetchAppointmentById,
   cancelConfirmedAppointment,
+  markPayAtClinicAsPaid,
   retryFailedRefund,
   fetchAppointmentDeletionImpact,
   deleteAppointment,
@@ -85,6 +86,7 @@ const PAYMENT_STATUS_PILL = {
   failed: "border-status-cancelled-border bg-status-cancelled-bg text-status-cancelled",
   refunded: "border-status-completed-border bg-status-completed-bg text-status-completed",
   pending: "border-status-pending-border bg-status-pending-bg text-status-pending",
+  pay_at_clinic: "border-status-pending-border bg-status-pending-bg text-status-pending",
   not_required: "border-status-completed-border bg-status-completed-bg text-status-completed",
 };
 
@@ -183,6 +185,8 @@ function AppointmentsPageContent() {
   const [earlyConsultTarget, setEarlyConsultTarget] = useState(null);
   const [cancelTarget, setCancelTarget] = useState(null);
   const [cancelling, setCancelling] = useState(false);
+  const [markPaidTarget, setMarkPaidTarget] = useState(null);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const [retryRefundTarget, setRetryRefundTarget] = useState(null);
   const [retryingRefund, setRetryingRefund] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
@@ -349,6 +353,31 @@ function AppointmentsPageContent() {
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setCancelling(false);
+    }
+  }
+
+  function openMarkPaidDialog(appointment) {
+    const paymentStatus = appointment?.paymentStatus ?? appointment?.payment_status;
+    if (!appointment?.id || paymentStatus !== "pay_at_clinic") return;
+    setActionError("");
+    setMarkPaidTarget(appointment);
+  }
+
+  async function confirmMarkAsPaid() {
+    if (!markPaidTarget?.id) return;
+    setMarkingPaid(true);
+    setActionError("");
+    try {
+      await markPayAtClinicAsPaid(markPaidTarget.id);
+      setMarkPaidTarget(null);
+      if (detail?.id === markPaidTarget.id) {
+        await openDetail(markPaidTarget.id);
+      }
+      await load();
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMarkingPaid(false);
     }
   }
 
@@ -802,6 +831,27 @@ function AppointmentsPageContent() {
                                 <Mic className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
                                 Start Consultation
                               </Button>
+                              {appointment.paymentStatus === "pay_at_clinic" ? (
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-primary"
+                                  title="Record in-person payment"
+                                  onClick={() =>
+                                    openMarkPaidDialog({
+                                      id: appointment.id,
+                                      status: appointment.status,
+                                      patientName: appointment.patientName,
+                                      slotLabel: appointment.slotLabel,
+                                      amount: appointment.amount,
+                                      paymentStatus: appointment.paymentStatus,
+                                    })
+                                  }
+                                >
+                                  Mark as Paid
+                                </Button>
+                              ) : null}
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -815,6 +865,7 @@ function AppointmentsPageContent() {
                                     patientName: appointment.patientName,
                                     slotLabel: appointment.slotLabel,
                                     amount: appointment.amount,
+                                    paymentStatus: appointment.paymentStatus,
                                   })
                                 }
                               >
@@ -1035,25 +1086,50 @@ function AppointmentsPageContent() {
                   </Button>
                 ) : null}
                 {detail.status === "confirmed" ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive"
-                    onClick={() =>
-                      openCancelDialog({
-                        id: detail.id,
-                        status: detail.status,
-                        patientName: detail.patient_name,
-                        slotLabel:
-                          detail.date && detail.time
-                            ? `${detail.date} · ${detail.time}`
-                            : detail.slot_start,
-                        amount: detail.payment_amount,
-                      })
-                    }
-                  >
-                    Cancel
-                  </Button>
+                  <>
+                    {detail.payment_status === "pay_at_clinic" ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-primary"
+                        onClick={() =>
+                          openMarkPaidDialog({
+                            id: detail.id,
+                            status: detail.status,
+                            patientName: detail.patient_name,
+                            slotLabel:
+                              detail.date && detail.time
+                                ? `${detail.date} · ${detail.time}`
+                                : detail.slot_start,
+                            amount: detail.payment_amount,
+                            paymentStatus: detail.payment_status,
+                          })
+                        }
+                      >
+                        Mark as Paid
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="text-destructive"
+                      onClick={() =>
+                        openCancelDialog({
+                          id: detail.id,
+                          status: detail.status,
+                          patientName: detail.patient_name,
+                          slotLabel:
+                            detail.date && detail.time
+                              ? `${detail.date} · ${detail.time}`
+                              : detail.slot_start,
+                          amount: detail.payment_amount,
+                          paymentStatus: detail.payment_status,
+                        })
+                      }
+                    >
+                      Cancel
+                    </Button>
+                  </>
                 ) : null}
                 {detail.refund_status === "failed" ? (
                   <Button
@@ -1494,11 +1570,17 @@ function AppointmentsPageContent() {
             <span className="font-medium text-foreground">
               {cancelTarget?.slotLabel ?? "the scheduled time"}
             </span>
-            ? This will refund{" "}
-            <span className="font-medium text-foreground">
-              {formatAmount(cancelTarget?.amount)}
-            </span>{" "}
-            to the patient.
+            {cancelTarget?.paymentStatus === "pay_at_clinic" ? (
+              <>? No online payment was collected, so nothing will be refunded.</>
+            ) : (
+              <>
+                ? This will refund{" "}
+                <span className="font-medium text-foreground">
+                  {formatAmount(cancelTarget?.amount)}
+                </span>{" "}
+                to the patient.
+              </>
+            )}
           </p>
           {actionError ? (
             <p className="text-body font-medium text-destructive">{actionError}</p>
@@ -1517,6 +1599,54 @@ function AppointmentsPageContent() {
               onClick={confirmCancelAppointment}
             >
               {cancelling ? "Cancelling…" : "Confirm Cancel"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(markPaidTarget)}
+        onOpenChange={(open) => {
+          if (!open && !markingPaid) setMarkPaidTarget(null);
+        }}
+      >
+        <DialogContent
+          onClose={() => {
+            if (!markingPaid) setMarkPaidTarget(null);
+          }}
+          className="max-w-md"
+        >
+          <DialogHeader>
+            <DialogTitle>Mark as paid?</DialogTitle>
+          </DialogHeader>
+          <p className="text-body text-muted-foreground">
+            Record in-person payment of{" "}
+            <span className="font-medium text-foreground">
+              {formatAmount(markPaidTarget?.amount)}
+            </span>{" "}
+            for{" "}
+            <span className="font-medium text-foreground">
+              {markPaidTarget?.patientName ?? "the patient"}
+            </span>{" "}
+            on{" "}
+            <span className="font-medium text-foreground">
+              {markPaidTarget?.slotLabel ?? "the scheduled time"}
+            </span>
+            ?
+          </p>
+          {actionError ? (
+            <p className="text-body font-medium text-destructive">{actionError}</p>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              disabled={markingPaid}
+              onClick={() => setMarkPaidTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button disabled={markingPaid} onClick={confirmMarkAsPaid}>
+              {markingPaid ? "Saving…" : "Mark as Paid"}
             </Button>
           </DialogFooter>
         </DialogContent>

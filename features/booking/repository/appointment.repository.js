@@ -341,6 +341,9 @@ export class AppointmentRepository extends BaseRepository {
           "slot_end",
           "status",
           "payment_status",
+          "payment_method",
+          "paid_at",
+          "marked_by",
           "payment_amount",
           "refund_status",
           "refund_id",
@@ -621,6 +624,76 @@ export class AppointmentRepository extends BaseRepository {
 
     this._log.error("DB error during confirmPayment", { appointmentId, code: error.code });
     throw new DatabaseError("confirmPayment", error);
+  }
+
+  /**
+   * Confirms a PAYMENT_PENDING hold as pay-at-clinic (no Razorpay charge).
+   * Same hold-expiry guard as confirmPayment — a late tap after the hold
+   * expired matches zero rows and returns null.
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @returns {Promise<object|null>}
+   */
+  async confirmPayAtClinic(clinicId, appointmentId) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        status:          APPOINTMENT_STATUS.CONFIRMED,
+        payment_status:  "pay_at_clinic",
+        payment_method:  "pay_at_clinic",
+        hold_expires_at: null,
+        updated_at:      nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.PAYMENT_PENDING)
+      .or(`hold_expires_at.is.null,hold_expires_at.gt.${nowIso}`)
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during confirmPayAtClinic", { appointmentId, code: error.code });
+    throw new DatabaseError("confirmPayAtClinic", error);
+  }
+
+  /**
+   * Records in-person payment for a confirmed pay-at-clinic appointment.
+   * Guarded UPDATE — returns null when payment_status is no longer
+   * pay_at_clinic (already marked paid, cancelled, etc.).
+   *
+   * @param {string} clinicId
+   * @param {string} appointmentId
+   * @param {string} markedBy auth.users.id from resolveRequestContext.actorId
+   * @returns {Promise<object|null>}
+   */
+  async markPayAtClinicAsPaid(clinicId, appointmentId, markedBy) {
+    const nowIso = new Date().toISOString();
+    const { data, error } = await this._db
+      .from(this._table)
+      .update({
+        payment_status: "paid",
+        paid_at:        nowIso,
+        marked_by:      markedBy,
+        updated_at:     nowIso,
+      })
+      .eq("id", appointmentId)
+      .eq("clinic_id", clinicId)
+      .eq("status", APPOINTMENT_STATUS.CONFIRMED)
+      .eq("payment_status", "pay_at_clinic")
+      .is("deleted_at", null)
+      .select("*")
+      .single();
+
+    if (!error) return data;
+    if (error.code === NOT_FOUND_CODE) return null;
+
+    this._log.error("DB error during markPayAtClinicAsPaid", { appointmentId, code: error.code });
+    throw new DatabaseError("markPayAtClinicAsPaid", error);
   }
 
   /**
@@ -1266,6 +1339,9 @@ function mapDashboardAppointmentRow(row) {
     slot_end: row.slot_end ?? null,
     status: row.status,
     payment_status: row.payment_status ?? null,
+    payment_method: row.payment_method ?? null,
+    paid_at: row.paid_at ?? null,
+    marked_by: row.marked_by ?? null,
     payment_amount: row.payment_amount != null ? Number(row.payment_amount) : null,
     refund_status: row.refund_status ?? null,
     refund_id: row.refund_id ?? null,

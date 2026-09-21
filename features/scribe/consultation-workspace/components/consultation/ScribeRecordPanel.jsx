@@ -38,6 +38,7 @@ export function ScribeRecordPanel({
   languageToggle,
   footer,
   sessionContext = RECORD_PANEL_CONTEXT.IDLE,
+  liveFallback = false,
 }) {
   const [manualText, setManualText] = useState("");
 
@@ -281,6 +282,8 @@ export function ScribeRecordPanel({
           highlightedSegmentId={highlightedSegmentId}
           loading={transcriptLoading}
           loadingMessage={transcriptLoadingMessage ?? statusMessage}
+          isLiveRecording={isLive}
+          liveFallback={liveFallback}
         />
       </div>
 

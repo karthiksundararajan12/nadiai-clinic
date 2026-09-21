@@ -263,6 +263,12 @@ export const TRANSCRIPTION_CONFIG = Object.freeze({
   DEFAULT_COST_PER_AUDIO_MINUTE_CENTS: 0.59,
 });
 
+/** Live Deepgram streaming (client → our server → Deepgram). */
+export const LIVE_TRANSCRIPTION = Object.freeze({
+  PATH: "/api/scribe/live-transcription",
+  CHUNK_INTERVAL_MS: 250,
+});
+
 // ─────────────────────────────────────────────────────────────
 // SOAP GENERATION
 // ─────────────────────────────────────────────────────────────

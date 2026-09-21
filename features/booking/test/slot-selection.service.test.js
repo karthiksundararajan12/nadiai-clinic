@@ -403,9 +403,9 @@ test("AWAITING_SELECTION: tapping first row of a paginated list is accepted (not
   });
 
   assert.notEqual(result.action, "SELECTION_REPROMPTED");
-  assert.equal(result.action, "TRANSITIONED_TO_PAYMENT_PENDING");
-  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
-  assert.equal(repo.row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
+  assert.equal(result.currentState, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.CONFIRMED);
   assert.equal(appointmentRepo.createCalls.length, 1);
   assert.equal(appointmentRepo.createCalls[0].slot_start, expectedSlotStart);
 });
@@ -460,7 +460,7 @@ test("AWAITING_SELECTION: tapping a prior page slot after More times is still ac
   });
 
   assert.notEqual(result.action, "SELECTION_REPROMPTED");
-  assert.equal(result.action, "TRANSITIONED_TO_PAYMENT_PENDING");
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
   assert.equal(appointmentRepo.createCalls[0].slot_start, firstPageFirstSlotStart);
 });
 
@@ -552,7 +552,7 @@ test("AWAITING_SELECTION: choosing a free slot with no doctor fee books directly
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
 });
 
-test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to PAYMENT_PENDING with Pay Online vs Pay at Clinic (no Razorpay yet)", async () => {
+test("AWAITING_SELECTION: choosing a paid slot confirms immediately as pay-at-clinic (no payment-method buttons, no Razorpay)", async () => {
   const row = rowAwaitingSelection();
   const before = Date.now();
   const { service, repo, wa, appointmentRepo, razorpay } = makeService({ row, doctor: DOCTOR_PAID });
@@ -563,24 +563,22 @@ test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to 
     row: repo.row,
   });
 
-  assert.equal(result.action, "TRANSITIONED_TO_PAYMENT_PENDING");
-  assert.equal(result.currentState, CONVERSATION_STATE.PAYMENT_PENDING);
-  assert.equal(repo.row.current_state, CONVERSATION_STATE.PAYMENT_PENDING);
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
+  assert.equal(result.currentState, CONVERSATION_STATE.CONFIRMED);
+  assert.equal(repo.row.current_state, CONVERSATION_STATE.CONFIRMED);
   assert.equal(appointmentRepo.createCalls[0].status, "payment_pending");
   assert.equal(appointmentRepo.createCalls[0].payment_status, "pending");
   assert.equal(appointmentRepo.createCalls[0].payment_method, "online");
   assert.equal(appointmentRepo.createCalls[0].payment_amount, DOCTOR_PAID.consultation_fee);
-  assert.equal(repo.row.context.awaitingPaymentMethodChoice, true);
-  assert.equal(razorpay.calls.length, 0, "Razorpay link must not be created until Pay Online is selected");
+  assert.equal(appointmentRepo.confirmPayAtClinicCalls.length, 1);
+  assert.equal(razorpay.calls.length, 0);
 
-  assert.equal(wa.calls[0].type, "buttons");
-  assert.deepEqual(
-    wa.calls[0].opts.buttons.map((b) => b.id),
-    [PAYMENT_METHOD_INTENT.ONLINE, PAYMENT_METHOD_INTENT.AT_CLINIC],
-  );
-  assert.match(wa.calls[0].opts.bodyText, new RegExp(`₹${DOCTOR_PAID.consultation_fee}`));
-  assert.match(wa.calls[0].opts.bodyText, new RegExp(`${SLOT_HOLD_DURATION_MINUTES} minutes`));
-  assert.equal(wa.calls[0].opts.bodyText.includes("Buttons:"), false);
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /confirmed/i);
+  assert.match(wa.calls[0].body, /pay at the clinic/i);
+  assert.equal(/payment received/i.test(wa.calls[0].body), false);
+  assert.equal(wa.calls[0].body.includes("Buttons:"), false);
+  assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
 
   const holdExpiresAt = new Date(appointmentRepo.createCalls[0].hold_expires_at).getTime();
   const expectedMinMs = before + SLOT_HOLD_DURATION_MINUTES * 60 * 1000;
@@ -588,16 +586,35 @@ test("AWAITING_SELECTION: choosing a free slot with a doctor fee transitions to 
   assert.ok(holdExpiresAt >= expectedMinMs && holdExpiresAt <= expectedMaxMs, "hold_expires_at should be ~SLOT_HOLD_DURATION_MINUTES from now");
 });
 
-test("PAYMENT_PENDING: Pay Online creates a Razorpay link and sends the existing payment message", async () => {
-  const row = rowAwaitingSelection();
-  const { service, repo, wa, razorpay } = makeService({ row, doctor: DOCTOR_PAID });
-
-  await service.handleReply({
-    clinic: CLINIC,
-    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
-    row: repo.row,
+function rowPaymentPendingAwaitingMethodChoice(appointmentId = "appt-1") {
+  return buildRow({
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: {
+      appointmentId,
+      feeRupees: DOCTOR_PAID.consultation_fee,
+      awaitingPaymentMethodChoice: true,
+      selectedPatientName: "Asha Kapoor",
+    },
   });
-  wa.calls.length = 0;
+}
+
+test("PAYMENT_PENDING (dormant): Pay Online still creates a Razorpay link when the method-choice step is active", async () => {
+  const appointmentId = "appt-1";
+  const row = rowPaymentPendingAwaitingMethodChoice(appointmentId);
+  const { service, repo, wa, razorpay, appointmentRepo } = makeService({ row, doctor: DOCTOR_PAID });
+
+  await appointmentRepo.createIfAvailable({
+    clinic_id: CLINIC.id,
+    doctor_id: DOCTOR_PAID.id,
+    patient_id: "p1",
+    slot_start: SLOT_A.slotStart,
+    slot_end: SLOT_A.slotEnd,
+    status: "payment_pending",
+    payment_status: "pending",
+    payment_method: "online",
+    payment_amount: DOCTOR_PAID.consultation_fee,
+    hold_expires_at: new Date(Date.now() + SLOT_HOLD_DURATION_MINUTES * 60 * 1000).toISOString(),
+  });
 
   const result = await service.handlePaymentPendingReply({
     clinic: CLINIC,
@@ -614,24 +631,31 @@ test("PAYMENT_PENDING: Pay Online creates a Razorpay link and sends the existing
   assert.equal(repo.row.context.awaitingPaymentMethodChoice, false);
   assert.equal(razorpay.calls.length, 1);
   assert.equal(razorpay.calls[0].amountRupees, DOCTOR_PAID.consultation_fee);
-  assert.equal(razorpay.calls[0].referenceId, result.appointmentId);
-  assert.deepEqual(razorpay.calls[0].notes, { appointment_id: result.appointmentId, clinic_id: CLINIC.id });
+  assert.equal(razorpay.calls[0].referenceId, appointmentId);
+  assert.deepEqual(razorpay.calls[0].notes, { appointment_id: appointmentId, clinic_id: CLINIC.id });
   assert.equal(wa.calls[0].type, "text");
   assert.match(wa.calls[0].body, new RegExp(`₹${DOCTOR_PAID.consultation_fee}`));
   assert.match(wa.calls[0].body, /rzp\.io\/i\/plink_1/);
   assert.match(wa.calls[0].body, new RegExp(`${SLOT_HOLD_DURATION_MINUTES} minutes`));
 });
 
-test("PAYMENT_PENDING: Pay at Clinic confirms without Razorpay and does not say payment received", async () => {
-  const row = rowAwaitingSelection();
+test("PAYMENT_PENDING (dormant): Pay at Clinic confirms without Razorpay and does not say payment received", async () => {
+  const appointmentId = "appt-1";
+  const row = rowPaymentPendingAwaitingMethodChoice(appointmentId);
   const { service, repo, wa, razorpay, appointmentRepo } = makeService({ row, doctor: DOCTOR_PAID });
 
-  await service.handleReply({
-    clinic: CLINIC,
-    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
-    row: repo.row,
+  await appointmentRepo.createIfAvailable({
+    clinic_id: CLINIC.id,
+    doctor_id: DOCTOR_PAID.id,
+    patient_id: "p1",
+    slot_start: SLOT_A.slotStart,
+    slot_end: SLOT_A.slotEnd,
+    status: "payment_pending",
+    payment_status: "pending",
+    payment_method: "online",
+    payment_amount: DOCTOR_PAID.consultation_fee,
+    hold_expires_at: new Date(Date.now() + SLOT_HOLD_DURATION_MINUTES * 60 * 1000).toISOString(),
   });
-  wa.calls.length = 0;
 
   const result = await service.handlePaymentPendingReply({
     clinic: CLINIC,

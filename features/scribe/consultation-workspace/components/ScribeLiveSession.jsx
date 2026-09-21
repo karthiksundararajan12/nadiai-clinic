@@ -17,7 +17,7 @@ export function ScribeLiveSession({
   toolbarLeft,
 }) {
   const recording = useRecording({
-    chunkIntervalMs: 5_000,
+    chunkIntervalMs: 250,
     onError: (err) => onError?.(err instanceof Error ? err : new Error(String(err))),
   });
 

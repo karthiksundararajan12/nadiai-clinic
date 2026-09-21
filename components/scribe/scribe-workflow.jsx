@@ -4,8 +4,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
+import { completeLiveTranscription } from "@/features/scribe/upload/live-transcription.client.js";
 import { submitManualTranscript } from "@/features/scribe/upload/manual-transcript.client.js";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
+import { useLiveTranscription } from "@/features/scribe/recording/use-live-transcription.js";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { RECORDING_LIMITS } from "@/features/scribe/recording/constants.js";
 import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
@@ -133,8 +135,13 @@ export function ScribeWorkflow() {
       });
   }, []);
 
+  const live = useLiveTranscription({ language });
+
   const recording = useRecording({
-    chunkIntervalMs: 5_000,
+    chunkIntervalMs: RECORDING_LIMITS.LIVE_CHUNK_INTERVAL_MS,
+    onChunkReady: (blob) => {
+      void live.sendAudio(blob);
+    },
     onError: (err) => setUploadError(err instanceof Error ? err : new Error(String(err))),
   });
 
@@ -145,6 +152,12 @@ export function ScribeWorkflow() {
     setRecordingGuardActive(isRecordingLive);
     return () => setRecordingGuardActive(false);
   }, [isRecordingLive]);
+
+  useEffect(() => {
+    if (recording.isRecording && live.status === "idle") {
+      live.connect(recording.mimeType);
+    }
+  }, [recording.isRecording, recording.mimeType, live]);
   const audioStatsRef = useRef({ sum: 0, count: 0, peak: 0 });
 
   useEffect(() => {
@@ -229,7 +242,7 @@ export function ScribeWorkflow() {
     }
   }, [loadConsultations]);
 
-  const handleRecordingComplete = useCallback(async (chunks, mimeType, durationSeconds) => {
+  const handleRecordingComplete = useCallback(async (chunks, mimeType, durationSeconds, liveResult) => {
     if (!chunks?.length) {
       setUploadError(new Error("No audio captured. Allow microphone access and try again."));
       return;
@@ -269,6 +282,21 @@ export function ScribeWorkflow() {
         duration_seconds: audioDurationSeconds,
       }).catch(() => {});
 
+      if (liveResult?.text && liveResult?.segments?.length) {
+        try {
+          await completeLiveTranscription(sessionId, liveResult);
+          await loadConsultations(true);
+          setViewFromHistory(false);
+          setActiveSessionId(sessionId);
+          setSessionsOpen(false);
+          setPipelineBusy(false);
+          setPipelineMessage(null);
+          return;
+        } catch (liveErr) {
+          setPipelineMessage("Live transcript save failed — transcribing recording…");
+        }
+      }
+
       void runTranscription(sessionId);
     } catch (err) {
       const wrapped = err instanceof Error ? err : new Error(String(err));
@@ -278,7 +306,7 @@ export function ScribeWorkflow() {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
-  }, [appointmentId, language, runTranscription, selectedPatient?.id]);
+  }, [appointmentId, language, loadConsultations, runTranscription, selectedPatient?.id]);
 
   const handleStopRecording = useCallback(async () => {
     try {
@@ -296,27 +324,31 @@ export function ScribeWorkflow() {
         );
         await recording.stopRecording();
         recording.resetRecording();
+        live.reset();
         return;
       }
       if (tooShort) {
         setToastMessage("Recording is too short. Please record for at least 10 seconds.");
         await recording.stopRecording();
         recording.resetRecording();
+        live.reset();
         return;
       }
       if (unclear) {
         setToastMessage("Audio is not clear. Please speak louder and try again.");
         await recording.stopRecording();
         recording.resetRecording();
+        live.reset();
         return;
       }
 
       const chunks = await recording.stopRecording();
-      await handleRecordingComplete(chunks, recording.mimeType, duration);
+      const liveResult = await live.finish();
+      await handleRecordingComplete(chunks, recording.mimeType, duration, liveResult);
     } catch (err) {
       setUploadError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [handleRecordingComplete, recording]);
+  }, [handleRecordingComplete, live, recording]);
 
   const recordState = useMemo(() => {
     if (pipelineBusy) return "processing";
@@ -362,7 +394,8 @@ export function ScribeWorkflow() {
       sessionComplete: false,
     });
     recording.resetRecording?.();
-  }, [recording.resetRecording]);
+    live.reset();
+  }, [live, recording.resetRecording]);
 
   const handleManualTranscriptSubmit = useCallback(async (text) => {
     setUploadError(null);
@@ -552,12 +585,23 @@ export function ScribeWorkflow() {
         disabled={Boolean(activeSessionId)}
         analyserNode={recording.analyserNode}
         pauseSupported={recording.pauseSupported}
-        transcriptSegments={workspaceState.segments}
+        transcriptSegments={
+          isRecordingLive || (live.segments.length > 0 && !workspaceState.segments?.length)
+            ? live.segments
+            : workspaceState.segments
+        }
         highlightedSegmentId={workspaceState.highlightedSegmentId}
-        transcriptLoading={workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId))}
+        transcriptLoading={
+          !isRecordingLive &&
+          (workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId)))
+        }
         transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
+        liveFallback={isRecordingLive && live.fallback}
         canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}
-        onStart={() => recording.startRecording()}
+        onStart={() => {
+          live.reset();
+          void recording.startRecording();
+        }}
         onPause={recording.pauseRecording}
         onResume={recording.resumeRecording}
         onStop={handleStopRecording}

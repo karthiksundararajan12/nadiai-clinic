@@ -71,3 +71,66 @@ test("queueSession is idempotent when already queued", async () => {
   assert.equal(result.queued, false);
   assert.equal(result.reason, "already_queued_or_processing");
 });
+
+test("completeFromLiveResult persists streamed transcript without the batch provider", async () => {
+  const session = {
+    id: "sess-live",
+    doctor_id: "doctor-1",
+    clinic_id: "clinic-1",
+    status: SESSION_STATUS.UPLOADED,
+    language: "english",
+  };
+  let current = { ...session };
+  const sessions = {
+    findById: async () => ({ ...current }),
+    findByIdForWorker: async () => ({ ...current }),
+    transitionStatus: async (_id, _doc, from, to) => {
+      current = { ...current, status: to };
+      return { ...current };
+    },
+  };
+  const stored = { transcription: null, segments: null };
+  const transcriptions = {
+    findBySession: async () => stored.transcription,
+    upsertTranscription: async (row) => {
+      stored.transcription = { id: "tx-live", ...row };
+      return stored.transcription;
+    },
+    replaceSegments: async (_tid, _sid, segs) => {
+      stored.segments = segs;
+    },
+  };
+  const provider = {
+    name: "deepgram",
+    model: "nova-2-medical",
+    transcribe: async () => {
+      throw new Error("batch provider must not run for live complete");
+    },
+  };
+  const svc = new TranscriptionService({}, sessions, transcriptions, mockAuditService(), provider);
+  const result = await svc.completeFromLiveResult(
+    "sess-live",
+    {
+      text: "Hello patient how are you",
+      language: "en",
+      model: "nova-2-medical",
+      durationSeconds: 8,
+      segments: [
+        {
+          start: 0,
+          end: 2.1,
+          text: "Hello patient how are you",
+          speaker: "A",
+          speaker_label: "Doctor",
+          confidence: 0.94,
+        },
+      ],
+    },
+    mockCtx(),
+  );
+
+  assert.equal(result.session.status, SESSION_STATUS.TRANSCRIBED);
+  assert.equal(stored.transcription.status, TRANSCRIPTION_STATUS.COMPLETED);
+  assert.equal(stored.segments.length, 1);
+  assert.equal(stored.segments[0].text, "Hello patient how are you");
+});

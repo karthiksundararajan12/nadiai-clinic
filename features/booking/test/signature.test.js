@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
-import { verifyMetaSignature } from "../lib/signature.js";
+import { verifyMetaSignature, metaSignatureDebug } from "../lib/signature.js";
 
 const APP_SECRET = "test-app-secret";
 const BODY = JSON.stringify({ object: "whatsapp_business_account", entry: [] });
@@ -38,4 +38,14 @@ test("rejects a header missing the sha256= prefix", () => {
 test("rejects when appSecret is not configured", () => {
   const signature = sign(BODY, APP_SECRET);
   assert.equal(verifyMetaSignature(BODY, signature, undefined), false);
+});
+
+test("metaSignatureDebug exposes only the first 8 hex chars", () => {
+  const signature = sign(BODY, APP_SECRET);
+  const receivedHex = signature.slice("sha256=".length);
+  const debug = metaSignatureDebug(BODY, signature, APP_SECRET);
+  assert.equal(debug.computedSigPrefix, receivedHex.slice(0, 8));
+  assert.equal(debug.receivedSigPrefix, receivedHex.slice(0, 8));
+  assert.equal(debug.computedSigPrefix.length, 8);
+  assert.ok(!debug.computedSigPrefix.includes(receivedHex.slice(8)));
 });

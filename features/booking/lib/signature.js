@@ -35,3 +35,25 @@ export function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
   if (expected.length !== computed.length) return false;
   return timingSafeEqual(expected, computed);
 }
+
+/**
+ * TEMP debug — first 8 hex chars of computed vs received digest.
+ * Do not log full signatures or the app secret.
+ *
+ * @param {string} rawBody
+ * @param {string|null} signatureHeader
+ * @param {string} [appSecret]
+ */
+export function metaSignatureDebug(rawBody, signatureHeader, appSecret) {
+  const receivedHex = signatureHeader?.startsWith(SIGNATURE_PREFIX)
+    ? signatureHeader.slice(SIGNATURE_PREFIX.length)
+    : "";
+  const computedHex = appSecret
+    ? createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex")
+    : "";
+  return {
+    computedSigPrefix: computedHex.slice(0, 8) || "(none)",
+    receivedSigPrefix: receivedHex.slice(0, 8) || "(none)",
+    bodyByteLength: Buffer.byteLength(rawBody ?? "", "utf8"),
+  };
+}

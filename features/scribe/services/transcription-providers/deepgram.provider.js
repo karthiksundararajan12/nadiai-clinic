@@ -1,8 +1,11 @@
 /**
  * @fileoverview DeepgramProvider — Deepgram Nova-2 implementation of TranscriptionProvider.
  *
- * API used: Deepgram Pre-recorded Audio
+ * API used: Deepgram Pre-recorded Audio (batch fallback)
  *   POST https://api.deepgram.com/v1/listen
+ *
+ * Live streaming (primary capture path) lives in deepgram-live.client.js
+ *   wss://api.deepgram.com/v1/listen
  *
  * Features enabled:
  *   diarize      = true   — native multi-speaker identification
@@ -26,7 +29,7 @@
 
 import { TranscriptionProvider }   from "./transcription-provider.js";
 import { TranscriptionProviderError } from "../../errors.js";
-import { SCRIBE_LANGUAGE, TRANSCRIPTION_CONFIG } from "../../constants.js";
+import { TRANSCRIPTION_CONFIG } from "../../constants.js";
 import {
   buildAppearanceSpeakerMap,
   buildSegmentsFromDiarizedWords,
@@ -35,29 +38,14 @@ import {
   resolveClinicalSpeaker,
 } from "../../lib/speaker-diarization.js";
 import { createLogger }             from "../../logger.js";
+import {
+  DEEPGRAM_LISTEN_HTTP_URL,
+  estimateDeepgramCostCents,
+  resolveDeepgramLanguage,
+  resolveDeepgramModel,
+} from "./deepgram-config.js";
 
-const DEEPGRAM_API_URL = "https://api.deepgram.com/v1/listen";
 const log = createLogger({ component: "DeepgramProvider" });
-
-/** @type {Record<string, string>} SCRIBE_LANGUAGE → Deepgram language code */
-const LANGUAGE_MAP = {
-  [SCRIBE_LANGUAGE.ENGLISH]:  "en",
-  [SCRIBE_LANGUAGE.HINDI]:    "hi",
-  [SCRIBE_LANGUAGE.HINGLISH]: "multi",
-};
-
-/** @type {Record<string, string>} SCRIBE_LANGUAGE → best Deepgram model */
-const MODEL_MAP = {
-  [SCRIBE_LANGUAGE.ENGLISH]:  "nova-2-medical",
-  [SCRIBE_LANGUAGE.HINDI]:    "nova-2",
-  [SCRIBE_LANGUAGE.HINGLISH]: "nova-2",
-};
-
-/** Cost per minute in US cents for each model class */
-const COST_CENTS_PER_MINUTE = {
-  medical: 0.59,
-  general: 0.43,
-};
 
 export class DeepgramProvider extends TranscriptionProvider {
   /**
@@ -92,8 +80,8 @@ export class DeepgramProvider extends TranscriptionProvider {
       );
     }
 
-    const model       = MODEL_MAP[language]    ?? (process.env.DEEPGRAM_MODEL ?? "nova-2-medical");
-    const deepgramLang = LANGUAGE_MAP[language] ?? "en";
+    const model       = resolveDeepgramModel(language);
+    const deepgramLang = resolveDeepgramLanguage(language);
 
     if (audioBlobs.length > 1) {
       log.warn("DeepgramProvider received multiple blobs; only the first is used. Merge chunks upstream.", {
@@ -115,7 +103,7 @@ export class DeepgramProvider extends TranscriptionProvider {
       language:      deepgramLang,
     });
 
-    const endpoint = `${DEEPGRAM_API_URL}?${params}`;
+    const endpoint = `${DEEPGRAM_LISTEN_HTTP_URL}?${params}`;
 
     log.info("Deepgram transcription started", {
       sessionId,
@@ -174,7 +162,7 @@ export class DeepgramProvider extends TranscriptionProvider {
     const alternative0 = results.channels?.[0]?.alternatives?.[0];
 
     const detectedDuration = metadata.duration                ?? durationSeconds ?? null;
-    const detectedLanguage = metadata.detected_language       ?? LANGUAGE_MAP[language] ?? null;
+    const detectedLanguage = metadata.detected_language       ?? resolveDeepgramLanguage(language) ?? null;
     const fullText         = (alternative0?.transcript ?? "").trim();
 
     const allWords = collectDeepgramWords(utterances, alternative0);
@@ -296,17 +284,9 @@ export class DeepgramProvider extends TranscriptionProvider {
         raw,
       },
       durationSeconds: detectedDuration,
-      costCents:       estimateCostCents(detectedDuration, model),
+      costCents:       estimateDeepgramCostCents(detectedDuration, model),
     };
   }
-}
-
-/** @param {number|null} seconds @param {string} model */
-function estimateCostCents(seconds, model) {
-  const rate = model.includes("medical")
-    ? COST_CENTS_PER_MINUTE.medical
-    : COST_CENTS_PER_MINUTE.general;
-  return Math.ceil(((seconds ?? 0) / 60) * rate);
 }
 
 function roundSeconds(value) {

@@ -68,6 +68,9 @@ export async function middleware(request) {
     pathname !== "/login" &&
     !pathname.startsWith("/auth/")
   ) {
+    if (pathname === "/api/scribe/live-transcription") {
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
     const redirectUrl = request.nextUrl.clone();
     redirectUrl.pathname = "/login";
     return NextResponse.redirect(redirectUrl);

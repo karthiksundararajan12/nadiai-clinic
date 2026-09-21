@@ -11,7 +11,7 @@
 export * from "./client.js";
 
 // Node-only helpers (crypto / ops I/O) — not safe for Client Components.
-export { verifyMetaSignature } from "./lib/signature.js";
+export { verifyMetaSignature, metaSignatureDebug } from "./lib/signature.js";
 export { verifyRazorpaySignature } from "./lib/razorpay-signature.js";
 export { parseInboundWhatsAppWebhook } from "./lib/webhook-parser.js";
 export {

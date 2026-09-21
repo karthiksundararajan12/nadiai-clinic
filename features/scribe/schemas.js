@@ -277,6 +277,30 @@ export const ManualTranscriptImportSchema = z.object({
 
 /** @typedef {z.infer<typeof ManualTranscriptImportSchema>} ManualTranscriptImportInput */
 
+export const LiveTranscriptionCompleteSchema = z.object({
+  text: z.string().trim().min(1, "Transcript is empty"),
+  language: z.string().nullable().optional(),
+  model: z.string().optional(),
+  durationSeconds: z.number().nonnegative().nullable().optional(),
+  costCents: z.number().nonnegative().optional(),
+  speakerMap: z.record(z.string(), z.string()).optional(),
+  providerResponse: z.unknown().optional(),
+  segments: z.array(z.object({
+    id: z.string().optional(),
+    index: z.number().int().nonnegative().optional(),
+    start: z.number(),
+    end: z.number(),
+    text: z.string(),
+    speaker: z.string().optional(),
+    speaker_label: z.string().optional(),
+    confidence: z.number().min(0).max(1).optional(),
+    is_low_confidence: z.boolean().optional(),
+    provider_metadata: z.record(z.string(), z.unknown()).optional(),
+  })).min(1),
+});
+
+/** @typedef {z.infer<typeof LiveTranscriptionCompleteSchema>} LiveTranscriptionCompleteInput */
+
 export const QueueTranscriptionSchema = z.object({
   priority: z.coerce.number().int().min(1).max(10).default(5),
   force: z.boolean().optional().default(false),

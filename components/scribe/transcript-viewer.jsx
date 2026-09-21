@@ -39,7 +39,7 @@ export function TranscriptViewer({ transcription, language, isRecording, error }
               </p>
               {isRecording && (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  Recording is in progress. Transcript will appear after the production transcription pipeline completes.
+                  Draft words appear as you speak. Settled text replaces the italic preview.
                 </p>
               )}
             </div>

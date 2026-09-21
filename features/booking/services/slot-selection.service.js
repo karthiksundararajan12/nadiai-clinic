@@ -36,13 +36,11 @@
  *          fee not configured  -> HUMAN_HANDOFF (fail loudly rather than
  *                                  silently default an amount — see
  *                                  HANDOFF_REASON.MISSING_CONSULTATION_FEE)
- *          prepayment required -> PAYMENT_PENDING, stamp
- *                                  hold_expires_at = now() + SLOT_HOLD_DURATION_MINUTES,
- *                                  prompt Pay Online vs Pay at Clinic.
- *                                  Pay Online creates a Razorpay Payment Link
- *                                  (RazorpayClientService) — see PaymentWebhookService.
- *                                  Pay at Clinic confirms immediately with
- *                                  payment_status/payment_method = pay_at_clinic.
+ *          prepayment required -> hold slot as PAYMENT_PENDING, then confirm
+ *                                  immediately as pay_at_clinic (Pay at Clinic
+ *                                  only — Pay Online / Razorpay is disabled in
+ *                                  the WhatsApp flow for now; see
+ *                                  handlePaymentPendingReply for dormant paths).
  *          else                -> CONFIRMED directly
  *
  * PAYMENT_PENDING holds: a slot with a still-active hold is excluded from
@@ -624,7 +622,7 @@ export class SlotSelectionService {
     }
 
     return requiresPrepayment
-      ? this._transitionToPaymentPending({ clinic, message, row, doctor, appointment, feeRupees: fee.feeRupees, log })
+      ? this._confirmPayAtClinic({ clinic, message, row, appointment, log })
       : this._transitionToConfirmed({ clinic, message, row, doctor, appointment, log });
   }
 

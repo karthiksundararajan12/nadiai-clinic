@@ -19,6 +19,8 @@ export function ScribeConversationChat({
   loading,
   loadingMessage,
   highlightedSegmentId = null,
+  isLiveRecording = false,
+  liveFallback = false,
 }) {
   const bottomRef = useRef(null);
 
@@ -26,7 +28,7 @@ export function ScribeConversationChat({
     if (segments.length) {
       bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }
-  }, [segments.length]);
+  }, [segments]);
 
   if (loading) {
     return (
@@ -44,7 +46,11 @@ export function ScribeConversationChat({
           <AudioLines className="h-6 w-6 text-gray-400" />
         </div>
         <p className="max-w-xs text-xs text-gray-500">
-          Conversation will appear here after transcription.
+          {isLiveRecording
+            ? liveFallback
+              ? "Live transcript unavailable. The full transcript will be saved when you stop recording."
+              : "Listening… draft words appear here as you speak."
+            : "Conversation will appear here after transcription."}
         </p>
       </div>
     );
@@ -57,6 +63,7 @@ export function ScribeConversationChat({
           const doctor = isDoctor(segment);
           const label = speakerLabel(segment);
           const isHighlighted = highlightedSegmentId === segment.id;
+          const isInterim = Boolean(segment.is_interim);
           return (
             <div
               key={segment.id}
@@ -82,16 +89,20 @@ export function ScribeConversationChat({
                     doctor
                       ? "rounded-tr-none bg-primary/5 text-gray-900"
                       : "rounded-tl-none border border-gray-200 bg-white text-gray-900",
+                    isInterim && "italic text-gray-500",
                   )}
+                  data-testid={isInterim ? "live-interim-transcript" : undefined}
                 >
-                  <p className="whitespace-pre-wrap">{segment.text}</p>
+                  <p className={cn("whitespace-pre-wrap", isInterim && "text-gray-500 italic")}>
+                    {segment.text}
+                  </p>
                   <span
                     className={cn(
                       "mt-1 block text-[9px] text-gray-500",
                       doctor ? "text-right" : "text-left",
                     )}
                   >
-                    {formatTimestamp(segment.start_seconds)}
+                    {isInterim ? "draft" : formatTimestamp(segment.start_seconds ?? segment.start)}
                   </span>
                 </div>
               </div>

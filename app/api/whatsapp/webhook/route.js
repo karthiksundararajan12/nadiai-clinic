@@ -27,7 +27,7 @@
 import { NextResponse } from "next/server";
 import { NormalizedInboundMessageSchema, parseReminderReplyId, bookingLogger } from "@/features/booking/client";
 import {
-  createBookingServices, verifyMetaSignature, parseInboundWhatsAppWebhook, alertOps, OPS_ALERT_STEP
+  createBookingServices, verifyMetaSignature, metaSignatureDebug, parseInboundWhatsAppWebhook, alertOps, OPS_ALERT_STEP
 } from "@/features/booking/server-core";
 
 const log = bookingLogger.child({ component: "API /api/whatsapp/webhook" });
@@ -73,12 +73,14 @@ export async function POST(request) {
 
   const signatureHeader = request.headers.get("x-hub-signature-256");
   const appSecret = process.env.WHATSAPP_APP_SECRET;
+  // HMAC is over rawBody from request.text() — never JSON.parse → stringify.
   if (!verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
-    // Diagnostic flags only -- never log the secret or signature values themselves.
+    // TEMP debug — masked first 8 hex chars only; remove after signature diagnosis.
     log.warn("Rejected webhook POST with invalid signature", {
       hasAppSecretConfigured: Boolean(appSecret),
       hasSignatureHeader: Boolean(signatureHeader),
       signatureHeaderPrefixOk: signatureHeader?.startsWith("sha256=") ?? false,
+      ...metaSignatureDebug(rawBody, signatureHeader, appSecret),
     });
     return NextResponse.json({ error: "Invalid signature", code: "WEBHOOK_SIGNATURE_INVALID" }, { status: 401 });
   }

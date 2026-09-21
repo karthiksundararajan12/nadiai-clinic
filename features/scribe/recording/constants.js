@@ -52,8 +52,11 @@ export const RECORDING_LIMITS = Object.freeze({
   /** Warning banner threshold (45 minutes). */
   WARNING_SECONDS: 45 * 60,
 
-  /** Chunk interval — 30 s of audio per chunk. Whisper-aligned. */
+  /** Default chunk interval when not streaming live (upload-oriented). */
   CHUNK_INTERVAL_MS: 30_000,
+
+  /** MediaRecorder timeslice while streaming to Deepgram live. */
+  LIVE_CHUNK_INTERVAL_MS: 250,
 
   /** Maximum single-chunk size before warning the user (10 MB). */
   MAX_CHUNK_SIZE_BYTES: 10 * 1024 * 1024,

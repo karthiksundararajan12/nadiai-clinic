@@ -4,6 +4,7 @@
 
 export { RecordingService }     from "./service.js";
 export { useRecording }         from "./use-recording.js";
+export { useLiveTranscription } from "./use-live-transcription.js";
 export { useAudioLevel }        from "./use-audio-level.js";
 export { useDeviceSelection }   from "./use-device-selection.js";
 export { useRecordingTimer, formatDuration } from "./use-recording-timer.js";

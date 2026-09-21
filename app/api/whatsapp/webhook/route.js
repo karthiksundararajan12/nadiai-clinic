@@ -69,19 +69,23 @@ export async function GET(request) {
 // ─────────────────────────────────────────────────────────────
 
 export async function POST(request) {
+  // App Router: read the exact raw POST body before any JSON.parse().
+  // HMAC-SHA256 must be computed over these bytes — never JSON.stringify(parsedBody).
   const rawBody = await request.text();
 
   const signatureHeader = request.headers.get("x-hub-signature-256");
-  const appSecret = process.env.WHATSAPP_APP_SECRET;
-  // HMAC is over rawBody from request.text() — never JSON.parse → stringify.
+  const rawAppSecret = process.env.WHATSAPP_APP_SECRET;
+  const appSecret = rawAppSecret?.trim() ?? "";
+
+  const debugFields = {
+    hasAppSecretConfigured: Boolean(appSecret),
+    hasSignatureHeader: Boolean(signatureHeader),
+    signatureHeaderPrefixOk: signatureHeader?.startsWith("sha256=") ?? false,
+    ...metaSignatureDebug(rawBody, signatureHeader, appSecret),
+  };
+
   if (!verifyMetaSignature(rawBody, signatureHeader, appSecret)) {
-    // TEMP debug — masked first 8 hex chars only; remove after signature diagnosis.
-    log.warn("Rejected webhook POST with invalid signature", {
-      hasAppSecretConfigured: Boolean(appSecret),
-      hasSignatureHeader: Boolean(signatureHeader),
-      signatureHeaderPrefixOk: signatureHeader?.startsWith("sha256=") ?? false,
-      ...metaSignatureDebug(rawBody, signatureHeader, appSecret),
-    });
+    log.warn("Rejected webhook POST with invalid signature", debugFields);
     return NextResponse.json({ error: "Invalid signature", code: "WEBHOOK_SIGNATURE_INVALID" }, { status: 401 });
   }
 

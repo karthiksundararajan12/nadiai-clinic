@@ -13,9 +13,9 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 const SIGNATURE_PREFIX = "sha256=";
 
 /**
- * @param {string} rawBody       Raw request body exactly as received.
+ * @param {string|Buffer|Uint8Array} rawBody  Raw request body exactly as received.
  * @param {string|null} signatureHeader  Value of the X-Hub-Signature-256 header.
- * @param {string} appSecret     Meta app secret.
+ * @param {string} appSecret     Meta app secret (App Settings → Basic → App Secret).
  * @returns {boolean}
  */
 export function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
@@ -26,7 +26,7 @@ export function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
 
   const expectedHex = signatureHeader.slice(SIGNATURE_PREFIX.length);
   const computedHex = createHmac("sha256", appSecret)
-    .update(rawBody, "utf8")
+    .update(rawBody)
     .digest("hex");
 
   const expected = Buffer.from(expectedHex, "hex");
@@ -40,7 +40,7 @@ export function verifyMetaSignature(rawBody, signatureHeader, appSecret) {
  * TEMP debug — first 8 hex chars of computed vs received digest.
  * Do not log full signatures or the app secret.
  *
- * @param {string} rawBody
+ * @param {string|Buffer|Uint8Array} rawBody
  * @param {string|null} signatureHeader
  * @param {string} [appSecret]
  */
@@ -49,11 +49,16 @@ export function metaSignatureDebug(rawBody, signatureHeader, appSecret) {
     ? signatureHeader.slice(SIGNATURE_PREFIX.length)
     : "";
   const computedHex = appSecret
-    ? createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex")
+    ? createHmac("sha256", appSecret).update(rawBody ?? "").digest("hex")
     : "";
+  const bodyBuffer = Buffer.isBuffer(rawBody)
+    ? rawBody
+    : Buffer.from(rawBody ?? "", typeof rawBody === "string" ? "utf8" : undefined);
   return {
     computedSigPrefix: computedHex.slice(0, 8) || "(none)",
     receivedSigPrefix: receivedHex.slice(0, 8) || "(none)",
-    bodyByteLength: Buffer.byteLength(rawBody ?? "", "utf8"),
+    bodyByteLength: bodyBuffer.length,
+    rawBodyType: Buffer.isBuffer(rawBody) ? "Buffer" : typeof rawBody,
+    rawBodyPreview: bodyBuffer.toString("utf8", 0, Math.min(100, bodyBuffer.length)),
   };
 }

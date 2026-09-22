@@ -41,6 +41,10 @@
  *                                  only — Pay Online / Razorpay is disabled in
  *                                  the WhatsApp flow for now; see
  *                                  handlePaymentPendingReply for dormant paths).
+ *                                  The resolved fee is threaded into the
+ *                                  confirmation copy: with the payment-method
+ *                                  prompt gone, that message is the only place
+ *                                  the patient is told what to pay.
  *          else                -> CONFIRMED directly
  *
  * PAYMENT_PENDING holds: a slot with a still-active hold is excluded from
@@ -87,7 +91,7 @@ import {
   buildOfferedSlotRows,
   matchOfferedSlotByReplyId,
 } from "../lib/slot-list.js";
-import { resolveConsultationFee } from "../lib/consultation-fee.js";
+import { resolveConsultationFee, toWholeRupees } from "../lib/consultation-fee.js";
 import { DatabaseError } from "../errors.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
@@ -622,7 +626,7 @@ export class SlotSelectionService {
     }
 
     return requiresPrepayment
-      ? this._confirmPayAtClinic({ clinic, message, row, appointment, log })
+      ? this._confirmPayAtClinic({ clinic, message, row, appointment, feeRupees: fee.feeRupees, log })
       : this._transitionToConfirmed({ clinic, message, row, doctor, appointment, log });
   }
 
@@ -817,7 +821,14 @@ export class SlotSelectionService {
       });
     }
 
-    return this._confirmPayAtClinic({ clinic, message, row, appointment: held, log });
+    return this._confirmPayAtClinic({
+      clinic,
+      message,
+      row,
+      appointment: held,
+      feeRupees: row.context?.feeRupees ?? held.payment_amount,
+      log,
+    });
   }
 
   _paymentMethodButtons() {
@@ -920,7 +931,7 @@ export class SlotSelectionService {
     };
   }
 
-  async _confirmPayAtClinic({ clinic, message, row, appointment, log }) {
+  async _confirmPayAtClinic({ clinic, message, row, appointment, feeRupees = null, log }) {
     const confirmed = await this._appointmentRepo.confirmPayAtClinic(clinic.id, appointment.id);
     if (!confirmed) {
       return this._expirePaymentPendingHold({ clinic, message, row, log });
@@ -938,10 +949,26 @@ export class SlotSelectionService {
       last_message_at: new Date().toISOString(),
     });
 
-    const body = SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED
+    // Fall back to the row's own stamped amount so the dormant
+    // handlePaymentPendingReply path and any future caller still quote a
+    // price rather than silently dropping it.
+    const wholeRupees = toWholeRupees(feeRupees ?? confirmed.payment_amount);
+    if (wholeRupees === null) {
+      log.warn("Pay-at-clinic confirm has no usable consultation fee — omitting the amount from the confirmation", {
+        appointmentId: confirmed.id,
+        feeRupees,
+        paymentAmount: confirmed.payment_amount ?? null,
+      });
+    }
+
+    const template = wholeRupees === null
+      ? SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED_WITHOUT_FEE
+      : SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED;
+    const body = template
       .replace("{patientName}", row.context?.selectedPatientName ?? "Your patient")
       .replace("{clinicName}", clinic.name ?? "the clinic")
-      .replace("{slotLabel}", formatSlotLabel(new Date(confirmed.slot_start)));
+      .replace("{slotLabel}", formatSlotLabel(new Date(confirmed.slot_start)))
+      .replace("{fee}", String(wholeRupees));
     await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
 
     await this._deliverPayAtClinicInvoice({ clinicId: clinic.id, appointment: confirmed, log });

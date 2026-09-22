@@ -41,6 +41,7 @@ import {
 } from "../constants.js";
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { formatSlotLabel } from "../lib/slot-engine.js";
+import { toWholeRupees } from "../lib/consultation-fee.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
@@ -321,20 +322,41 @@ export class PaymentWebhookService {
    * names aren't on it directly and are looked up here; `payment_amount` IS
    * on it directly (stamped at booking time with the doctor's real
    * consultation_fee — see ARCHITECTURE.md's `appointments` section), so no
-   * doctor_profiles lookup is needed just for the fee.
+   * doctor_profiles lookup is needed just for the fee. It is a
+   * `numeric(10,2)` column, so it arrives as "799.00" and goes through
+   * toWholeRupees (lib/consultation-fee.js) to reach the patient as "₹799".
    */
   async _notifyContactConfirmed({ clinicId, contactPhone, appointment, log }) {
+    const slotLabel = formatSlotLabel(new Date(appointment.slot_start));
+    const plainTextConfirmation = () =>
+      this._notifyContact({
+        clinicId,
+        contactPhone,
+        body: PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED.replace("{slotLabel}", slotLabel),
+        log,
+      });
+
     if (!this._templatesLive) {
       log.info("WHATSAPP_TEMPLATES_LIVE=false — sending the plain-text PAYMENT_CONFIRMED message instead of the appt_booking_confirmed template", {
         clinicId,
         appointmentId: appointment.id,
       });
-      return this._notifyContact({
+      return plainTextConfirmation();
+    }
+
+    // The Meta body renders {{4}} as "₹{{4}}" and requires every
+    // placeholder to be supplied, so there is no way to send the template
+    // minus just the amount. Degrade to the fee-less plain-text
+    // confirmation instead of quoting "₹0" or a bare "₹" — same rule as
+    // SLOT_SELECTION_COPY.PAY_AT_CLINIC_CONFIRMED_WITHOUT_FEE.
+    const feeRupees = toWholeRupees(appointment.payment_amount);
+    if (feeRupees === null) {
+      log.warn("No usable payment_amount on a captured payment — sending the plain-text confirmation rather than a template quoting a bogus fee", {
         clinicId,
-        contactPhone,
-        body: PAYMENT_WEBHOOK_COPY.PAYMENT_CONFIRMED.replace("{slotLabel}", formatSlotLabel(new Date(appointment.slot_start))),
-        log,
+        appointmentId: appointment.id,
+        paymentAmount: appointment.payment_amount ?? null,
       });
+      return plainTextConfirmation();
     }
 
     try {
@@ -354,8 +376,8 @@ export class PaymentWebhookService {
       const bodyParams = [
         patient?.full_name ?? "there",
         doctor?.full_name ?? "our doctor",
-        formatSlotLabel(new Date(appointment.slot_start)),
-        String(appointment.payment_amount ?? ""),
+        slotLabel,
+        String(feeRupees),
         clinic.name ?? "our clinic",
       ];
 

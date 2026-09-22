@@ -130,7 +130,7 @@ export {
   slotRowId,
   parseSlotRowId,
 } from "./lib/slot-engine.js";
-export { resolveConsultationFee } from "./lib/consultation-fee.js";
+export { resolveConsultationFee, toWholeRupees } from "./lib/consultation-fee.js";
 export { isBlockingAppointmentRow } from "./lib/appointment-availability.js";
 export { reminderReplyId, parseReminderReplyId } from "./lib/reminder-reply.js";
 export {

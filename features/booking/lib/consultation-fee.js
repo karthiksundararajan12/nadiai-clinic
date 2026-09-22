@@ -43,3 +43,28 @@ export function resolveConsultationFee(doctor) {
     requiresPrepayment: feeRupees > PAYMENT_REQUIRED_MIN_FEE,
   };
 }
+
+/**
+ * Normalizes a consultation fee for patient-facing copy, in whole rupees.
+ *
+ * The same amount reaches callers in two shapes: `resolveConsultationFee`
+ * yields the number `799`, while reading `appointments.payment_amount` back
+ * out of Postgres yields the string `"799.00"` (the column is
+ * `numeric(10,2)`). Both must read as "₹799", never "₹799.00".
+ *
+ * Non-positive and blank values return null rather than a number, because
+ * every message that quotes a fee describes a booking that required
+ * prepayment: `Number(null)` and `Number("")` are both 0, so a missing
+ * amount would otherwise silently advertise a free consultation. Callers
+ * are expected to switch to copy that omits the amount entirely — quoting
+ * "₹0" or a bare "₹" to a patient is worse than saying nothing.
+ *
+ * @param {number|string|null|undefined} amount
+ * @returns {number|null} null when there is no usable amount to quote.
+ */
+export function toWholeRupees(amount) {
+  if (amount === null || amount === undefined || amount === "") return null;
+  const n = Number(amount);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return Math.round(n);
+}

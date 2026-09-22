@@ -576,6 +576,11 @@ test("AWAITING_SELECTION: choosing a paid slot confirms immediately as pay-at-cl
   assert.equal(wa.calls[0].type, "text");
   assert.match(wa.calls[0].body, /confirmed/i);
   assert.match(wa.calls[0].body, /pay at the clinic/i);
+  // Removing the payment-method prompt removed the only place the patient
+  // was told the price — it has to be in this message now.
+  assert.match(wa.calls[0].body, /Consultation fee: ₹750\b/);
+  assert.equal(wa.calls[0].body.includes("750.00"), false, "whole rupees, not numeric(10,2)");
+  assert.equal(wa.calls[0].body.includes("{fee}"), false);
   assert.equal(/payment received/i.test(wa.calls[0].body), false);
   assert.equal(wa.calls[0].body.includes("Buttons:"), false);
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
@@ -675,9 +680,76 @@ test("PAYMENT_PENDING (dormant): Pay at Clinic confirms without Razorpay and doe
   assert.equal(wa.calls[0].type, "text");
   assert.match(wa.calls[0].body, /confirmed/i);
   assert.match(wa.calls[0].body, /pay at the clinic/i);
+  // Dormant path: the fee comes from context.feeRupees / payment_amount
+  // rather than a freshly resolved doctor fee, and must still be quoted.
+  assert.match(wa.calls[0].body, /Consultation fee: ₹750\b/);
   assert.equal(/payment received/i.test(wa.calls[0].body), false);
   assert.equal(wa.calls[0].body.includes("Buttons:"), false);
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
+});
+
+test("pay-at-clinic confirmation quotes a numeric(10,2) fee as whole rupees", async () => {
+  // resolveConsultationFee reads doctor_profiles.consultation_fee, which is
+  // numeric(10,2) — Supabase hands it back as the string "799.00".
+  const row = rowAwaitingSelection();
+  const { service, repo, wa } = makeService({
+    row,
+    doctor: { ...DOCTOR_PAID, consultation_fee: "799.00" },
+  });
+
+  const result = await service.handleReply({
+    clinic: CLINIC,
+    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
+  assert.match(wa.calls[0].body, /Consultation fee: ₹799 —/);
+  assert.equal(wa.calls[0].body.includes("799.00"), false);
+});
+
+test("pay-at-clinic confirmation omits the amount entirely rather than quoting a bare ₹", async () => {
+  // No feeRupees in context and no payment_amount on the row: quoting
+  // "₹" with nothing after it would be worse than saying nothing.
+  const appointmentId = "appt-1";
+  const row = buildRow({
+    current_state: CONVERSATION_STATE.PAYMENT_PENDING,
+    context: {
+      appointmentId,
+      awaitingPaymentMethodChoice: true,
+      selectedPatientName: "Asha Kapoor",
+    },
+  });
+  const { service, repo, wa, appointmentRepo } = makeService({ row, doctor: DOCTOR_PAID });
+
+  await appointmentRepo.createIfAvailable({
+    clinic_id: CLINIC.id,
+    doctor_id: DOCTOR_PAID.id,
+    patient_id: "p1",
+    slot_start: SLOT_A.slotStart,
+    slot_end: SLOT_A.slotEnd,
+    status: "payment_pending",
+    payment_status: "pending",
+    payment_method: "online",
+    payment_amount: null,
+    hold_expires_at: new Date(Date.now() + SLOT_HOLD_DURATION_MINUTES * 60 * 1000).toISOString(),
+  });
+
+  const result = await service.handlePaymentPendingReply({
+    clinic: CLINIC,
+    message: buildMessage({
+      waMessageId: "wamid.pay-clinic-no-fee",
+      type: "button_reply",
+      replyId: PAYMENT_METHOD_INTENT.AT_CLINIC,
+    }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
+  assert.match(wa.calls[0].body, /pay at the clinic/i);
+  assert.equal(wa.calls[0].body.includes("₹"), false);
+  assert.equal(wa.calls[0].body.includes("null"), false);
+  assert.equal(wa.calls[0].body.includes("NaN"), false);
 });
 
 test("AWAITING_SELECTION: a doctor with no consultation_fee configured hands off instead of silently defaulting an amount", async () => {

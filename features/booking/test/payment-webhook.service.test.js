@@ -252,6 +252,83 @@ test("payment.captured: WHATSAPP_TEMPLATES_LIVE=true confirms the appointment, s
   assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
 });
 
+// ─────────────────────────────────────────────────────────────
+// Fee formatting in the template's {{4}} param.
+// payment_amount is numeric(10,2), so Supabase hands it back as a string
+// like "500.00" — {{4}} is rendered by Meta as "₹{{4}}".
+// ─────────────────────────────────────────────────────────────
+
+test("payment.captured: a numeric(10,2) payment_amount is quoted as whole rupees, not '500.00'", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed", payment_amount: "500.00" };
+  const { service, wa } = makeService({
+    confirmResult: confirmed,
+    conversationRow: paymentPendingConversationRow(),
+    templatesLive: true,
+  });
+
+  await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload(),
+  });
+
+  assert.equal(wa.templateCalls.length, 1);
+  assert.equal(wa.templateCalls[0].opts.bodyParams[3], "500");
+});
+
+test("payment.captured: a fractional payment_amount is rounded to whole rupees", async () => {
+  const confirmed = { ...APPOINTMENT, status: "confirmed", payment_amount: "499.50" };
+  const { service, wa } = makeService({
+    confirmResult: confirmed,
+    conversationRow: paymentPendingConversationRow(),
+    templatesLive: true,
+  });
+
+  await service.handleEvent({
+    eventId: "evt_1",
+    eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+    payload: capturedEventPayload(),
+  });
+
+  assert.equal(wa.templateCalls[0].opts.bodyParams[3], "500");
+});
+
+for (const [label, paymentAmount] of [
+  ["null", null],
+  ["undefined", undefined],
+  ["an empty string", ""],
+  ["zero", 0],
+]) {
+  test(`payment.captured: ${label} payment_amount sends the plain-text confirmation instead of a template quoting a bogus fee`, async () => {
+    // Meta requires every {{n}} to be supplied, so the template can't be
+    // sent minus just the amount — degrading to the fee-less plain text is
+    // the only way to avoid "₹" or "₹0" reaching the patient.
+    const confirmed = { ...APPOINTMENT, status: "confirmed", payment_amount: paymentAmount };
+    const { service, wa, conversationRepo } = makeService({
+      confirmResult: confirmed,
+      conversationRow: paymentPendingConversationRow(),
+      templatesLive: true,
+    });
+
+    const result = await service.handleEvent({
+      eventId: "evt_1",
+      eventType: RAZORPAY_EVENT_TYPE.PAYMENT_CAPTURED,
+      payload: capturedEventPayload(),
+    });
+
+    assert.equal(result.action, "PAYMENT_CONFIRMED");
+    assert.equal(wa.templateCalls.length, 0, "must not send a template it cannot fill");
+    assert.equal(wa.calls.length, 1);
+    assert.equal(wa.calls[0].body.includes("₹"), false);
+    assert.equal(wa.calls[0].body.includes("undefined"), false);
+    assert.equal(wa.calls[0].body.includes("NaN"), false);
+    assert.match(wa.calls[0].body, /confirmed/i);
+    // The confirm/notify split is best-effort: messaging never blocks the
+    // state transition.
+    assert.equal(conversationRepo.row.current_state, CONVERSATION_STATE.CONFIRMED);
+  });
+}
+
 test("payment.captured: WHATSAPP_TEMPLATES_LIVE=false (default) falls back to the plain-text PAYMENT_CONFIRMED message instead of the template, and still advances conversation_state", async () => {
   const confirmed = { ...APPOINTMENT, status: "confirmed" };
   const row = paymentPendingConversationRow();

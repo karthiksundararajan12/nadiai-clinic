@@ -1,7 +1,11 @@
 name: Booking reminders
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    # Fallback cadence, offset from :00/:15/:30/:45 to avoid GitHub schedule congestion.
+    # The self-dispatch tick below is the primary 15-minute loop.
+    - cron: "7,22,37,52 * * * *"
+  repository_dispatch:
+    types: [reminder-sweep-tick]
   workflow_dispatch:
 jobs:
   trigger:
@@ -39,5 +43,36 @@ jobs:
           echo "$body"
           if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
             echo "HTTP $status"
+            exit 1
+          fi
+
+  # Runs only after every matrix sweep succeeds. Kept as its own job so the
+  # prod/dev matrix does not sleep twice or fire two dispatches.
+  schedule-next:
+    name: schedule next tick
+    needs: trigger
+    runs-on: ubuntu-latest
+    # Same-repo repository_dispatch is an allowed GITHUB_TOKEN exception and
+    # requires contents:write. If this job 403s (org token policy), add a
+    # classic PAT with `repo` scope as secret REMINDER_DISPATCH_TOKEN.
+    permissions:
+      contents: write
+    steps:
+      - name: Wait ~15 minutes then trigger next sweep
+        env:
+          GH_TOKEN: ${{ secrets.REMINDER_DISPATCH_TOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          sleep 900
+          status=$(curl -sS -o /tmp/dispatch-body -w "%{http_code}" -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/dispatches" \
+            -d '{"event_type":"reminder-sweep-tick"}')
+          if [ "$status" -ne 204 ]; then
+            echo "Failed to dispatch reminder-sweep-tick (HTTP $status)"
+            cat /tmp/dispatch-body || true
+            echo "GITHUB_TOKEN can trigger same-repo repository_dispatch with contents:write."
+            echo "If this 403s, add a PAT with repo scope as secret REMINDER_DISPATCH_TOKEN."
             exit 1
           fi

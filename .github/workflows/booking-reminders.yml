@@ -5,15 +5,35 @@ on:
   workflow_dispatch:
 jobs:
   trigger:
+    name: trigger (${{ matrix.environment }})
     runs-on: ubuntu-latest
+    strategy:
+      # Each environment is independent — a failure against one must not
+      # cancel the sweep for the other.
+      fail-fast: false
+      matrix:
+        include:
+          - environment: production
+            host: nadiai-clinic.vercel.app
+            secret_name: CRON_SECRET
+          - environment: dev
+            host: dev.nadiai.in
+            secret_name: DEV_CRON_SECRET
     steps:
       - name: Log run timestamp
-        run: echo "Booking reminders trigger at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+        run: echo "Booking reminders trigger for ${{ matrix.environment }} at $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
       - name: Call booking reminders endpoint
+        env:
+          CRON_SECRET: ${{ secrets[matrix.secret_name] }}
+          HOST: ${{ matrix.host }}
         run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "Missing repository secret ${{ matrix.secret_name }} — cannot authenticate against $HOST"
+            exit 1
+          fi
           response=$(curl -sS -w "\n%{http_code}" \
-            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            https://nadiai-clinic.vercel.app/api/cron/booking-reminders)
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://$HOST/api/cron/booking-reminders")
           body=$(echo "$response" | head -n -1)
           status=$(echo "$response" | tail -n 1)
           echo "$body"

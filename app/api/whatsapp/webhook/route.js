@@ -7,6 +7,15 @@
  * exactly once (via ClinicRepository), then threads clinic_id through
  * every downstream query. See features/booking/index.js for scope notes.
  *
+ * ── Idempotency ────────────────────────────────────────────────────────
+ * Every inbound wamid is claimed in public.whatsapp_inbound_messages
+ * (insert-if-new) before it is dispatched — see claimInboundMessage below.
+ * This is the authoritative dedupe for BOTH downstream branches.
+ * conversation_state.context.last_wa_message_id remains as an in-row second
+ * layer, but it only ever remembered one wamid per contact, so it could not
+ * catch a redelivery that arrived after any other message from the same
+ * contact, and it never covered reminder quick-replies at all.
+ *
  * ── Top-level error boundary (pre-pilot visibility pass) ────────────────
  * Two independent boundaries, both alert ops (index.js header note #29)
  * instead of only logging, and both still ACK Meta with 200 (unchanged —
@@ -27,7 +36,8 @@
 import { NextResponse } from "next/server";
 import { NormalizedInboundMessageSchema, parseReminderReplyId, bookingLogger } from "@/features/booking/client";
 import {
-  createBookingServices, verifyMetaSignature, metaSignatureDebug, parseInboundWhatsAppWebhook, alertOps, OPS_ALERT_STEP
+  createBookingServices, verifyMetaSignature, metaSignatureDebug, parseInboundWhatsAppWebhook,
+  claimInboundMessage, alertOps, OPS_ALERT_STEP
 } from "@/features/booking/server-core";
 
 const log = bookingLogger.child({ component: "API /api/whatsapp/webhook" });
@@ -104,7 +114,10 @@ export async function POST(request) {
       return NextResponse.json({ status: "ignored" }, { status: 200 });
     }
 
-    const { clinicRepository, conversationStateService, reminderService, whatsappClient } = createBookingServices();
+    const {
+      clinicRepository, conversationStateService, reminderService, whatsappClient,
+      whatsappInboundMessageRepository,
+    } = createBookingServices();
 
     for (const rawMessage of messages) {
       const parsed = NormalizedInboundMessageSchema.safeParse(rawMessage);
@@ -114,6 +127,14 @@ export async function POST(request) {
       }
       const message = parsed.data;
       const messageLog = log.child({ waMessageId: message.waMessageId });
+
+      // Idempotency claim — BEFORE any side effect, and before the branch
+      // below picks reminderService vs conversationStateService, so both
+      // paths are covered (reminder quick-replies never touched
+      // conversation_state and so had no dedupe of their own at all).
+      if (!(await claimInboundMessage(whatsappInboundMessageRepository, message, messageLog))) {
+        continue;
+      }
 
       let clinicIdForAlert = null;
       try {

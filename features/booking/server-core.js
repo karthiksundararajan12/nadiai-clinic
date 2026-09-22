@@ -14,6 +14,7 @@ export * from "./client.js";
 export { verifyMetaSignature, metaSignatureDebug } from "./lib/signature.js";
 export { verifyRazorpaySignature } from "./lib/razorpay-signature.js";
 export { parseInboundWhatsAppWebhook } from "./lib/webhook-parser.js";
+export { claimInboundMessage } from "./lib/inbound-dedupe.js";
 export {
   alertOps,
   sendToOpsChannel,
@@ -33,6 +34,7 @@ export { DoctorProfileRepository } from "./repository/doctor-profile.repository.
 export { PatientRepository } from "./repository/patient.repository.js";
 export { AppointmentRepository } from "./repository/appointment.repository.js";
 export { RazorpayWebhookEventRepository } from "./repository/razorpay-webhook-event.repository.js";
+export { WhatsAppInboundMessageRepository } from "./repository/whatsapp-inbound-message.repository.js";
 export { OpsAlertRepository } from "./repository/ops-alert.repository.js";
 export { InvoiceRepository } from "./repository/invoice.repository.js";
 export { WhatsAppClientService } from "./services/whatsapp-client.service.js";
@@ -92,6 +94,7 @@ import { DoctorProfileRepository as _DoctorRepo } from "./repository/doctor-prof
 import { PatientRepository as _PatientRepo } from "./repository/patient.repository.js";
 import { AppointmentRepository as _AppointmentRepo } from "./repository/appointment.repository.js";
 import { RazorpayWebhookEventRepository as _RazorpayWebhookEventRepo } from "./repository/razorpay-webhook-event.repository.js";
+import { WhatsAppInboundMessageRepository as _WhatsAppInboundMessageRepo } from "./repository/whatsapp-inbound-message.repository.js";
 import { InvoiceRepository as _InvoiceRepo } from "./repository/invoice.repository.js";
 import { WhatsAppClientService as _WAClient } from "./services/whatsapp-client.service.js";
 import { RazorpayClientService as _RazorpayClient } from "./services/razorpay-client.service.js";
@@ -123,6 +126,7 @@ import { SessionRepository as _ScribeSessionRepo } from "../scribe/repository/se
  *   patientRepository: import("./repository/patient.repository.js").PatientRepository;
  *   appointmentRepository: import("./repository/appointment.repository.js").AppointmentRepository;
  *   razorpayWebhookEventRepository: import("./repository/razorpay-webhook-event.repository.js").RazorpayWebhookEventRepository;
+ *   whatsappInboundMessageRepository: import("./repository/whatsapp-inbound-message.repository.js").WhatsAppInboundMessageRepository;
  *   invoiceRepository: import("./repository/invoice.repository.js").InvoiceRepository;
  *   notificationRepository: import("./repository/notification.repository.js").NotificationRepository;
  *   whatsappClient: import("./services/whatsapp-client.service.js").WhatsAppClientService;
@@ -150,6 +154,7 @@ export function createBookingServices(supabaseClient) {
   const patientRepository = new _PatientRepo(supabase);
   const appointmentRepository = new _AppointmentRepo(supabase);
   const razorpayWebhookEventRepository = new _RazorpayWebhookEventRepo(supabase);
+  const whatsappInboundMessageRepository = new _WhatsAppInboundMessageRepo(supabase);
   const invoiceRepository = new _InvoiceRepo(supabase);
   const notificationRepository = new _NotificationRepo(supabase);
   const whatsappClient = new _WAClient({
@@ -245,6 +250,7 @@ export function createBookingServices(supabaseClient) {
     patientRepository,
     appointmentRepository,
     razorpayWebhookEventRepository,
+    whatsappInboundMessageRepository,
     invoiceRepository,
     notificationRepository,
     whatsappClient,

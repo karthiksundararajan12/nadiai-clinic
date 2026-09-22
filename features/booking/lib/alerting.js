@@ -60,6 +60,7 @@ export const OPS_ALERT_STEP = Object.freeze({
   WHATSAPP_WEBHOOK_MESSAGE:      "whatsapp_webhook_message",
   WHATSAPP_WEBHOOK_TOP_LEVEL:    "whatsapp_webhook_top_level",
   WHATSAPP_WEBHOOK_FALLBACK_REPLY_FAILED: "whatsapp_webhook_fallback_reply_failed",
+  WHATSAPP_WEBHOOK_DEDUPE_UNAVAILABLE: "whatsapp_webhook_dedupe_unavailable",
   RAZORPAY_SEND:                 "razorpay_send",
   INVOICE_DELIVERY:              "invoice_delivery",
   IN_APP_NOTIFICATION:           "in_app_notification",
@@ -88,6 +89,7 @@ export const WEBHOOK_ERROR_STEPS = Object.freeze([
   OPS_ALERT_STEP.WHATSAPP_WEBHOOK_MESSAGE,
   OPS_ALERT_STEP.WHATSAPP_WEBHOOK_TOP_LEVEL,
   OPS_ALERT_STEP.WHATSAPP_WEBHOOK_FALLBACK_REPLY_FAILED,
+  OPS_ALERT_STEP.WHATSAPP_WEBHOOK_DEDUPE_UNAVAILABLE,
 ]);
 
 export const WHATSAPP_SEND_FAILURE_STEPS = Object.freeze([OPS_ALERT_STEP.WHATSAPP_SEND]);

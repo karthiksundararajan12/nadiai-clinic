@@ -7,9 +7,12 @@
  *
  * Schedule: GitHub Actions .github/workflows/booking-reminders.yml
  * runs every 15 minutes (cron: star-slash-15 star star star star) and also supports
- * workflow_dispatch for a one-click manual run. (vercel.json currently
- * has no crons — comments elsewhere that mention vercel.json scheduling
- * are stale.)
+ * workflow_dispatch for a one-click manual run. It fans out over a matrix
+ * of environments — production (nadiai-clinic.vercel.app, CRON_SECRET) and
+ * dev (dev.nadiai.in, DEV_CRON_SECRET) — since each deployment sweeps its
+ * own Supabase project. Scheduled runs only fire from the default branch.
+ * (vercel.json currently has no crons — comments elsewhere that mention
+ * vercel.json scheduling are stale.)
  *
  * Modes:
  *   1. Default (no query params) — ReminderService.runReminderSweep():

@@ -8,6 +8,10 @@
  * shared by every state:
  *   - Fresh/expired conversation detection (> 24h inactivity resets to START).
  *   - Idempotency on wa_message_id (Meta may redeliver the same webhook).
+ *     NOTE: context.last_wa_message_id is a single-slot second layer only —
+ *     it forgets a wamid as soon as another message from the same contact
+ *     is processed, so a late redelivery looks new. The authoritative
+ *     dedupe is the whatsapp_inbound_messages claim in the webhook route.
  *   - Global reset keywords (RESET_KEYWORDS — "restart", "start over", …)
  *     short-circuit normal state routing and reset conversation_state to
  *     START. PAYMENT_PENDING gets an explicit confirmation step first so we
@@ -16,7 +20,11 @@
  *   - Global cancel keyword (CANCEL_KEYWORDS — "cancel") cancels the
  *     appointments row when context.appointmentId is PAYMENT_PENDING or
  *     CONFIRMED (incl. post-reminder), then resets conversation_state.
- *     Without a cancellable appointment it falls back to the reset path.
+ *     An appointment that is ALREADY cancelled is acknowledged in place
+ *     (_acknowledgeAlreadyCancelled) rather than reset — that branch is
+ *     reached by duplicate "cancel"s, and answering those with the reset
+ *     copy reads as a spontaneous "let's start over". Without any
+ *     appointment to act on at all it still falls back to the reset path.
  * START behavior:
  * DoctorNotificationService (see that file) rather than owned here, since
  * SLOT_SELECTION can also trigger a handoff (no doctor configured / no open
@@ -239,6 +247,16 @@ export class ConversationStateService {
       return this._handleResetKeyword({ clinic, message, row, log });
     }
 
+    // Already cancelled — almost always a redelivered/repeated "cancel" for
+    // an appointment the previous delivery just cancelled. Acknowledge it;
+    // never fall through to the reset path, which would answer a duplicate
+    // with an unprompted "let's start over" and wipe the conversation.
+    if (appointment.status === APPOINTMENT_STATUS.CANCELLED) {
+      return this._acknowledgeAlreadyCancelled({
+        clinic, message, row, log, appointmentId: appointment.id,
+      });
+    }
+
     if (!appointment || !CANCELLABLE_APPOINTMENT_STATUSES.has(appointment.status)) {
       return this._handleResetKeyword({ clinic, message, row, log });
     }
@@ -360,6 +378,11 @@ export class ConversationStateService {
       if (appointmentId && this._appointmentRepo) {
         appointment = await this._appointmentRepo.findByIdForClinic(clinic.id, appointmentId).catch(() => null);
       }
+      if (appointment?.status === APPOINTMENT_STATUS.CANCELLED) {
+        return this._acknowledgeAlreadyCancelled({
+          clinic, message, row, log, appointmentId: appointment.id,
+        });
+      }
       if (!appointment || !CANCELLABLE_APPOINTMENT_STATUSES.has(appointment.status)) {
         return this._resetConversationToStart({ clinic, message, row, log });
       }
@@ -431,10 +454,15 @@ export class ConversationStateService {
     }
 
     if (!cancelled) {
-      log.info("Cancel keyword matched no cancellable appointment — falling back to reset", {
+      // cancelViaPatientKeyword is a conditional UPDATE — null means the row
+      // was no longer cancellable, i.e. a concurrent/redelivered "cancel"
+      // already did the work. Acknowledge rather than reset.
+      log.info("Cancel keyword matched no cancellable appointment — already cancelled", {
         appointmentId: appointment.id,
       });
-      return this._resetConversationToStart({ clinic, message, row, log });
+      return this._acknowledgeAlreadyCancelled({
+        clinic, message, row, log, appointmentId: appointment.id,
+      });
     }
 
     await this._notifyDoctorAppointmentCancelled({ clinicId: clinic.id, appointment: cancelled, log });
@@ -475,6 +503,43 @@ export class ConversationStateService {
       action: "APPOINTMENT_CANCELLED",
       currentState: CONVERSATION_STATE.START,
       appointmentId: cancelled.id,
+    };
+  }
+
+  /**
+   * A "cancel" aimed at an appointment that is already CANCELLED — the
+   * duplicate-delivery / double-tap case. Tells the contact where they
+   * stand and stamps the wamid, but deliberately leaves current_state
+   * alone: resetting here is what surfaced an unprompted "No problem,
+   * let's start over" long after the patient last typed anything.
+   * Clears any pending confirmation flag so the conversation isn't stuck
+   * waiting on a yes/no that no longer has anything to act on.
+   */
+  async _acknowledgeAlreadyCancelled({ clinic, message, row, log, appointmentId }) {
+    const context = { ...(row.context ?? {}) };
+    delete context.awaitingCancelConfirmation;
+    delete context.awaitingResetConfirmation;
+
+    await this._repo.update(row.id, {
+      context: { ...context, last_wa_message_id: message.waMessageId },
+      last_message_at: new Date().toISOString(),
+    });
+    await this._wa.sendText(
+      clinic.whatsapp_phone_number_id,
+      message.contactPhone,
+      CONFIRMED_INBOUND_COPY.CANCELLED,
+    );
+
+    log.info("Cancel request for an already-cancelled appointment — acknowledged without resetting", {
+      contactPhone: message.contactPhone,
+      appointmentId,
+      currentState: row.current_state,
+    });
+    return {
+      handled: true,
+      action: "APPOINTMENT_ALREADY_CANCELLED",
+      currentState: row.current_state,
+      appointmentId,
     };
   }
 
@@ -600,11 +665,15 @@ export class ConversationStateService {
       }
     }
 
-    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
+    // Record the wamid BEFORE sending, not after: this reply is the one a
+    // redelivered webhook used to duplicate most visibly, and a crash
+    // between the send and the write would leave the wamid unrecorded and
+    // guarantee a repeat on Meta's retry.
     await this._repo.update(row.id, {
       context: { ...row.context, last_wa_message_id: message.waMessageId },
       last_message_at: new Date().toISOString(),
     });
+    await this._wa.sendText(clinic.whatsapp_phone_number_id, message.contactPhone, body);
 
     log.info("Sent CONFIRMED inbound fallback reply", {
       contactPhone: message.contactPhone,
@@ -680,7 +749,7 @@ export class ConversationStateService {
       contactPhone: message.contactPhone,
       wasExpired,
     });
-    await this._sendGreetingMenu(clinic, message.contactPhone, row, log);
+    await this._sendGreetingMenu(clinic, message, row, log);
     return { handled: true, action: "GREETING_SENT", currentState: CONVERSATION_STATE.START };
   }
 
@@ -688,7 +757,7 @@ export class ConversationStateService {
     // Defensive: row says START but the menu never actually went out (e.g. a previous
     // send failed after the DB write succeeded) — resend instead of evaluating a "reply".
     if (!row.context?.menu_sent_at) {
-      await this._sendGreetingMenu(clinic, message.contactPhone, row, log);
+      await this._sendGreetingMenu(clinic, message, row, log);
       return { handled: true, action: "GREETING_SENT", currentState: CONVERSATION_STATE.START };
     }
 
@@ -735,15 +804,23 @@ export class ConversationStateService {
     return known.includes(message.replyId) ? message.replyId : null;
   }
 
-  async _sendGreetingMenu(clinic, contactPhone, row, log) {
+  async _sendGreetingMenu(clinic, message, row, log) {
+    const contactPhone = message.contactPhone;
     const bodyText = START_MENU_COPY.GREETING.replace("{clinicName}", clinic.name ?? "our clinic");
     await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, contactPhone, {
       bodyText,
       buttonLabel: START_MENU_COPY.BUTTON_LABEL,
       rows: START_MENU_ROWS,
     });
+    // last_wa_message_id matters on the _handleStart resend path: without it
+    // this reply is the one message that never stamped the wamid it was
+    // answering, so a redelivery re-sent the greeting indefinitely.
     await this._repo.update(row.id, {
-      context: { ...row.context, menu_sent_at: new Date().toISOString() },
+      context: {
+        ...row.context,
+        last_wa_message_id: message.waMessageId,
+        menu_sent_at: new Date().toISOString(),
+      },
       last_message_at: new Date().toISOString(),
     });
     log.info("Greeting + intent menu sent", { contactPhone });
@@ -824,6 +901,10 @@ export class ConversationStateService {
         clinicId: clinic.id,
         contactPhone: message.contactPhone,
         extra: { action },
+      });
+      await this._repo.update(row.id, {
+        context: { ...row.context, last_wa_message_id: message.waMessageId },
+        last_message_at: new Date().toISOString(),
       });
       await this._wa.sendText(
         clinic.whatsapp_phone_number_id,

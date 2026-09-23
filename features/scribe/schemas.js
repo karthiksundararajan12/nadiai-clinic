@@ -58,7 +58,7 @@ export const TranscriptSegmentSchema = z.object({
 export const CreateSessionSchema = z.object({
   patient_id:     uuidOptional,
   appointment_id: uuidOptional,
-  language:       languageEnum.default(SCRIBE_LANGUAGE.HINGLISH),
+  language:       languageEnum.default(SCRIBE_LANGUAGE.ENGLISH),
 });
 
 /** @typedef {z.infer<typeof CreateSessionSchema>} CreateSessionInput */
@@ -168,7 +168,7 @@ export const UploadChunkManifestSchema = z.object({
 export const StartAudioUploadSchema = z.object({
   patient_id:             uuidOptional,
   appointment_id:         uuidOptional,
-  language:               languageEnum.default(SCRIBE_LANGUAGE.HINGLISH),
+  language:               languageEnum.default(SCRIBE_LANGUAGE.ENGLISH),
   audio_duration_seconds: z
     .number()
     .nonnegative()

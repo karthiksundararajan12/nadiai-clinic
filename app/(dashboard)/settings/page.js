@@ -90,7 +90,7 @@ export default function SettingsPage() {
   const [remindersSaving, setRemindersSaving] = useState(false);
   const [remindersError, setRemindersError] = useState("");
   const [remindersSuccess, setRemindersSuccess] = useState("");
-  const [defaultScribeLanguage, setDefaultScribeLanguage] = useState("hinglish");
+  const [defaultScribeLanguage, setDefaultScribeLanguage] = useState("english");
   const [scribeLanguageSaving, setScribeLanguageSaving] = useState(false);
   const [scribeLanguageError, setScribeLanguageError] = useState("");
   const [scribeLanguageSuccess, setScribeLanguageSuccess] = useState("");
@@ -138,7 +138,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     if (!profileSettingsLoading && preferences) {
-      setDefaultScribeLanguage(preferences.defaultScribeLanguage ?? "hinglish");
+      setDefaultScribeLanguage(preferences.defaultScribeLanguage ?? "english");
     }
   }, [preferences, profileSettingsLoading]);
 

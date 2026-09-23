@@ -62,7 +62,7 @@ async function fetchConsultations(bucket) {
 
 export function ScribeWorkflow() {
   const { preferences, loading: profileSettingsLoading } = useDoctorProfileSettings();
-  const [language, setLanguage] = useState(SCRIBE_LANGUAGE.HINGLISH);
+  const [language, setLanguage] = useState(SCRIBE_LANGUAGE.ENGLISH);
   const [languageInitialized, setLanguageInitialized] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const [viewFromHistory, setViewFromHistory] = useState(false);
@@ -103,7 +103,7 @@ export function ScribeWorkflow() {
 
   useEffect(() => {
     if (!profileSettingsLoading && preferences && !languageInitialized) {
-      setLanguage(preferences.defaultScribeLanguage ?? SCRIBE_LANGUAGE.HINGLISH);
+      setLanguage(preferences.defaultScribeLanguage ?? SCRIBE_LANGUAGE.ENGLISH);
       setLanguageInitialized(true);
     }
   }, [preferences, profileSettingsLoading, languageInitialized]);

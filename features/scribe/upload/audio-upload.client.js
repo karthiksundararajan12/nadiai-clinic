@@ -48,7 +48,7 @@ export async function uploadCompletedRecording(options) {
     audioDurationSeconds,
     patientId,
     appointmentId,
-    language = "hinglish",
+    language = "english",
     maxRetries = 2,
     onProgress,
   } = options;

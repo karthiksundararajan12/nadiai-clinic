@@ -436,6 +436,7 @@ export const AUDIT_ACTION = Object.freeze({
   PRESCRIPTION_SAVED:               "prescription_saved",
   PRESCRIPTION_APPROVED:            "prescription_approved",
   PRESCRIPTION_REJECTED:            "prescription_rejected",
+  PEDIATRIC_DOSE_BLOCKED:           "pediatric_dose_blocked",
   SESSION_REVIEWED:                 "session_reviewed",
   SESSION_SIGNED:            "session_signed",
   SESSION_EXPORTED:          "session_exported",

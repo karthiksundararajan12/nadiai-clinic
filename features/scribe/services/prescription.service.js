@@ -47,6 +47,13 @@ import {
   isGeminiPrescriptionFormat,
   mapGeminiPrescriptionToDraft,
 } from "../lib/prescription-response-mapper.js";
+import { applyPediatricDosageToDraft } from "../lib/pediatric-dosage-apply.js";
+import {
+  resolvePediatricAge,
+  resolveWeightKgFromSources,
+} from "../lib/pediatric-patient-context.js";
+import { PEDIATRIC_DOSE_REASON } from "../lib/pediatric-dosage-calculator.js";
+import { alertOps, OPS_ALERT_STEP } from "../../booking/lib/alerting.js";
 
 const parseDraftLog = createLogger({ component: "PrescriptionService.parseAndValidateDraft" });
 
@@ -124,7 +131,14 @@ export class PrescriptionService {
     const doctorStyleContext = buildDoctorStyleContext(approvedHistory);
 
     const generationContext = buildGenerationContext(
-      soapNote, latestTranscriptVersion, patient, doctor, appointment, session, doctorStyleContext,
+      soapNote,
+      latestTranscriptVersion,
+      patient,
+      doctor,
+      appointment,
+      session,
+      doctorStyleContext,
+      genCtx.latestWeightKg ?? null,
     );
     const inputHash = hashInput(generationContext);
     const fromStatus = session.status;
@@ -195,13 +209,24 @@ export class PrescriptionService {
         soapNote.assessment ?? "",
         soapNote.plan ?? "",
       );
+      const { draft: pediatricDraft, events: pediatricEvents } = applyPediatricDosageToDraft(
+        draftObj,
+        {
+          specialization: doctor?.specialization ?? null,
+          ageYears: generationContext.patient?.age ?? null,
+          ageMonths: generationContext.patient?.ageMonths ?? null,
+          ageIsApproximate: generationContext.patient?.ageIsApproximate ?? true,
+          weightKg: generationContext.patient?.weightKg ?? null,
+        },
+      );
+      await this._logPediatricDoseEvents(pediatricEvents, sessionId, ctx, session, patient);
       const generatedAt = new Date().toISOString();
 
       // Low-confidence medications get an extra warning automatically.
-      const autoWarnings = buildAutoWarnings(draftObj);
+      const autoWarnings = buildAutoWarnings(pediatricDraft);
       const finalDraft   = {
-        ...draftObj,
-        warnings: [...new Set([...draftObj.warnings, ...autoWarnings])],
+        ...pediatricDraft,
+        warnings: [...new Set([...(pediatricDraft.warnings ?? []), ...autoWarnings])],
       };
 
       // ── Persist completed draft ──────────────────────────────────────────
@@ -477,6 +502,50 @@ export class PrescriptionService {
 
     throw err;
   }
+
+  /**
+   * Hard-block events (over-max daily, below min age) are logged to ops.
+   * Soft "unknown drug / manual entry" rows stay on the draft warnings only.
+   *
+   * @param {Array<Record<string, unknown>>} events
+   * @param {string} sessionId
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   * @param {Record<string, unknown>} session
+   * @param {Record<string, unknown>|null} patient
+   */
+  async _logPediatricDoseEvents(events, sessionId, ctx, session, patient) {
+    const blocked = (events ?? []).filter(
+      (event) => event.reason === PEDIATRIC_DOSE_REASON.EXCEEDS_MAX_DAILY,
+    );
+    if (blocked.length === 0) return;
+
+    for (const event of blocked) {
+      await this._audit.log({
+        action: AUDIT_ACTION.PEDIATRIC_DOSE_BLOCKED,
+        sessionId,
+        ctx,
+        metadata: {
+          drugName: event.drugName,
+          reason: event.reason,
+          dailyDoseMg: event.dailyDoseMg ?? null,
+          dailyCapMg: event.dailyCapMg ?? null,
+        },
+      });
+      await alertOps({
+        title: "Nadi AI — pediatric dose hard-blocked",
+        step: OPS_ALERT_STEP.PEDIATRIC_DOSE_BLOCKED,
+        error: event.message ?? "Calculated pediatric dose exceeds max daily",
+        clinicId: ctx.clinicId,
+        patientId: session.patient_id ?? patient?.id ?? null,
+        extra: {
+          sessionId,
+          drugName: event.drugName,
+          dailyDoseMg: event.dailyDoseMg ?? null,
+          dailyCapMg: event.dailyCapMg ?? null,
+        },
+      });
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -494,8 +563,25 @@ export class PrescriptionService {
  * @param {Record<string,unknown>}      session
  * @returns {import('./prescription-prompt.js').PrescriptionGenerationContext}
  */
-function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, appointment, session, doctorStyleContext = "") {
+function buildGenerationContext(
+  soapNote,
+  transcriptVersion,
+  patient,
+  doctor,
+  appointment,
+  session,
+  doctorStyleContext = "",
+  latestWeightKg = null,
+) {
   const transcriptText = transcriptVersion?.full_text?.trim() ?? "";
+  const age = patient
+    ? resolvePediatricAge({
+        ageYears: patient.age ?? null,
+        dateOfBirth: patient.date_of_birth ?? null,
+        dateOfBirthIsApproximate: patient.date_of_birth_is_approximate ?? false,
+      })
+    : { ageMonths: null, ageYears: null, ageIsApproximate: true };
+  const weightKg = resolveWeightKgFromSources(soapNote.objective ?? "", latestWeightKg);
 
   return {
     doctorStyleContext,
@@ -511,9 +597,14 @@ function buildGenerationContext(soapNote, transcriptVersion, patient, doctor, ap
     transcriptText,
     patient: patient
       ? {
-          age:             patient.age    ?? null,
-          gender:          patient.gender ?? null,
-          knownConditions: patient.condition ?? null,
+          age:                 age.ageYears ?? patient.age ?? null,
+          ageMonths:           age.ageMonths,
+          ageIsApproximate:    age.ageIsApproximate,
+          dateOfBirth:         patient.date_of_birth ?? null,
+          dateOfBirthIsApproximate: Boolean(patient.date_of_birth_is_approximate),
+          weightKg,
+          gender:              patient.gender ?? null,
+          knownConditions:     patient.condition ?? null,
         }
       : null,
     doctor: doctor

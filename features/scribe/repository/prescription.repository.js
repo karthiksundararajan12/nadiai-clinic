@@ -49,7 +49,7 @@ export class PrescriptionRepository extends BaseRepository {
     );
     if (!session) return null;
 
-    const [soapNote, patient, doctor, appointment, latestTranscriptVersion] =
+    const [soapNote, patient, doctor, appointment, latestTranscriptVersion, latestWeightKg] =
       await Promise.all([
         this._getApprovedSoapNote(sessionId),
         session.patient_id
@@ -60,9 +60,20 @@ export class PrescriptionRepository extends BaseRepository {
           ? this._getAppointment(session.appointment_id, session.doctor_id)
           : null,
         this._getLatestTranscriptVersion(sessionId),
+        session.patient_id
+          ? this._getLatestWeightKg(session.patient_id, session.clinic_id)
+          : null,
       ]);
 
-    return { session, soapNote, patient, doctor, appointment, latestTranscriptVersion };
+    return {
+      session,
+      soapNote,
+      patient,
+      doctor,
+      appointment,
+      latestTranscriptVersion,
+      latestWeightKg,
+    };
   }
 
   /** @param {string} sessionId */
@@ -94,6 +105,7 @@ export class PrescriptionRepository extends BaseRepository {
    *   condition: null;
    *   status: null;
    *   last_visit: null;
+   *   date_of_birth_is_approximate: boolean;
    * }|null>}
    */
   async _getPatient(patientId, clinicId) {
@@ -101,7 +113,9 @@ export class PrescriptionRepository extends BaseRepository {
       () =>
         this._db
           .from("patients")
-          .select("id, full_name, age_years, date_of_birth, gender, contact_phone")
+          .select(
+            "id, full_name, age_years, date_of_birth, date_of_birth_is_approximate, gender, contact_phone",
+          )
           .eq("id", patientId)
           .eq("clinic_id", clinicId)
           .is("deleted_at", null)
@@ -114,6 +128,7 @@ export class PrescriptionRepository extends BaseRepository {
             name: row.full_name,
             age: row.age_years ?? null,
             date_of_birth: row.date_of_birth ?? null,
+            date_of_birth_is_approximate: row.date_of_birth_is_approximate ?? false,
             gender: row.gender ?? null,
             phone: row.contact_phone ?? null,
             // Legacy prompt/UI fields — not present on clinic-scoped patients.
@@ -123,6 +138,32 @@ export class PrescriptionRepository extends BaseRepository {
           }
         : null,
     );
+  }
+
+  /**
+   * Latest recorded weight from public.vitals (fallback when SOAP Objective
+   * has no Weight: line).
+   *
+   * @param {string} patientId
+   * @param {string} clinicId
+   * @returns {Promise<number|null>}
+   */
+  async _getLatestWeightKg(patientId, clinicId) {
+    const row = await this._runNullable(
+      () =>
+        this._db
+          .from("vitals")
+          .select("weight_kg")
+          .eq("patient_id", patientId)
+          .eq("clinic_id", clinicId)
+          .not("weight_kg", "is", null)
+          .order("recorded_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      "getPrescriptionLatestWeight",
+    );
+    const value = Number(row?.weight_kg);
+    return Number.isFinite(value) && value > 0 ? value : null;
   }
 
   /** @param {string} doctorId auth user id (doctor_profiles.user_id) */

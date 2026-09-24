@@ -73,6 +73,7 @@ export const OPS_ALERT_STEP = Object.freeze({
   REMINDER_CLAIM:                "reminder_claim",
   REMINDER_SEND:                 "reminder_send",
   REFUND:                        "refund",
+  PEDIATRIC_DOSE_BLOCKED:        "pediatric_dose_blocked",
 });
 
 /** Buckets consumed by DailyDigestService — see that file. */

@@ -267,6 +267,19 @@ export class PrescriptionReviewError extends ScribeError {
   }
 }
 
+export class PediatricDoseBlockedError extends ScribeError {
+  /**
+   * @param {string}  [message]
+   * @param {unknown} [details=null]
+   */
+  constructor(
+    message = "Pediatric calculated dose exceeds the maximum daily limit. Enter the dose manually — this cannot be auto-approved.",
+    details = null,
+  ) {
+    super(message, "PEDIATRIC_DOSE_BLOCKED", 422, details);
+  }
+}
+
 /** @deprecated License is optional; approval no longer throws this. Kept for legacy clients. */
 export class MissingDoctorRegistrationError extends ScribeError {
   constructor() {

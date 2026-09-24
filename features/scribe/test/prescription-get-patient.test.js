@@ -47,6 +47,7 @@ test("prescription _getPatient uses clinic_id + full_name and maps to name", asy
       full_name: "Karthik",
       age_years: 40,
       date_of_birth: "1985-03-12",
+      date_of_birth_is_approximate: false,
       gender: null,
       contact_phone: "919840227132",
     },
@@ -63,6 +64,7 @@ test("prescription _getPatient uses clinic_id + full_name and maps to name", asy
     name: "Karthik",
     age: 40,
     date_of_birth: "1985-03-12",
+    date_of_birth_is_approximate: false,
     gender: null,
     phone: "919840227132",
     condition: null,
@@ -71,7 +73,7 @@ test("prescription _getPatient uses clinic_id + full_name and maps to name", asy
   });
   assert.equal(
     supabase.captured.select,
-    "id, full_name, age_years, date_of_birth, gender, contact_phone",
+    "id, full_name, age_years, date_of_birth, date_of_birth_is_approximate, gender, contact_phone",
   );
   assert.deepEqual(supabase.captured.filters, {
     id: "6c721819-6465-4948-90aa-d47cc1b40f8f",

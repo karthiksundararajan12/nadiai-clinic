@@ -487,13 +487,30 @@ export const RestoreSOAPVersionSchema = z.object({
 // PRESCRIPTION DRAFT GENERATION
 // ─────────────────────────────────────────────────────────────
 
+export const PediatricDoseMetaSchema = z.object({
+  status:          z.enum(["suggested", "age_estimate", "blocked", "manual_required", "unknown_drug"]),
+  source:          z.enum(["weight", "age"]).optional(),
+  weightKg:        z.number().positive().optional(),
+  ageMonths:       z.number().nonnegative().optional(),
+  mgPerKg:         z.number().nonnegative().nullable().optional(),
+  calculatedMg:    z.number().nonnegative().optional(),
+  maxDailyDoseMg:  z.number().positive().optional(),
+  dailyDoseMg:     z.number().nonnegative().optional(),
+  label:           z.string().max(200),
+  reason:          z.string().max(200).optional(),
+  overridden:      z.boolean().optional(),
+});
+
+/** @typedef {z.infer<typeof PediatricDoseMetaSchema>} PediatricDoseMeta */
+
 export const PrescriptionMedicationSchema = z.object({
-  name:         z.string().min(1).max(200),
-  dosage:       z.string().min(1).max(200),
-  frequency:    z.string().min(1).max(200),
-  duration:     z.string().min(1).max(200),
-  instructions: z.string().max(1000).default(""),
-  confidence:   z.number().min(0).max(1),
+  name:           z.string().min(1).max(200),
+  dosage:         z.string().max(200),
+  frequency:      z.string().min(1).max(200),
+  duration:       z.string().min(1).max(200),
+  instructions:   z.string().max(1000).default(""),
+  confidence:     z.number().min(0).max(1),
+  pediatricDose:  PediatricDoseMetaSchema.optional(),
 });
 
 /** @typedef {z.infer<typeof PrescriptionMedicationSchema>} PrescriptionMedication */

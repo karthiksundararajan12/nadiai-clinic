@@ -50,13 +50,13 @@ test("parseVitalsFromObjective still reads real vitals when findings exist", () 
   });
 });
 
-test("buildObjectiveWithVitals does not attach vitals onto not-documented fallback", () => {
+test("buildObjectiveWithVitals persists doctor-entered weight over not-documented fallback", () => {
   const combined = buildObjectiveWithVitals(
-    { bpSys: "140", bpDia: "90", hr: "88", temp: "97", spo2: "99", weight: "78" },
+    { ...EMPTY, weight: "12.5" },
     "Not documented in transcript.",
   );
-  assert.equal(combined, "Not documented in transcript.");
-  assert.deepEqual(parseVitalsFromObjective(combined), EMPTY);
+  assert.equal(combined, "Vitals: Weight: 12.5 kg");
+  assert.equal(parseVitalsFromObjective(combined).weight, "12.5");
 });
 
 test("isObjectiveNotDocumented matches SOAP fallback wording", () => {

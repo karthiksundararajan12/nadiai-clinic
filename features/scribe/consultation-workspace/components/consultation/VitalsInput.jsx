@@ -158,6 +158,8 @@ export function VitalsInput({ value, onChange, disabled }) {
           disabled={disabled}
           onChange={(e) => update({ weight: e.target.value.replace(/[^\d.]/g, "") })}
           onBlur={handleBlur}
+          data-testid="vitals-weight"
+          aria-label="Weight in kilograms"
         />
       </Field>
     </div>

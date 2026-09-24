@@ -91,11 +91,13 @@ export function sanitizeObjectiveVitals(text = "") {
 
 export function buildObjectiveWithVitals(vitals, objectiveText = "") {
   const body = stripVitalsFromObjective(objectiveText);
-  if (isObjectiveNotDocumented(body)) {
-    // Do not re-attach vitals on top of the not-documented fallback.
-    return body;
-  }
   const formatted = formatVitalsString(vitals);
   if (!formatted) return body;
+  // Doctor-entered vitals (especially weight for pediatric dosing) must persist
+  // even when the AI Objective fallback is "Not documented in transcript."
+  // Hallucinated AI vitals are still stripped by sanitizeObjectiveVitals.
+  if (isObjectiveNotDocumented(body)) {
+    return `Vitals: ${formatted}`;
+  }
   return body ? `Vitals: ${formatted}\n\n${body}` : `Vitals: ${formatted}`;
 }

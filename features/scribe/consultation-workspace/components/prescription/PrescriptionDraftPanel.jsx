@@ -15,6 +15,11 @@ import {
   SETTINGS_HREF,
 } from "@/features/scribe/lib/prescription-registration-gate.js";
 import { isAiSuggestedMedication } from "@/features/scribe/lib/prescription-medication-suggestions.js";
+import { mergeMedicationWithPediatricOverride } from "@/features/scribe/lib/pediatric-dosage-apply.js";
+import {
+  isActivePediatricDoseBlock,
+  PEDIATRIC_DOSE_BLOCKED_CODE,
+} from "@/features/scribe/lib/pediatric-dosage-approval.js";
 
 export const PRESCRIPTION_FREQUENCY_OPTIONS = Object.freeze([
   "1-0-1",
@@ -64,7 +69,16 @@ export function PrescriptionDraftPanel({
     : "";
 
   const registrationMissing = !hasDoctorRegistrationNumber(doctor);
+  const pediatricBlocked =
+    approvalError?.code === PEDIATRIC_DOSE_BLOCKED_CODE ||
+    (draft.medications ?? []).some((med) => isActivePediatricDoseBlock(med));
+  const pediatricBlockMessage = pediatricBlocked
+    ? (approvalError?.code === PEDIATRIC_DOSE_BLOCKED_CODE
+      ? approvalError.message
+      : "A calculated pediatric dose exceeds the maximum daily limit. Enter the dose manually before approving.")
+    : null;
   const gateMessage =
+    pediatricBlockMessage ||
     approvalError?.message ||
     (doctor != null && registrationMissing
       ? MISSING_DOCTOR_REGISTRATION_MESSAGE
@@ -100,7 +114,7 @@ export function PrescriptionDraftPanel({
         <button
           type="button"
           onClick={onApprove}
-          disabled={approving}
+          disabled={approving || pediatricBlocked}
           className={cn(
             "flex cursor-pointer items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium text-white",
             "bg-primary transition-all duration-200 hover:bg-primary/90 disabled:opacity-60",
@@ -114,20 +128,27 @@ export function PrescriptionDraftPanel({
 
       {gateMessage ? (
         <div
-          className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
-          data-testid="prescription-registration-gate"
+          className={cn(
+            "shrink-0 border-b px-4 py-3 text-sm",
+            pediatricBlocked
+              ? "border-red-200 bg-red-50 text-red-950"
+              : "border-amber-200 bg-amber-50 text-amber-950",
+          )}
+          data-testid={pediatricBlocked ? "prescription-pediatric-dose-gate" : "prescription-registration-gate"}
           role="alert"
         >
           <p className="font-medium">{gateMessage}</p>
-          <Link
-            href={SETTINGS_HREF}
-            className={cn(
-              buttonVariants({ variant: "outline", size: "sm" }),
-              "mt-2 inline-flex border-amber-300 bg-white text-amber-950 hover:bg-amber-100",
-            )}
-          >
-            Open Settings
-          </Link>
+          {!pediatricBlocked ? (
+            <Link
+              href={SETTINGS_HREF}
+              className={cn(
+                buttonVariants({ variant: "outline", size: "sm" }),
+                "mt-2 inline-flex border-amber-300 bg-white text-amber-950 hover:bg-amber-100",
+              )}
+            >
+              Open Settings
+            </Link>
+          ) : null}
         </div>
       ) : null}
 
@@ -220,7 +241,7 @@ export function PrescriptionDraftPanel({
           type="button"
           className="w-full cursor-pointer bg-primary hover:bg-primary/90"
           onClick={onApprove}
-          disabled={approving}
+          disabled={approving || pediatricBlocked}
           data-testid="prescription-approve-footer"
         >
           {approving ? (
@@ -311,10 +332,16 @@ function MedicationFields({
         <Field label="Dose">
           <Input
             value={med.dosage}
-            onChange={(e) => onUpdate(index, { ...med, dosage: e.target.value })}
-            placeholder="500mg"
+            onChange={(e) =>
+              onUpdate(index, mergeMedicationWithPediatricOverride(med, { dosage: e.target.value }))
+            }
+            placeholder={med.pediatricDose ? "Enter dose" : "500mg"}
             className="text-sm"
+            data-testid="prescription-dose-input"
           />
+          {med.pediatricDose && !med.pediatricDose.overridden ? (
+            <PediatricDoseChip meta={med.pediatricDose} />
+          ) : null}
         </Field>
         <Field label="Frequency">
           <Combobox
@@ -375,6 +402,27 @@ function MedicationFields({
         </Field>
       </div>
     </div>
+  );
+}
+
+function PediatricDoseChip({ meta }) {
+  const ageEstimate = meta.status === "age_estimate";
+  const blocked = meta.status === "blocked" || meta.status === "manual_required";
+  return (
+    <p
+      className={cn(
+        "mt-1 rounded-md px-2 py-1 text-[11px] leading-snug",
+        blocked
+          ? "bg-red-50 text-red-800"
+          : ageEstimate
+            ? "bg-amber-50 text-amber-900"
+            : "bg-primary/5 text-primary",
+      )}
+      data-testid="pediatric-dose-chip"
+      data-pediatric-status={meta.status}
+    >
+      {meta.label}
+    </p>
   );
 }
 

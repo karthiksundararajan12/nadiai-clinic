@@ -11,6 +11,7 @@ import {
   hasDoctorRegistrationNumber,
   MISSING_DOCTOR_REGISTRATION_CODE,
 } from "../../lib/prescription-registration-gate.js";
+import { PEDIATRIC_DOSE_BLOCKED_CODE } from "../../lib/pediatric-dosage-approval.js";
 
 import {
   MANUAL_MEDICATION_CONFIDENCE,
@@ -154,9 +155,14 @@ export function usePrescriptionPanel(sessionId) {
       const isRegistrationGate =
         err?.code === MISSING_DOCTOR_REGISTRATION_CODE ||
         /registration number/i.test(message);
-      if (isRegistrationGate) {
+      const isPediatricDoseBlock =
+        err?.code === PEDIATRIC_DOSE_BLOCKED_CODE ||
+        /pediatric calculated dose/i.test(message);
+      if (isRegistrationGate || isPediatricDoseBlock) {
         const gateError = err instanceof Error ? err : new Error(message);
-        gateError.code = MISSING_DOCTOR_REGISTRATION_CODE;
+        gateError.code = isPediatricDoseBlock
+          ? PEDIATRIC_DOSE_BLOCKED_CODE
+          : MISSING_DOCTOR_REGISTRATION_CODE;
         setApprovalError(gateError);
       }
       throw err instanceof Error ? err : new Error(message);

@@ -36,6 +36,9 @@ import {
   UpdatePrescriptionDraftSchema,
 } from "../schemas.js";
 import { createLogger } from "../logger.js";
+import { assertPediatricDosageSafeForApproval } from "../lib/pediatric-dosage-approval.js";
+import { alertOps, OPS_ALERT_STEP } from "../../booking/lib/alerting.js";
+import { PediatricDoseBlockedError } from "../errors.js";
 
 export class PrescriptionReviewService {
   /**
@@ -262,6 +265,30 @@ export class PrescriptionReviewService {
     // License/registration is optional (same as onboarding). Soft UI banner only —
     // do not block approval when doctor_profiles.license_number is missing.
     const { session, draft, review } = await this._assertReviewing(sessionId, ctx);
+
+    // Hard block (unlike the license gate): a still-active calculated
+    // over-max pediatric dose cannot be approved. Doctor-typed overrides pass.
+    try {
+      assertPediatricDosageSafeForApproval(draft.draft);
+    } catch (err) {
+      if (err instanceof PediatricDoseBlockedError) {
+        await this._audit.log({
+          action: AUDIT_ACTION.PEDIATRIC_DOSE_BLOCKED,
+          sessionId,
+          ctx,
+          metadata: { draftId: draft.id, details: err.details ?? null },
+        });
+        await alertOps({
+          title: "Nadi AI — pediatric dose approval blocked",
+          step: OPS_ALERT_STEP.PEDIATRIC_DOSE_BLOCKED,
+          error: err,
+          clinicId: ctx.clinicId,
+          patientId: draft.patient_id ?? session.patient_id ?? null,
+          extra: { sessionId, draftId: draft.id },
+        });
+      }
+      throw err;
+    }
 
     let version = null;
     if (parsed.data.create_version) {

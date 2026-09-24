@@ -6,7 +6,7 @@
  * @typedef {Object} PrescriptionGenerationContext
  * @property {{ subjective: string; objective: string; assessment: string; plan: string; chiefComplaint: string; historyOfPresentIllness: string; clinicalSummary: string }} soapNote
  * @property {string}        transcriptText
- * @property {{ age?: number|null; gender?: string|null; knownConditions?: string|null } | null} patient
+ * @property {{ age?: number|null; ageMonths?: number|null; ageIsApproximate?: boolean; weightKg?: number|null; gender?: string|null; knownConditions?: string|null } | null} patient
  * @property {{ fullName?: string|null; specialization?: string|null; clinicName?: string|null } | null} doctor
  * @property {{ language?: string|null; sessionId: string }} consultation
  * @property {string}        doctorStyleContext
@@ -19,8 +19,9 @@
 export function buildPrescriptionPrompt(ctx) {
   const { soapNote, patient, doctorStyleContext = "" } = ctx;
 
-  const patientAge = patient?.age != null ? `${patient.age}yr` : "unknown age";
+  const patientAge = formatPatientAgeForPrompt(patient);
   const patientGender = patient?.gender ?? "unknown gender";
+  const patientWeight = patient?.weightKg != null ? `${patient.weightKg} kg` : "weight not documented";
 
   const system = `You are a clinical prescription assistant for Indian doctors.
 Suggest medicines using Indian brand names commonly available in India.
@@ -31,7 +32,7 @@ These are SUGGESTIONS only for the doctor to review and edit — never finalize 
 Doctor style context (from past approved prescriptions):
 ${doctorStyleContext || "(No past prescriptions on file — use standard clinical protocols.)"}
 
-Patient: ${patientAge} ${patientGender}
+Patient: ${patientAge} ${patientGender}; weight ${patientWeight}
 Diagnosis from SOAP: ${soapNote.assessment || "(not documented)"}
 Plan from SOAP: ${soapNote.plan || "(not documented)"}
 
@@ -52,6 +53,7 @@ Generate a prescription draft as JSON only, no markdown, no preamble:
 }
 
 Rules for drugs:
+- For children, prefer mg/kg thinking but still output a concrete dose string. The server will replace catalog-drug doses with a calculated suggestion for the doctor to edit.
 - If Assessment/diagnosis is missing, unclear, or only says it was not documented, return "drugs": [] (empty array). Do NOT invent medicines.
 - Only suggest medicines that are reasonable for the stated assessment and what was discussed.
 - confidence is 0.0–1.0 reflecting how sure you are that this medicine/dose/frequency/duration fits (lower when uncertain).
@@ -69,6 +71,22 @@ Plan: ${soapNote.plan || "(not documented)"}
 Generate the prescription JSON now.`,
     },
   ];
+}
+
+/**
+ * @param {{ age?: number|null; ageMonths?: number|null; ageIsApproximate?: boolean }|null|undefined} patient
+ * @returns {string}
+ */
+function formatPatientAgeForPrompt(patient) {
+  if (patient?.ageMonths != null && patient.ageMonths < 24) {
+    const approx = patient.ageIsApproximate ? " (approximate)" : "";
+    return `${patient.ageMonths} months${approx}`;
+  }
+  if (patient?.age != null) {
+    const approx = patient.ageIsApproximate ? " (approximate)" : "";
+    return `${patient.age}yr${approx}`;
+  }
+  return "unknown age";
 }
 
 /** JSON schema for Gemini structured output (Indian GP prescription format). */

@@ -38,6 +38,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  AGE_BASED_DOSE_LABEL,
+  mergeMedicationWithPediatricOverride,
+} from "@/features/scribe/lib/pediatric-dosage-apply.js";
 
 // ─────────────────────────────────────────────────────────────
 // SAFETY HELPERS
@@ -140,7 +144,13 @@ function MedicationCard({ med, index, onChange, onRemove, readonly }) {
   const hasSafetyFlag = flags.size > 0;
   const [isExpanded, setIsExpanded] = useState(true);
 
-  const field = (key) => (val) => onChange(index, { ...med, [key]: val });
+  const field = (key) => (val) => {
+    if (key === "dosage") {
+      onChange(index, mergeMedicationWithPediatricOverride(med, { dosage: val }));
+      return;
+    }
+    onChange(index, { ...med, [key]: val });
+  };
 
   return (
     <div
@@ -224,6 +234,23 @@ function MedicationCard({ med, index, onChange, onRemove, readonly }) {
               disabled={readonly}
               className="h-7 text-sm"
             />
+            {med.pediatricDose && !med.pediatricDose.overridden ? (
+              <p
+                className={cn(
+                  "mt-1 text-[11px] leading-snug",
+                  med.pediatricDose.status === "blocked" || med.pediatricDose.status === "manual_required"
+                    ? "text-red-700"
+                    : med.pediatricDose.status === "age_estimate"
+                      ? "text-amber-800"
+                      : "text-primary",
+                )}
+                data-testid="pediatric-dose-chip"
+              >
+                {med.pediatricDose.label === AGE_BASED_DOSE_LABEL
+                  ? AGE_BASED_DOSE_LABEL
+                  : med.pediatricDose.label}
+              </p>
+            ) : null}
           </LabeledField>
 
           {/* Frequency */}

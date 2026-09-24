@@ -4,10 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, UserPlus, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import {
-  createPatient,
-  fetchEligibleConsultationPatients,
-} from "../../services/patient.client.js";
+import { Toast } from "@/components/ui/toast";
+import { fetchEligibleConsultationPatients } from "../../services/patient.client.js";
+import { NewPatientModal } from "./NewPatientModal.jsx";
 
 function initials(name) {
   return (name ?? "P").split(" ").map((p) => p[0]).join("").slice(0, 2).toUpperCase();
@@ -29,8 +28,7 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(null);
   const [showCreate, setShowCreate] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const [form, setForm] = useState({ name: "", phone: "", age: "", gender: "Male" });
+  const [toast, setToast] = useState(null);
 
   const loadEligible = useCallback(async () => {
     setLoading(true);
@@ -66,18 +64,31 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
     if (selected) onSelect?.(selected);
   };
 
-  const handleCreate = async () => {
-    if (!form.name.trim() || !form.phone.trim()) return;
-    setCreating(true);
-    try {
-      const created = await createPatient(form);
-      onSelect?.({ ...created, appointment_id: null });
-      setShowCreate(false);
-      setForm({ name: "", phone: "", age: "", gender: "Male" });
-    } finally {
-      setCreating(false);
-    }
+  const handleCreated = (created) => {
+    onSelect?.({ ...created, appointment_id: null });
+    setToast({ message: "Patient saved", variant: "default" });
+    void loadEligible();
   };
+
+  const createModal = (
+    <>
+      <NewPatientModal
+        open={showCreate}
+        onOpenChange={setShowCreate}
+        onCreated={handleCreated}
+        onError={(message) => setToast({ message, variant: "error" })}
+      />
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 top-4 z-[60] flex justify-center px-4">
+          <Toast
+            message={toast.message}
+            variant={toast.variant}
+            onDismiss={() => setToast(null)}
+          />
+        </div>
+      ) : null}
+    </>
+  );
 
   if (patient) {
     const days = daysSince(patient.last_visit);
@@ -116,7 +127,7 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
             </button>
           </div>
         </div>
-        {showCreate && <CreatePanel form={form} setForm={setForm} creating={creating} onCreate={handleCreate} onClose={() => setShowCreate(false)} />}
+        {createModal}
       </div>
     );
   }
@@ -186,12 +197,13 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
         variant="outline"
         size="xs"
         className="mt-2 gap-1"
+        data-testid="scribe-create-patient"
         onClick={() => setShowCreate(true)}
       >
         <UserPlus className="h-3.5 w-3.5" />
         Create new patient
       </Button>
-      {showCreate && <CreatePanel form={form} setForm={setForm} creating={creating} onCreate={handleCreate} onClose={() => setShowCreate(false)} />}
+      {createModal}
     </div>
   );
 }
@@ -207,26 +219,3 @@ function PatientStepLabel() {
   );
 }
 
-function CreatePanel({ form, setForm, creating, onCreate, onClose }) {
-  return (
-    <div className="mt-3 rounded-lg border border-gray-200 bg-white p-4">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <input className="rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Full Name *" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-        <input className="rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Phone *" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
-        <input className="rounded border border-gray-200 px-3 py-2 text-sm" placeholder="Age *" value={form.age} onChange={(e) => setForm({ ...form, age: e.target.value })} />
-        <select className="rounded border border-gray-200 px-3 py-2 text-sm" value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })}>
-          <option>Male</option>
-          <option>Female</option>
-          <option>Other</option>
-        </select>
-      </div>
-      <div className="mt-3 flex gap-2">
-        <button type="button" className="cursor-pointer rounded-lg bg-primary px-4 py-2 text-sm text-white disabled:opacity-50" disabled={creating} onClick={onCreate}>
-          {creating ? <Loader2 className="inline h-4 w-4 animate-spin" /> : null}
-          Create and Attach
-        </button>
-        <button type="button" className="cursor-pointer rounded-lg border border-gray-200 px-4 py-2 text-sm" onClick={onClose}>Cancel</button>
-      </div>
-    </div>
-  );
-}

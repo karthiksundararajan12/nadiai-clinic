@@ -173,7 +173,7 @@ export class PrescriptionRepository extends BaseRepository {
         this._db
           .from("doctor_profiles")
           .select(
-            "user_id, full_name, specialization, clinic_name, clinic_address, license_number",
+            "user_id, full_name, specialization, qualifications, clinic_name, clinic_address, license_number",
           )
           .eq("user_id", doctorId)
           .single(),
@@ -380,17 +380,32 @@ export class PrescriptionRepository extends BaseRepository {
    * @returns {Promise<string|null>}
    */
   async getClinicPhone(clinicId) {
+    const row = await this.getClinicLetterhead(clinicId);
+    return row?.phone ? String(row.phone) : null;
+  }
+
+  /**
+   * Clinic name, address, and phone for the prescription letterhead.
+   * @param {string} clinicId
+   * @returns {Promise<{ name: string|null; address: string|null; phone: string|null }|null>}
+   */
+  async getClinicLetterhead(clinicId) {
     const db = this._adminDb ?? this._db;
     const row = await this._runNullable(
       () =>
         db
           .from("clinics")
-          .select("phone")
+          .select("name, address, phone")
           .eq("id", clinicId)
           .single(),
-      "getClinicPhone",
+      "getClinicLetterhead",
     );
-    return row?.phone ? String(row.phone) : null;
+    if (!row) return null;
+    return {
+      name: row.name ? String(row.name) : null,
+      address: row.address ? String(row.address) : null,
+      phone: row.phone ? String(row.phone) : null,
+    };
   }
 
   // ─────────────────────────────────────────────────────────────

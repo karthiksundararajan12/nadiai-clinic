@@ -85,23 +85,32 @@ export class PrescriptionPdfService {
         draft.approved_at ??
         new Date().toISOString();
 
+      const clinic = typeof this._prescriptions.getClinicLetterhead === "function"
+        ? await this._prescriptions.getClinicLetterhead(ctx.clinicId)
+        : null;
       const clinicPhone =
+        clinic?.phone ??
         (await this._prescriptions.getClinicPhone(ctx.clinicId)) ??
         doctor?.phone ??
         null;
 
       const pdfBytes = await generatePrescriptionPdf({
-        clinicName: doctor?.clinic_name ?? "Clinic",
-        clinicAddress: doctor?.clinic_address ?? null,
+        clinicName: clinic?.name ?? doctor?.clinic_name ?? "",
+        clinicAddress: clinic?.address ?? doctor?.clinic_address ?? null,
         clinicPhone,
-        doctorName: doctor?.full_name ?? "NA",
+        doctorName: doctor?.full_name ?? "",
+        qualifications: doctor?.qualifications ?? null,
         specialization: doctor?.specialization ?? null,
         registrationNumber: getDoctorRegistrationNumber(doctor),
-        patientName: patient?.name ?? "NA",
-        patientAge: patient?.age ?? null,
+        signatureUrl: typeof doctor?.signature_url === "string" ? doctor.signature_url : null,
+        patientName: patient?.name ?? "",
         patientDob: patient?.date_of_birth ?? null,
+        dobIsApproximate: Boolean(patient?.date_of_birth_is_approximate),
+        patientGender: patient?.gender ?? null,
         consultationDate,
         prescriptionNumber: allocated.prescriptionNumber,
+        objective: context?.soapNote?.objective ?? "",
+        complaints: context?.soapNote?.chief_complaint ?? null,
         draft: draft.draft ?? {},
       });
 

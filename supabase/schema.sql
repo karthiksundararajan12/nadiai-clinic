@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS public.doctor_profiles (
   email TEXT,
   full_name TEXT NOT NULL,
   specialization TEXT,
+  qualifications TEXT,
   license_number TEXT,
   phone TEXT,
   clinic_name TEXT,

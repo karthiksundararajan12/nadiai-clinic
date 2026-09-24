@@ -114,6 +114,7 @@ function formatPersonalProfile(profile) {
   return {
     fullName: profile?.full_name ?? "",
     specialization: profile?.specialization ?? "",
+    qualifications: profile?.qualifications ?? "",
     email: profile?.email ?? "",
     phone: profile?.phone ?? null,
     licenseNumber: profile?.license_number ?? "",
@@ -179,6 +180,11 @@ function parseEmail(rawEmail) {
     throw new DoctorProfileRequestError("Enter a valid email address");
   }
   return email;
+}
+
+function parseQualifications(rawQualifications) {
+  const qualifications = String(rawQualifications ?? "").trim();
+  return qualifications || null;
 }
 
 function parseLicenseNumber(rawLicense) {
@@ -280,6 +286,7 @@ export class DoctorProfileService {
     const updated = await this._doctors.updatePersonalProfile(clinicId, userId, {
       full_name: parseFullName(input.fullName),
       specialization: parseSpecialization(input.specialization),
+      qualifications: parseQualifications(input.qualifications),
       email: parseEmail(input.email),
       phone: parseIndianMobilePhone(input.phone, "Phone"),
       license_number: parseLicenseNumber(input.licenseNumber),

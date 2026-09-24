@@ -16,6 +16,7 @@ const DEFAULT_PROFILE = {
   id: "doctor-1",
   full_name: "Dr. Ananya Mehta",
   specialization: "Cardiologist",
+  qualifications: "MBBS, MD",
   email: "dr.ananya@nadiai.com",
   phone: "919876543210",
   license_number: "MCI-123456",
@@ -173,6 +174,7 @@ test("getSettings returns consultation fee, clinic fields, personal profile, not
   assert.deepEqual(result.profile, {
     fullName: "Dr. Ananya Mehta",
     specialization: "Cardiologist",
+    qualifications: "MBBS, MD",
     email: "dr.ananya@nadiai.com",
     phone: "919876543210",
     licenseNumber: "MCI-123456",
@@ -346,6 +348,7 @@ test("updatePersonalProfile writes validated doctor_profiles fields", async () =
       data: {
         full_name: "Dr. Nadi Heart",
         specialization: "Interventional Cardiology",
+        qualifications: null,
         email: "nadi@example.com",
         phone: "919840227132",
         license_number: "MCI-999",

@@ -84,7 +84,7 @@ export class DoctorProfileRepository extends BaseRepository {
         this._db
           .from(this._table)
           .select(
-            "id, full_name, specialization, email, phone, license_number, created_at, consultation_fee, working_hours_start, working_hours_end, reminders_enabled, default_scribe_language, avatar_url",
+            "id, full_name, specialization, qualifications, email, phone, license_number, created_at, consultation_fee, working_hours_start, working_hours_end, reminders_enabled, default_scribe_language, avatar_url",
           )
           .eq("clinic_id", clinicId)
           .eq("user_id", userId)
@@ -147,7 +147,7 @@ export class DoctorProfileRepository extends BaseRepository {
   /**
    * @param {string} clinicId
    * @param {string} userId
-   * @param {{ full_name: string; specialization: string; email: string; phone: string; license_number: string|null }} data
+   * @param {{ full_name: string; specialization: string; qualifications: string|null; email: string; phone: string; license_number: string|null }} data
    */
   async updatePersonalProfile(clinicId, userId, data) {
     return this._run(
@@ -157,6 +157,7 @@ export class DoctorProfileRepository extends BaseRepository {
           .update({
             full_name: data.full_name,
             specialization: data.specialization,
+            qualifications: data.qualifications,
             email: data.email,
             phone: data.phone,
             license_number: data.license_number,
@@ -165,7 +166,7 @@ export class DoctorProfileRepository extends BaseRepository {
           .eq("clinic_id", clinicId)
           .eq("user_id", userId)
           .select(
-            "full_name, specialization, email, phone, license_number, created_at, avatar_url",
+            "full_name, specialization, qualifications, email, phone, license_number, created_at, avatar_url",
           )
           .single(),
       "updatePersonalProfile",

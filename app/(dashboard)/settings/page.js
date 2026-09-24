@@ -65,6 +65,7 @@ export default function SettingsPage() {
   const [profileForm, setProfileForm] = useState({
     fullName: "",
     specialization: "",
+    qualifications: "",
     email: "",
     phone: "",
     licenseNumber: "",
@@ -110,6 +111,7 @@ export default function SettingsPage() {
       setProfileForm({
         fullName: personalProfile.fullName ?? "",
         specialization: personalProfile.specialization ?? "",
+        qualifications: personalProfile.qualifications ?? "",
         email: personalProfile.email ?? "",
         phone: personalProfile.phone ? formatPhoneForDisplay(personalProfile.phone) : "",
         licenseNumber: personalProfile.licenseNumber ?? "",
@@ -390,6 +392,23 @@ export default function SettingsPage() {
                           setProfileForm((prev) => ({
                             ...prev,
                             specialization: e.target.value,
+                          }));
+                          setProfileSuccess("");
+                          setProfileError("");
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="profile-qualifications">Qualifications</Label>
+                      <Input
+                        id="profile-qualifications"
+                        value={profileForm.qualifications}
+                        disabled={profileSettingsLoading || profileSaving}
+                        placeholder="MBBS, MD (General Medicine)"
+                        onChange={(e) => {
+                          setProfileForm((prev) => ({
+                            ...prev,
+                            qualifications: e.target.value,
                           }));
                           setProfileSuccess("");
                           setProfileError("");

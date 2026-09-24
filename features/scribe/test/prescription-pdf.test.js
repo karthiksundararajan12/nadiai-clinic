@@ -67,11 +67,16 @@ test("buildPrescriptionDisplayFields: maps letterhead, patient, Rx rows, and not
   assert.equal(display.clinicAddress, "12 MG Road, Bengaluru");
   assert.equal(display.clinicPhone, "+91 80 1234 5678");
   assert.equal(display.doctorName, "Dr. Rao");
-  assert.equal(display.specialization, "General Physician");
+  assert.equal(display.credentialLine, "General Physician");
   assert.equal(display.registrationNumber, "MCI-123456");
   assert.equal(display.patientName, "Asha Kumar");
-  assert.equal(display.ageDob, "34 yr · DOB 15 Apr 1992");
+  assert.equal(display.ageSex, "34 yr");
   assert.equal(display.consultationDateLabel, "22 Jul 2026");
+  assert.match(display.registrationLine, /Reg\. No: MCI-123456/);
+  assert.match(display.padText, /Age\/Sex: 34 yr/);
+  assert.match(display.padText, /Weight: ____ kg/);
+  assert.match(display.padText, /SpO2: ____ %/);
+  assert.match(display.padText, /Heart Rate: ____ bpm/);
   assert.equal(display.medicines.length, 2);
   assert.equal(display.medicines[0].name, "Amoxicillin");
   assert.equal(display.medicines[0].dose, "500mg");
@@ -79,10 +84,11 @@ test("buildPrescriptionDisplayFields: maps letterhead, patient, Rx rows, and not
   assert.equal(display.medicines[0].duration, "5 days");
   assert.equal(display.medicines[0].instructions, "After food");
   assert.deepEqual(display.diagnosis, ["Acute pharyngitis"]);
-  assert.ok(display.clinicalNotes.some((n) => /Warm saline/i.test(n)));
-  assert.ok(display.clinicalNotes.some((n) => /Follow up/i.test(n)));
-  assert.match(display.signatureLabel, /Dr\. Rao/);
-  assert.match(display.generatedVia, /Nadi AI/i);
+  assert.match(display.advice, /Warm saline/i);
+  assert.match(display.followUp, /Follow up/i);
+  assert.match(display.signatureName, /Dr\. Rao/);
+  assert.match(display.disclaimer, /Nadi AI/i);
+  assert.match(display.disclaimer, /doctor's signature/i);
 });
 
 test("buildPrescriptionDisplayFields: accepts dose alias and medicines array", () => {
@@ -103,28 +109,68 @@ test("buildPrescriptionDisplayFields: accepts dose alias and medicines array", (
     },
   });
   assert.equal(display.medicines[0].dose, "500mg");
+  assert.equal(display.medicines[0].detail, "500mg · OD · 3 days · PRN");
   assert.deepEqual(display.diagnosis, ["Fever"]);
-  assert.ok(display.clinicalNotes.includes("Rest well"));
+  assert.match(display.advice, /Rest well/);
 });
 
-test("buildPrescriptionDisplayFields: missing optional fields become NA", () => {
+test("buildPrescriptionDisplayFields: missing licence and vitals stay blank", () => {
   const display = buildPrescriptionDisplayFields({
     ...BASE_FIELDS,
     clinicAddress: null,
     clinicPhone: null,
     specialization: null,
     registrationNumber: null,
-    patientAge: null,
+    patientAge: 99,
     patientDob: null,
+    patientGender: "female",
+    objective: "Not documented in transcript.",
+    vitals: { weightKg: 70, spo2: 99, heartRate: 80, bp: "120/80", temperature: "98.6" },
     draft: { medications: [], diagnosis: [], advice: [], warnings: [], investigations: [] },
   });
-  assert.equal(display.clinicAddress, "NA");
-  assert.equal(display.clinicPhone, "NA");
-  assert.equal(display.specialization, "NA");
-  assert.equal(display.registrationNumber, "NA");
-  assert.equal(display.ageDob, "NA");
+  assert.equal(display.clinicAddress, "");
+  assert.equal(display.clinicPhone, "");
+  assert.equal(display.credentialLine, "");
+  assert.equal(display.registrationLine, "Reg. No: ________");
+  assert.match(display.padText, /Reg\. No: ________/);
+  assert.equal(display.ageSex, "____ / F");
+  assert.doesNotMatch(display.padText, /99 yr/);
+  assert.match(display.padText, /Weight: ____ kg/);
+  assert.match(display.padText, /SpO2: ____ %/);
+  assert.match(display.padText, /Heart Rate: ____ bpm/);
+  assert.doesNotMatch(display.vitalRow.join(" "), /120\/80|98\.6|70 kg|99 %|80 bpm/);
   assert.equal(display.medicines.length, 0);
   assert.equal(display.diagnosis.length, 0);
+});
+
+test("buildPrescriptionDisplayFields: keeps duration ranges and prints documented vitals", () => {
+  const display = buildPrescriptionDisplayFields({
+    ...BASE_FIELDS,
+    patientGender: "male",
+    dobIsApproximate: true,
+    objective: "Vitals: BP: 120/80 mmHg, HR: 88 bpm, Temp: 99 °F, SpO2: 97%, Weight: 62 kg",
+    draft: {
+      ...BASE_DRAFT,
+      medications: [
+        {
+          name: "Paracetamol",
+          dosage: "10 ml",
+          frequency: "TID",
+          duration: "3-4 days",
+          instructions: "After food",
+        },
+      ],
+    },
+  });
+  assert.equal(display.ageSex, "34 yr / M");
+  assert.doesNotMatch(display.ageSex, /approx|~/i);
+  assert.equal(display.medicines[0].duration, "3-4 days");
+  assert.equal(display.medicines[0].detail, "10 ml · TID · 3-4 days · After food");
+  assert.match(display.padText, /Weight: 62 kg/);
+  assert.match(display.padText, /SpO2: 97 %/);
+  assert.match(display.padText, /Heart Rate: 88 bpm/);
+  assert.match(display.padText, /BP: 120\/80/);
+  assert.match(display.padText, /Temp: 99/);
 });
 
 test("generatePrescriptionPdf: produces a valid PDF loadable by pdf-lib", async () => {
@@ -135,6 +181,26 @@ test("generatePrescriptionPdf: produces a valid PDF loadable by pdf-lib", async 
 
   const loaded = await PDFDocument.load(bytes);
   assert.equal(loaded.getPageCount(), 1);
+});
+
+test("generatePrescriptionPdf: 10 and 14 medicines paginate", async () => {
+  const medicines = Array.from({ length: 14 }, (_, i) => ({
+    name: `Medicine ${i + 1}`,
+    dosage: "500mg",
+    frequency: "1-0-1",
+    duration: "3-4 days",
+    instructions: "After food",
+  }));
+  const ten = await generatePrescriptionPdf({
+    ...BASE_FIELDS,
+    draft: { ...BASE_DRAFT, medications: medicines.slice(0, 10) },
+  });
+  const fourteen = await generatePrescriptionPdf({
+    ...BASE_FIELDS,
+    draft: { ...BASE_DRAFT, medications: medicines },
+  });
+  assert.ok((await PDFDocument.load(ten)).getPageCount() >= 2);
+  assert.ok((await PDFDocument.load(fourteen)).getPageCount() >= 2);
 });
 
 test("generatePrescriptionPdf: empty medicines still produces a valid PDF", async () => {

@@ -17,6 +17,7 @@ test("listen URL targets Deepgram and keeps the grant out of the query string", 
   assert.equal(parsed.searchParams.get("language"), "en");
   assert.equal(parsed.searchParams.get("interim_results"), "true");
   assert.equal(parsed.searchParams.get("diarize"), "true");
+  assert.equal(parsed.searchParams.get("diarize_model"), null);
   assert.equal(parsed.searchParams.get("token"), null);
   assert.equal(parsed.searchParams.get("access_token"), null);
 });

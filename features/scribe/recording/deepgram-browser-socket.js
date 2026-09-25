@@ -28,7 +28,6 @@ export function deepgramListenUrl(language) {
     punctuate: "true",
     interim_results: "true",
     diarize: "true",
-    diarize_model: "latest",
     endpointing: "300",
   });
   return { url: `${DEEPGRAM_LISTEN_WS_URL}?${params}`, model };

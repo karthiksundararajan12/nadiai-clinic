@@ -173,7 +173,7 @@ export function useLiveTranscription({ language }) {
     }
   }, [attachSocketHandlers, markFallback]);
 
-  const connect = useCallback((/* mimeType */ = "") => {
+  const connect = useCallback((_mimeType = "") => {
     if (typeof window === "undefined") return;
     if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
     intentionalCloseRef.current = false;

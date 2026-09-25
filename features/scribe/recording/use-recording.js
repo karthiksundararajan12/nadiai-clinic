@@ -24,6 +24,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useState,
 } from "react";
 
 import { RecordingService }   from "./service.js";
@@ -162,9 +163,37 @@ export function useRecording(options = {}) {
   // ── Derived state ──────────────────────────────────────────
   const isRecording = recordingState === RECORDING_STATE.RECORDING;
   const isPaused    = recordingState === RECORDING_STATE.PAUSED;
+
+  const [micState, setMicState] = useState("inactive");
   const isStopped   = recordingState === RECORDING_STATE.STOPPED;
   const isBusy      = recordingState === RECORDING_STATE.REQUESTING ||
                       recordingState === RECORDING_STATE.STOPPING;
+
+  // Tracks the real microphone and MediaRecorder, not the last button click.
+  useEffect(() => {
+    const readMicState = () => {
+      if (recordingState === RECORDING_STATE.REQUESTING) return "requesting";
+      const service = serviceRef.current;
+      if (!service) return "inactive";
+      const tracks = service.stream?.getAudioTracks?.() ?? [];
+      const micLive = tracks.some((track) => track.readyState === "live");
+      if (!micLive) return "inactive";
+      if (service.recorderState === "recording") return "recording";
+      if (service.recorderState === "paused") return "paused";
+      return "inactive";
+    };
+
+    setMicState(readMicState());
+    const watching =
+      recordingState === RECORDING_STATE.REQUESTING ||
+      recordingState === RECORDING_STATE.RECORDING ||
+      recordingState === RECORDING_STATE.PAUSED ||
+      recordingState === RECORDING_STATE.STOPPING;
+    if (!watching) return undefined;
+
+    const timer = window.setInterval(() => setMicState(readMicState()), 400);
+    return () => window.clearInterval(timer);
+  }, [recordingState]);
 
   // ── Timer ──────────────────────────────────────────────────
   const isTimerActive = isRecording || isPaused;
@@ -354,6 +383,7 @@ export function useRecording(options = {}) {
       isRequesting: recordingState === RECORDING_STATE.REQUESTING,
       isRecording,
       isPaused,
+      micState,
       isStopped,
       isBusy,
       hasError:    recordingState === RECORDING_STATE.ERROR,
@@ -369,7 +399,7 @@ export function useRecording(options = {}) {
     [
       recordingState, error, chunks, totalSize, mimeType,
       duration, formattedDuration, isNearLimit,
-      isRecording, isPaused, isStopped, isBusy,
+      isRecording, isPaused, isStopped, isBusy, micState,
       startRecording, pauseRecording, resumeRecording,
       stopRecording, resetRecording, clearError,
     ],

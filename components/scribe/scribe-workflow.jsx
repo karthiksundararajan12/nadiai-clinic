@@ -14,6 +14,7 @@ import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace"
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
 import { ScribeRecordPanel } from "@/features/scribe/consultation-workspace/components/consultation/ScribeRecordPanel.jsx";
 import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
+import { LiveTranscriptPanel } from "@/features/scribe/consultation-workspace/components/consultation/LiveTranscriptPanel.jsx";
 import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
 import { appointmentToPatientPrefill } from "@/features/appointments/appointment-prefill.js";
 import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
@@ -617,8 +618,16 @@ export function ScribeWorkflow() {
         sessionContext={recordPanelSessionContext}
       />
 
-      <main className="min-h-0 min-w-0 w-full bg-white md:w-[60%]">
-        {rightPanel}
+      <main className="flex min-h-0 min-w-0 w-full flex-col bg-white md:w-[60%]">
+        {(isRecordingLive || recording.micState !== "inactive") && (
+          <LiveTranscriptPanel
+            segments={live.segments}
+            liveStatus={live.status}
+            fallback={live.fallback}
+            micState={recording.micState}
+          />
+        )}
+        <div className="min-h-0 flex-1">{rightPanel}</div>
       </main>
 
       {uploadError && (

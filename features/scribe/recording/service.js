@@ -269,4 +269,7 @@ export class RecordingService {
 
   /** @returns {"inactive"|"recording"|"paused"} */
   get recorderState() { return this.#mediaRecorder?.state ?? "inactive"; }
+
+  /** @returns {MediaStream|null} */
+  get stream() { return this.#stream; }
 }

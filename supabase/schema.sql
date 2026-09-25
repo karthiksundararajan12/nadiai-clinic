@@ -105,16 +105,7 @@ CREATE POLICY "Doctors can view their clinic"
 -- Patients table
 CREATE TABLE IF NOT EXISTS public.patients (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  doctor_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
-  name TEXT,
-  age INTEGER,
   gender TEXT,
-  phone TEXT,
-  email TEXT,
-  condition TEXT,
-  status TEXT DEFAULT 'active',
-  last_visit DATE,
-  next_appointment DATE,
   clinic_id UUID REFERENCES public.clinics(id),
   contact_phone TEXT,
   full_name TEXT,
@@ -131,9 +122,15 @@ CREATE TABLE IF NOT EXISTS public.patients (
 
 ALTER TABLE public.patients ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Doctors can manage their own patients"
-  ON public.patients FOR ALL
-  USING (auth.uid() = doctor_id);
+CREATE POLICY "Doctors can read their clinic patients"
+  ON public.patients FOR SELECT
+  USING (
+    EXISTS (
+      SELECT 1 FROM public.doctor_profiles dp
+      WHERE dp.user_id = auth.uid()
+        AND dp.clinic_id = patients.clinic_id
+    )
+  );
 
 -- Conversation state (WhatsApp booking bot — see migration 040)
 CREATE TABLE IF NOT EXISTS public.conversation_state (

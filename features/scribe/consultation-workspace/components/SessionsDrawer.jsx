@@ -16,6 +16,7 @@ export function SessionsDrawer({
   refreshing,
   error,
   busySessionId,
+  deletingSessionId,
   lastRecordedSessionId,
   onRefresh,
   onOpen,
@@ -73,6 +74,7 @@ export function SessionsDrawer({
                 sessions={activeSessions}
                 empty="No active consultations"
                 busySessionId={busySessionId}
+                deletingSessionId={deletingSessionId}
                 lastRecordedSessionId={lastRecordedSessionId}
                 onOpen={onOpen}
                 onTranscribe={onTranscribe}
@@ -84,6 +86,7 @@ export function SessionsDrawer({
                 sessions={historySessions}
                 empty="No archived consultations"
                 busySessionId={busySessionId}
+                deletingSessionId={deletingSessionId}
                 onOpen={onOpen}
                 readOnly
               />
@@ -100,6 +103,7 @@ function SessionGroup({
   sessions,
   empty,
   busySessionId,
+  deletingSessionId,
   lastRecordedSessionId,
   onOpen,
   onTranscribe,
@@ -118,7 +122,8 @@ function SessionGroup({
             <SessionRow
               key={session.id}
               session={session}
-              busy={busySessionId === session.id}
+              transcribing={busySessionId === session.id}
+              deleting={deletingSessionId === session.id}
               isLatest={session.id === lastRecordedSessionId}
               readOnly={readOnly}
               onOpen={() => onOpen(session.id, Boolean(readOnly))}
@@ -148,7 +153,7 @@ function SessionStatusChip({ session }) {
   );
 }
 
-function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, readOnly }) {
+function SessionRow({ session, transcribing, deleting, isLatest, onOpen, onTranscribe, onDelete, readOnly }) {
   const sessionLabel = formatSessionLabel(session.created_at);
 
   const needsTranscribe = ["UPLOADED", "TRANSCRIPTION_FAILED"].includes(session.status);
@@ -184,8 +189,14 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
         </div>
         <div className="flex shrink-0 gap-1">
           {(needsTranscribe || canRetry) && onTranscribe && (
-            <Button size="sm" variant="outline" className="h-7 text-[11px]" disabled={busy} onClick={onTranscribe}>
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : canRetry ? "Retry" : "Transcribe"}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 text-[11px]"
+              disabled={transcribing || deleting}
+              onClick={onTranscribe}
+            >
+              {transcribing ? <Loader2 className="h-3 w-3 animate-spin" /> : canRetry ? "Retry" : "Transcribe"}
             </Button>
           )}
           {canOpen && (
@@ -204,10 +215,15 @@ function SessionRow({ session, busy, isLatest, onOpen, onTranscribe, onDelete, r
               variant="ghost"
               className="h-7 w-7 p-0 text-rose-500"
               data-testid="delete-session"
-              disabled={busy}
+              disabled={deleting || transcribing}
+              aria-busy={deleting || undefined}
               onClick={onDelete}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
             </Button>
           )}
         </div>

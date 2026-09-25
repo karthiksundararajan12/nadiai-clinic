@@ -135,6 +135,21 @@ export function countUniqueSpeakerLabels(segments) {
   return new Set(segments.map((s) => s.speaker_label)).size;
 }
 
+/**
+ * True when diarization assigned at least two known clinical roles.
+ * "Unknown" (no Deepgram speaker id) does not count as a second speaker.
+ *
+ * @param {Array<{ speaker_label?: string }>} segments
+ */
+export function hasDistinctClinicalSpeakers(segments) {
+  const labels = new Set(
+    (segments ?? [])
+      .map((s) => s.speaker_label)
+      .filter((label) => label && label !== UNKNOWN_SPEAKER_ROLE.label),
+  );
+  return labels.size >= 2;
+}
+
 function roundSeconds(value) {
   return Number(Number(value).toFixed(3));
 }

@@ -72,7 +72,7 @@ export function resolveRecordPanelCopy(context, recordState = {}) {
   if (context === RECORD_PANEL_CONTEXT.IN_PROGRESS) {
     return {
       title: "Session in progress",
-      hint: "Finish or end the open consultation to record again.",
+      hint: "Approve the SOAP note, or tap New Session — this consultation stays in Past sessions.",
     };
   }
 

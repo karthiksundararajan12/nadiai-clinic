@@ -39,3 +39,9 @@ test("resolveRecordPanelCopy keeps Session in progress for live unfinished sessi
   const copy = resolveRecordPanelCopy(RECORD_PANEL_CONTEXT.IN_PROGRESS, {});
   assert.equal(copy.title, "Session in progress");
 });
+
+test("in-progress hint points to an action that exists in the UI", () => {
+  const copy = resolveRecordPanelCopy(RECORD_PANEL_CONTEXT.IN_PROGRESS, {});
+  assert.match(copy.hint, /New Session/);
+  assert.doesNotMatch(copy.hint, /end the open consultation/i);
+});

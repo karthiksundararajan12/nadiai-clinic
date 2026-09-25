@@ -1,6 +1,6 @@
 "use client";
 
-import { History, Plus, Trash2 } from "lucide-react";
+import { History, Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -105,7 +105,11 @@ export function PatientContextHeader({
               disabled={deleting}
               data-testid="delete-session"
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              {deleting ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <Trash2 className="h-3.5 w-3.5" />
+              )}
               Delete
             </Button>
           )}

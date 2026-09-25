@@ -24,7 +24,11 @@ import { logSessionEvent } from "@/features/scribe/consultation-workspace/servic
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
 import { SCRIBE_LANGUAGE } from "@/features/scribe/constants.js";
 import { setRecordingGuardActive } from "@/features/scribe/recording/recording-guard.js";
-import { resolveRecordPanelContext } from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
+import {
+  RECORD_PANEL_CONTEXT,
+  resolveRecordPanelContext,
+} from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
+import { hasDistinctClinicalSpeakers } from "@/features/scribe/lib/speaker-diarization.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -86,6 +90,8 @@ export function ScribeWorkflow() {
   const [manualInputMode, setManualInputMode] = useState(false);
   const [manualSubmitting, setManualSubmitting] = useState(false);
   const [busySessionId, setBusySessionId] = useState(null);
+  const [deletingSessionId, setDeletingSessionId] = useState(null);
+  const [toastVariant, setToastVariant] = useState("warning");
   const [lastRecordedSessionId, setLastRecordedSessionId] = useState(null);
   const [workspaceState, setWorkspaceState] = useState({
     segments: [],
@@ -283,7 +289,13 @@ export function ScribeWorkflow() {
         duration_seconds: audioDurationSeconds,
       }).catch(() => {});
 
-      if (liveResult?.text && liveResult?.segments?.length) {
+      // Deepgram streaming only has the v1 diarizer, which often tags every word
+      // as speaker 0. Batch (v2 diarizer) re-transcribes those recordings.
+      if (
+        liveResult?.text &&
+        liveResult?.segments?.length &&
+        hasDistinctClinicalSpeakers(liveResult.segments)
+      ) {
         try {
           await completeLiveTranscription(sessionId, liveResult);
           await loadConsultations(true);
@@ -320,6 +332,7 @@ export function ScribeWorkflow() {
         avgLevel < RECORDING_LIMITS.MIN_AVG_AUDIO_LEVEL;
 
       if (tooShort && unclear) {
+        setToastVariant("warning");
         setToastMessage(
           "Recording is too short and audio is not clear. Speak louder and record for at least 10 seconds.",
         );
@@ -329,6 +342,7 @@ export function ScribeWorkflow() {
         return;
       }
       if (tooShort) {
+        setToastVariant("warning");
         setToastMessage("Recording is too short. Please record for at least 10 seconds.");
         await recording.stopRecording();
         recording.resetRecording();
@@ -336,6 +350,7 @@ export function ScribeWorkflow() {
         return;
       }
       if (unclear) {
+        setToastVariant("warning");
         setToastMessage("Audio is not clear. Please speak louder and try again.");
         await recording.stopRecording();
         recording.resetRecording();
@@ -398,6 +413,20 @@ export function ScribeWorkflow() {
     live.reset();
   }, [live, recording.resetRecording]);
 
+  const handleNewSession = useCallback(() => {
+    const unfinished =
+      recordPanelSessionContext === RECORD_PANEL_CONTEXT.IN_PROGRESS;
+    if (
+      unfinished &&
+      !window.confirm(
+        "This SOAP note isn't approved yet. Start a new session anyway? You can finish this consultation later from Past sessions.",
+      )
+    ) {
+      return;
+    }
+    goLive();
+  }, [goLive, recordPanelSessionContext]);
+
   const handleManualTranscriptSubmit = useCallback(async (text) => {
     setUploadError(null);
     setManualSubmitting(true);
@@ -437,21 +466,30 @@ export function ScribeWorkflow() {
   }, []);
 
   const deleteSession = useCallback(async (sessionId) => {
+    if (deletingSessionId === sessionId) return;
     if (!window.confirm("Delete this recording? This cannot be undone.")) return;
 
-    setBusySessionId(sessionId);
+    setDeletingSessionId(sessionId);
+    setListError(null);
     try {
       const res = await fetch(`/api/scribe/sessions/${sessionId}`, { method: "DELETE" });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(payload?.error || `Delete failed (${res.status})`);
+
+      setActiveSessions((prev) => prev.filter((s) => s.id !== sessionId));
+      setHistorySessions((prev) => prev.filter((s) => s.id !== sessionId));
+
       if (activeSessionId === sessionId) goLive();
       else await loadConsultations(true);
     } catch (err) {
-      setListError(err instanceof Error ? err : new Error(String(err)));
+      const wrapped = err instanceof Error ? err : new Error(String(err));
+      setListError(wrapped);
+      setToastMessage(wrapped.message);
+      setToastVariant("error");
     } finally {
-      setBusySessionId(null);
+      setDeletingSessionId(null);
     }
-  }, [activeSessionId, goLive, loadConsultations]);
+  }, [activeSessionId, deletingSessionId, goLive, loadConsultations]);
 
   const handleSOAPApproved = useCallback((result, options = {}) => {
     const approvedId = result?.session?.id ?? activeSessionId;
@@ -497,6 +535,7 @@ export function ScribeWorkflow() {
       refreshing={refreshing}
       error={listError}
       busySessionId={busySessionId}
+      deletingSessionId={deletingSessionId}
       lastRecordedSessionId={lastRecordedSessionId}
       onRefresh={() => loadConsultations(true)}
       onOpen={openSession}
@@ -533,7 +572,7 @@ export function ScribeWorkflow() {
       onStartTranscription={runTranscription}
       autoGenerateNote={!viewFromHistory}
       onDelete={() => deleteSession(activeSessionId)}
-      deleting={busySessionId === activeSessionId}
+      deleting={deletingSessionId === activeSessionId}
       selectedPatient={selectedPatient}
       onSelectedPatientChange={(next) => {
         setSelectedPatient(next);
@@ -597,7 +636,7 @@ export function ScribeWorkflow() {
           (workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId)))
         }
         transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
-        canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}
+        canStartNewSession={Boolean(activeSessionId) && !pipelineBusy}
         onStart={() => {
           live.reset();
           void recording.startRecording();
@@ -605,7 +644,7 @@ export function ScribeWorkflow() {
         onPause={recording.pauseRecording}
         onResume={recording.resumeRecording}
         onStop={handleStopRecording}
-        onNewSession={goLive}
+        onNewSession={handleNewSession}
         manualMode={manualInputMode}
         onManualModeChange={setManualInputMode}
         onManualSubmit={handleManualTranscriptSubmit}
@@ -649,7 +688,7 @@ export function ScribeWorkflow() {
         <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
           <Toast
             message={toastMessage}
-            variant="warning"
+            variant={toastVariant}
             onDismiss={() => setToastMessage(null)}
           />
         </div>

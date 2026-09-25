@@ -160,6 +160,31 @@ test("processing spinner is suppressed while recording and shown after stop", as
   }
 });
 
+test("unapproved open session still offers New Session instead of a dead end", async () => {
+  let clicked = 0;
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    disabled: true,
+    canStartNewSession: true,
+    sessionContext: "in-progress",
+    onNewSession: () => { clicked += 1; },
+  });
+  try {
+    assert.match(view.host.textContent, /Session in progress/);
+    assert.equal(view.host.querySelector("button[aria-label='Start recording']"), null);
+    const newSession = [...view.host.querySelectorAll("button")].find((b) =>
+      b.textContent.includes("New Session"),
+    );
+    assert.ok(newSession, "New Session button must be available for unapproved sessions");
+    await act(async () => {
+      newSession.click();
+    });
+    assert.equal(clicked, 1);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("recorder status strip shows mic state but never live transcript text", async () => {
   const view = render(LiveTranscriptPanel, {
     micState: "recording",

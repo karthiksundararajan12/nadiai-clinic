@@ -97,7 +97,15 @@ export function ChatTranscriptPanel({
         {poorTranscription && onDelete && (
           <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3 text-center">
             <p className="text-xs text-amber-800">Transcription quality is poor.</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={onDelete} disabled={deleting} data-testid="delete-session">
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 gap-1.5"
+              onClick={onDelete}
+              disabled={deleting}
+              data-testid="delete-session"
+            >
+              {deleting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
               Delete recording
             </Button>
           </div>

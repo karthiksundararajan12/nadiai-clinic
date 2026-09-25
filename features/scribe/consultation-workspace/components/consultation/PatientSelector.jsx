@@ -186,12 +186,6 @@ export function PatientSelector({ patient, onSelect, onClear, className }) {
         </p>
       )}
 
-      {!loading && !loadError && !hasEligible && (
-        <p className="mt-2 text-xs text-gray-500" data-testid="scribe-patient-select-empty">
-          No active appointments to consult
-        </p>
-      )}
-
       <Button
         type="button"
         variant="outline"

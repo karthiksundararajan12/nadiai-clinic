@@ -38,7 +38,6 @@ export function ScribeRecordPanel({
   languageToggle,
   footer,
   sessionContext = RECORD_PANEL_CONTEXT.IDLE,
-  liveFallback = false,
 }) {
   const [manualText, setManualText] = useState("");
 
@@ -52,6 +51,7 @@ export function ScribeRecordPanel({
   const isPaused = recordState === "paused";
   const isProcessing = recordState === "processing";
   const isLive = isRecording || isPaused;
+  const transcriptPending = isLive || isRequesting;
 
   const { level, waveformData } = useAudioLevel(analyserNode, isLive && !manualMode);
 
@@ -273,17 +273,16 @@ export function ScribeRecordPanel({
         )}
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col bg-white">
+      <div className="flex min-h-0 flex-1 flex-col bg-white" data-testid="record-panel-conversation">
         <div className="shrink-0 border-b border-gray-200 bg-white px-4 py-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Conversation</p>
         </div>
         <ScribeConversationChat
-          segments={transcriptSegments}
+          segments={transcriptPending ? [] : transcriptSegments}
           highlightedSegmentId={highlightedSegmentId}
-          loading={transcriptLoading}
+          loading={!transcriptPending && transcriptLoading}
           loadingMessage={transcriptLoadingMessage ?? statusMessage}
-          isLiveRecording={isLive}
-          liveFallback={liveFallback}
+          isLiveRecording={transcriptPending}
         />
       </div>
 

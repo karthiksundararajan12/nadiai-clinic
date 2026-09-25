@@ -1,7 +1,6 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
-import { ScribeConversationChat } from "./ScribeConversationChat.jsx";
 
 function MicIndicator({ micState, liveStatus, fallback }) {
   const connecting = liveStatus === "connecting" || liveStatus === "reconnecting";
@@ -49,32 +48,24 @@ function MicIndicator({ micState, liveStatus, fallback }) {
 }
 
 /**
- * Passive Deepgram partials. Does not start, stop, or wait on SOAP generation.
+ * Recorder status strip. Live Deepgram partials are intentionally not rendered;
+ * the conversation is shown in the record panel only after recording stops.
  */
 export function LiveTranscriptPanel({
-  segments = [],
   liveStatus = "idle",
   fallback = false,
   micState = "inactive",
 }) {
-  const listening = micState === "recording" || micState === "paused" || micState === "requesting";
-
   return (
     <section
-      className="flex max-h-[42%] min-h-[180px] shrink-0 flex-col border-b border-gray-200 bg-white"
+      className="flex shrink-0 flex-col border-b border-gray-200 bg-white"
       data-testid="live-transcript-panel"
-      aria-label="Live transcript"
+      aria-label="Recorder status"
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-gray-200 px-4 py-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Live transcript</p>
+      <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Microphone</p>
         <MicIndicator micState={micState} liveStatus={liveStatus} fallback={fallback} />
       </div>
-      <ScribeConversationChat
-        segments={segments}
-        isLiveRecording={listening}
-        liveFallback={fallback}
-        loading={false}
-      />
     </section>
   );
 }

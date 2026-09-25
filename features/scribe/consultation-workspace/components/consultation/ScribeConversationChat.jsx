@@ -20,7 +20,6 @@ export function ScribeConversationChat({
   loadingMessage,
   highlightedSegmentId = null,
   isLiveRecording = false,
-  liveFallback = false,
 }) {
   const bottomRef = useRef(null);
 
@@ -41,15 +40,16 @@ export function ScribeConversationChat({
 
   if (!segments.length) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-8 text-center">
+      <div
+        className="flex flex-1 flex-col items-center justify-center gap-2 bg-white px-4 py-8 text-center"
+        data-testid="conversation-placeholder"
+      >
         <div className="rounded-full bg-gray-100 p-3">
           <AudioLines className="h-6 w-6 text-gray-400" />
         </div>
         <p className="max-w-xs text-xs text-gray-500">
           {isLiveRecording
-            ? liveFallback
-              ? "Live transcript unavailable. The full transcript will be saved when you stop recording."
-              : "Listening… draft words appear here as you speak."
+            ? "Transcript will appear here once you stop recording."
             : "Conversation will appear here after transcription."}
         </p>
       </div>

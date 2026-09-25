@@ -587,7 +587,7 @@ export function ScribeWorkflow() {
         analyserNode={recording.analyserNode}
         pauseSupported={recording.pauseSupported}
         transcriptSegments={
-          isRecordingLive || (live.segments.length > 0 && !workspaceState.segments?.length)
+          live.segments.length > 0 && !workspaceState.segments?.length
             ? live.segments
             : workspaceState.segments
         }
@@ -597,7 +597,6 @@ export function ScribeWorkflow() {
           (workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId)))
         }
         transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
-        liveFallback={isRecordingLive && live.fallback}
         canStartNewSession={Boolean(activeSessionId) && workspaceState.sessionComplete}
         onStart={() => {
           live.reset();
@@ -621,7 +620,6 @@ export function ScribeWorkflow() {
       <main className="flex min-h-0 min-w-0 w-full flex-col bg-white md:w-[60%]">
         {(isRecordingLive || recording.micState !== "inactive") && (
           <LiveTranscriptPanel
-            segments={live.segments}
             liveStatus={live.status}
             fallback={live.fallback}
             micState={recording.micState}

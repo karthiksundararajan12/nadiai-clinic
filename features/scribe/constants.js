@@ -263,9 +263,9 @@ export const TRANSCRIPTION_CONFIG = Object.freeze({
   DEFAULT_COST_PER_AUDIO_MINUTE_CENTS: 0.59,
 });
 
-/** Live Deepgram streaming (client → our server → Deepgram). */
+/** Live Deepgram streaming (browser → Deepgram, after a short-lived grant). */
 export const LIVE_TRANSCRIPTION = Object.freeze({
-  PATH: "/api/scribe/live-transcription",
+  TOKEN_PATH: "/api/scribe/live-transcription-token",
   CHUNK_INTERVAL_MS: 250,
 });
 

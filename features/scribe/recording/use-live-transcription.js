@@ -1,18 +1,32 @@
 "use client";
 
 /**
- * Streams MediaRecorder chunks over a WebSocket to the scribe live-transcription
- * relay. Reconnects once on drop; after that, marks fallback so the caller can
- * use the existing batch Deepgram API when recording stops.
+ * Streams MediaRecorder chunks over a WebSocket straight to Deepgram Live.
+ * Each connection fetches a new 30-second grant. Reconnects once on drop;
+ * after that, marks fallback so the caller can use batch transcription.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LIVE_TRANSCRIPTION } from "../constants.js";
+import { createLiveTranscriptAccumulator } from "../lib/live-transcript-accumulator.js";
+import {
+  deepgramBrowserProtocols,
+  deepgramListenUrl,
+} from "./deepgram-browser-socket.js";
 
-function liveSocketUrl(language) {
-  const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-  const params = new URLSearchParams({ language: language || "english" });
-  return `${proto}//${window.location.host}${LIVE_TRANSCRIPTION.PATH}?${params}`;
+const KEEPALIVE_MS = 8_000;
+
+async function fetchLiveToken() {
+  const res = await fetch(LIVE_TRANSCRIPTION.TOKEN_PATH, {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
+  const payload = await res.json().catch(() => ({}));
+  if (!res.ok || typeof payload.access_token !== "string" || !payload.access_token) {
+    throw new Error(payload?.error || "Live transcription token failed");
+  }
+  return payload.access_token;
 }
 
 /**
@@ -28,14 +42,41 @@ export function useLiveTranscription({ language }) {
   const reconnectUsedRef = useRef(false);
   const intentionalCloseRef = useRef(false);
   const languageRef = useRef(language);
+  const modelRef = useRef("");
   const completeWaiterRef = useRef(/** @type {((v: unknown) => void)|null} */ (null));
-  const mimeTypeRef = useRef("");
   const fallbackRef = useRef(false);
   const lastResultRef = useRef(/** @type {object|null} */ (null));
+  const accumulatorRef = useRef(createLiveTranscriptAccumulator());
+  const keepAliveRef = useRef(/** @type {ReturnType<typeof setInterval>|null} */ (null));
+  const connectGenerationRef = useRef(0);
 
   useEffect(() => {
     languageRef.current = language;
   }, [language]);
+
+  const clearKeepAlive = useCallback(() => {
+    if (keepAliveRef.current) {
+      clearInterval(keepAliveRef.current);
+      keepAliveRef.current = null;
+    }
+  }, []);
+
+  const markFallback = useCallback(() => {
+    fallbackRef.current = true;
+    setFallback(true);
+    setStatus("fallback");
+    completeWaiterRef.current?.(null);
+    completeWaiterRef.current = null;
+  }, []);
+
+  const publishSnapshot = useCallback(() => {
+    const snap = accumulatorRef.current.snapshot();
+    setSegments(snap.segments);
+    lastResultRef.current = accumulatorRef.current.toTranscriptionResult({
+      language: languageRef.current,
+      model: modelRef.current,
+    });
+  }, []);
 
   const flushQueue = useCallback(() => {
     const ws = wsRef.current;
@@ -49,13 +90,12 @@ export function useLiveTranscription({ language }) {
   const attachSocketHandlers = useCallback((ws) => {
     ws.onopen = () => {
       setStatus("live");
-      ws.send(
-        JSON.stringify({
-          type: "start",
-          language: languageRef.current,
-          mimeType: mimeTypeRef.current,
-        }),
-      );
+      keepAliveRef.current = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: "KeepAlive" }));
+        }
+      }, KEEPALIVE_MS);
+      flushQueue();
     };
 
     ws.onmessage = (event) => {
@@ -67,35 +107,15 @@ export function useLiveTranscription({ language }) {
         return;
       }
 
-      if (msg.type === "ready") {
-        flushQueue();
+      if (msg.type === "Error") {
+        markFallback();
+        try { ws.close(); } catch { /* ignore */ }
         return;
       }
-      if (msg.type === "transcript" && Array.isArray(msg.segments)) {
-        setSegments(msg.segments);
-        if (msg.full_text) {
-          lastResultRef.current = {
-            text: msg.full_text,
-            language: languageRef.current,
-            segments: msg.segments.filter((s) => !s.is_interim),
-            speakerMap: {},
-            providerResponse: { source: "live" },
-          };
-        }
-        return;
-      }
-      if (msg.type === "complete") {
-        lastResultRef.current = msg.result ?? lastResultRef.current;
-        completeWaiterRef.current?.(msg.result ?? lastResultRef.current);
-        completeWaiterRef.current = null;
-        return;
-      }
-      if (msg.type === "error") {
-        if (msg.fallback) {
-          fallbackRef.current = true;
-          setFallback(true);
-          setStatus("fallback");
-        }
+
+      if (msg.type === "Results") {
+        accumulatorRef.current.applyResult(msg);
+        publishSnapshot();
       }
     };
 
@@ -104,8 +124,11 @@ export function useLiveTranscription({ language }) {
     };
 
     ws.onclose = () => {
-      wsRef.current = null;
+      clearKeepAlive();
+      if (wsRef.current === ws) wsRef.current = null;
+      if (fallbackRef.current) return;
       if (intentionalCloseRef.current) {
+        publishSnapshot();
         setStatus("closed");
         completeWaiterRef.current?.(lastResultRef.current);
         completeWaiterRef.current = null;
@@ -114,47 +137,56 @@ export function useLiveTranscription({ language }) {
       if (!reconnectUsedRef.current) {
         reconnectUsedRef.current = true;
         setStatus("reconnecting");
-        const next = new WebSocket(liveSocketUrl(languageRef.current));
-        next.binaryType = "arraybuffer";
-        wsRef.current = next;
-        attachSocketHandlers(next);
+        void openSocket();
         return;
       }
-      fallbackRef.current = true;
-      setFallback(true);
-      setStatus("fallback");
-      completeWaiterRef.current?.(null);
-      completeWaiterRef.current = null;
+      markFallback();
     };
-  }, [flushQueue]);
+  }, [clearKeepAlive, flushQueue, markFallback, publishSnapshot]);
 
-  const connect = useCallback(
-    (mimeType = "") => {
-      if (typeof window === "undefined") return;
-      if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
-      mimeTypeRef.current = mimeType;
-      intentionalCloseRef.current = false;
-      reconnectUsedRef.current = false;
-      fallbackRef.current = false;
-      lastResultRef.current = null;
-      setFallback(false);
-      outboundQueueRef.current = [];
-      setSegments([]);
-      setStatus("connecting");
+  const openSocket = useCallback(async () => {
+    const generation = ++connectGenerationRef.current;
+    const { url, model } = deepgramListenUrl(languageRef.current);
+    modelRef.current = model;
+    let token;
+    try {
+      token = await fetchLiveToken();
+    } catch {
+      if (generation !== connectGenerationRef.current) return;
+      markFallback();
+      return;
+    }
+    if (generation !== connectGenerationRef.current || intentionalCloseRef.current) return;
 
-      try {
-        const ws = new WebSocket(liveSocketUrl(languageRef.current));
-        ws.binaryType = "arraybuffer";
-        wsRef.current = ws;
-        attachSocketHandlers(ws);
-      } catch {
-        fallbackRef.current = true;
-        setFallback(true);
-        setStatus("fallback");
+    try {
+      const ws = new WebSocket(url, deepgramBrowserProtocols(token));
+      token = "";
+      if (generation !== connectGenerationRef.current) {
+        ws.close();
+        return;
       }
-    },
-    [attachSocketHandlers],
-  );
+      ws.binaryType = "arraybuffer";
+      wsRef.current = ws;
+      attachSocketHandlers(ws);
+    } catch {
+      markFallback();
+    }
+  }, [attachSocketHandlers, markFallback]);
+
+  const connect = useCallback((/* mimeType */ = "") => {
+    if (typeof window === "undefined") return;
+    if (wsRef.current && wsRef.current.readyState <= WebSocket.OPEN) return;
+    intentionalCloseRef.current = false;
+    reconnectUsedRef.current = false;
+    fallbackRef.current = false;
+    lastResultRef.current = null;
+    accumulatorRef.current = createLiveTranscriptAccumulator();
+    setFallback(false);
+    outboundQueueRef.current = [];
+    setSegments([]);
+    setStatus("connecting");
+    void openSocket();
+  }, [openSocket]);
 
   const sendAudio = useCallback(async (blob) => {
     if (fallbackRef.current || !blob?.size) return;
@@ -194,27 +226,37 @@ export function useLiveTranscription({ language }) {
       };
 
       intentionalCloseRef.current = true;
-      ws.send(JSON.stringify({ type: "stop" }));
+      try {
+        ws.send(JSON.stringify({ type: "CloseStream" }));
+      } catch {
+        clearTimeout(timer);
+        resolve(usable(lastResultRef.current));
+      }
     });
   }, []);
 
   const reset = useCallback(() => {
     intentionalCloseRef.current = true;
+    connectGenerationRef.current += 1;
+    clearKeepAlive();
     try { wsRef.current?.close(); } catch { /* ignore */ }
     wsRef.current = null;
     outboundQueueRef.current = [];
     reconnectUsedRef.current = false;
     lastResultRef.current = null;
     fallbackRef.current = false;
+    accumulatorRef.current = createLiveTranscriptAccumulator();
     setSegments([]);
     setStatus("idle");
     setFallback(false);
-  }, []);
+  }, [clearKeepAlive]);
 
   useEffect(() => () => {
     intentionalCloseRef.current = true;
+    connectGenerationRef.current += 1;
+    clearKeepAlive();
     try { wsRef.current?.close(); } catch { /* ignore */ }
-  }, []);
+  }, [clearKeepAlive]);
 
   return useMemo(
     () => ({

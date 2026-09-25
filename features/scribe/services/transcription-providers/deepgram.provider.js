@@ -4,8 +4,8 @@
  * API used: Deepgram Pre-recorded Audio (batch fallback)
  *   POST https://api.deepgram.com/v1/listen
  *
- * Live streaming (primary capture path) lives in deepgram-live.client.js
- *   wss://api.deepgram.com/v1/listen
+ * Live streaming is a browser WebSocket to wss://api.deepgram.com/v1/listen,
+ * authorized with a 30-second grant from /api/scribe/live-transcription-token.
  *
  * Features enabled:
  *   diarize      = true   — native multi-speaker identification

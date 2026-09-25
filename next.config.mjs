@@ -1,6 +1,5 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  serverExternalPackages: ["ws"],
   // Ensure Noto Sans fonts ship with PDF-generating serverless functions.
   // Paths are relative to the project root (Next outputFileTracingIncludes).
   outputFileTracingIncludes: {

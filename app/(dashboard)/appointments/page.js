@@ -36,6 +36,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { formatPaymentStatusLabel } from "@/features/booking/lib/payment-list.js";
+import { formatSlotDateTimeParts } from "@/features/booking/lib/slot-engine.js";
 import { formatPhoneForDisplay, normalizePhoneForWhatsApp } from "@/features/booking/lib/phone.js";
 import {
   buildHighlightRedirectPath,
@@ -110,6 +111,13 @@ const CONSULTATION_STATUSES = new Set([
   "payment_pending",
   "confirmed",
 ]);
+
+function formatSlotTime(slotStart) {
+  if (!slotStart) return null;
+  const slot = new Date(slotStart);
+  if (Number.isNaN(slot.getTime())) return null;
+  return formatSlotDateTimeParts(slot).time;
+}
 
 function clinicDateKey(date = new Date()) {
   const parts = new Intl.DateTimeFormat("en-IN", {
@@ -742,7 +750,12 @@ function AppointmentsPageContent() {
                       )}
                     >
                       <td className="px-4 py-3 font-medium text-foreground">
-                        <div>{appointment.patientName}</div>
+                        <div className="flex items-baseline gap-2">
+                          <span className="shrink-0 tabular-nums text-foreground">
+                            {formatSlotTime(appointment.slotStart) ?? "—"}
+                          </span>
+                          <span>{appointment.patientName}</span>
+                        </div>
                         {appointment.contactPhone ? (
                           <div className="mt-1 text-caption font-medium text-muted-foreground">
                             {formatPhoneForDisplay(appointment.contactPhone)}

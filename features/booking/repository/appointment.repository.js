@@ -308,6 +308,7 @@ export class AppointmentRepository extends BaseRepository {
    *   toIso?: string|null;
    *   limit?: number;
    *   offset?: number;
+   *   ascending?: boolean;
    * }} [filters]
    * @returns {Promise<{ rows: object[]; total: number }>}
    */
@@ -318,6 +319,7 @@ export class AppointmentRepository extends BaseRepository {
     toIso = null,
     limit = 20,
     offset = 0,
+    ascending = false,
   } = {}) {
     const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
     const safeOffset = Math.max(Number(offset) || 0, 0);
@@ -355,7 +357,7 @@ export class AppointmentRepository extends BaseRepository {
       )
       .eq("clinic_id", clinicId)
       .is("deleted_at", null)
-      .order("slot_start", { ascending: false })
+      .order("slot_start", { ascending })
       .range(safeOffset, safeOffset + safeLimit - 1);
 
     if (dbStatus) {

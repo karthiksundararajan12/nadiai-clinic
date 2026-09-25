@@ -166,6 +166,7 @@ export class AppointmentsService {
       toIso,
       limit: safeLimit,
       offset: safeOffset,
+      ascending: range === "today",
     });
 
     const appointments = rows.map((row) => {

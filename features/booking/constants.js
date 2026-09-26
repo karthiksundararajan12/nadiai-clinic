@@ -251,6 +251,12 @@ export const CANCEL_CONFIRM_INTENT = Object.freeze({
 export const RESET_COPY = Object.freeze({
   /** Body of the START menu re-sent after a successful reset. */
   ACKNOWLEDGED: "No problem, let's start over. How can I help you today?",
+  /**
+   * Body when "menu" is typed from a post-confirmation state (CONFIRMED or
+   * a legacy REMINDER_SENT string). The same START menu rows follow. The
+   * appointment itself is not modified — this copy says so.
+   */
+  CONFIRMED_MENU: "No changes made to your appointment. Here's the menu:",
   PAYMENT_PENDING_CONFIRM:
     "You have a payment in progress for this booking. Starting over here " +
     "won't cancel that payment link — it may still work until it expires. " +

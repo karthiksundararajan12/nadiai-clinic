@@ -573,6 +573,9 @@ export class ConversationStateService {
    */
   async _resetConversationToStart({ clinic, message, row, log }) {
     this._assertCanResetToStart(row.current_state);
+    // Read before the START write: the acknowledgement depends on the state
+    // the patient typed from, and update() may mutate `row` in place.
+    const bodyText = this._resetAcknowledgementCopy(message, row);
 
     const updated = await this._repo.update(row.id, {
       current_state: CONVERSATION_STATE.START,
@@ -582,7 +585,7 @@ export class ConversationStateService {
     });
 
     await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
-      bodyText: RESET_COPY.ACKNOWLEDGED,
+      bodyText,
       buttonLabel: START_MENU_COPY.BUTTON_LABEL,
       rows: START_MENU_ROWS,
     });
@@ -599,6 +602,21 @@ export class ConversationStateService {
       fromState: row.current_state,
     });
     return { handled: true, action: "RESET_TO_START", currentState: CONVERSATION_STATE.START };
+  }
+
+  /**
+   * Copy only. Post-confirmation "menu" reassures that the appointment is
+   * untouched; every other reset keeps the generic start-over acknowledgement.
+   * State transitions are unchanged.
+   */
+  _resetAcknowledgementCopy(message, row) {
+    const typedMenu =
+      message.type === "text" &&
+      String(message.text ?? "").trim().toLowerCase() === "menu";
+    if (typedMenu && CONFIRMED_INBOUND_FALLBACK_STATES.includes(row.current_state)) {
+      return RESET_COPY.CONFIRMED_MENU;
+    }
+    return RESET_COPY.ACKNOWLEDGED;
   }
 
   /**

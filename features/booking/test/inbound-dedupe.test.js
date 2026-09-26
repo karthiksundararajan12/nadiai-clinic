@@ -248,7 +248,7 @@ test("a redelivered reset keyword does not re-send 'let's start over'", async ()
   assert.equal(first.action, "RESET_TO_START");
   assert.equal(second.skipped, true);
 
-  const resetSends = wa.calls.filter((c) => c.opts?.bodyText === RESET_COPY.ACKNOWLEDGED);
+  const resetSends = wa.calls.filter((c) => c.opts?.bodyText === RESET_COPY.CONFIRMED_MENU);
   assert.equal(resetSends.length, 1, "the reset acknowledgement must not repeat");
 });
 

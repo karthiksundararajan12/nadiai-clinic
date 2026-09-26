@@ -1232,6 +1232,9 @@ test("CONFIRMED: reset keywords still short-circuit to START unchanged", async (
   assert.equal(appointmentRepo.findCalls.length, 0, "reset must not look up the appointment for fallback copy");
   assert.equal(repo.rows.get("clinic-1:919876543210").current_state, CONVERSATION_STATE.START);
   assert.equal(wa.calls.some((c) => c.type === "list"), true);
+  assert.equal(wa.calls[0].opts.bodyText, RESET_COPY.CONFIRMED_MENU);
+  assert.match(wa.calls[0].opts.bodyText, /no changes made to your appointment/i);
+  assert.doesNotMatch(wa.calls[0].opts.bodyText, /let's start over/i);
 });
 
 test("REMINDER_SENT: unrecognized message gets the same confirmed fallback treatment", async () => {

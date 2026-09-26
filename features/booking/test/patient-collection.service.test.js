@@ -188,6 +188,40 @@ test("enterState: existing patients — presents a selection list including 'Add
   assert.equal(repo.row.context.patientOptions.length, 2);
 });
 
+test("enterState: a patient with 3 prior appointments appears once in the picker list", async () => {
+  const phone = "919876543210";
+  // One patients row per prior booking of the same person (distinct ids).
+  const karthikBookings = [1, 2, 3].map((n) => ({
+    id: `karthik-${n}`,
+    clinic_id: "clinic-1",
+    contact_phone: phone,
+    full_name: n === 2 ? "karthik" : "Karthik",
+    age_years: 41,
+    consent_given: true,
+    prior_appointment_id: `appt-${n}`,
+  }));
+  const child = {
+    id: "child-1",
+    clinic_id: "clinic-1",
+    contact_phone: phone,
+    full_name: "Little Kiran",
+    age_years: 4,
+    consent_given: true,
+  };
+  const { service, repo, wa } = makeService({ patients: [...karthikBookings, child] });
+
+  const result = await service.enterState({ clinic: CLINIC, message: buildMessage(), row: repo.row });
+
+  assert.equal(result.action, "PATIENT_LIST_SENT");
+  const optionRows = wa.calls[0].opts.rows.filter((r) => r.id !== PATIENT_SELECTION_ADD_NEW_ID);
+  const karthikRows = optionRows.filter((r) => r.title.toLowerCase() === "karthik");
+  assert.equal(karthikRows.length, 1);
+  assert.equal(karthikRows[0].id, patientOptionRowId("karthik-1"));
+  assert.equal(karthikRows[0].description, "41 yrs");
+  assert.equal(optionRows.length, 2);
+  assert.equal(repo.row.context.patientOptions.filter((p) => p.full_name.toLowerCase() === "karthik").length, 1);
+});
+
 // ─────────────────────────────────────────────────────────────
 // AWAITING_SELECTION
 // ─────────────────────────────────────────────────────────────

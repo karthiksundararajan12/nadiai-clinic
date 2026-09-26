@@ -71,7 +71,7 @@ import {
 import { assertValidConversationTransition } from "../lib/conversation-transitions.js";
 import { validatePatientName, parseAgeOrDob } from "../lib/patient-input.js";
 import { findClosestPatientMatch } from "../lib/fuzzy-match.js";
-import { buildPatientSelectionRows, parsePatientOptionRowId } from "../lib/patient-list.js";
+import { buildPatientSelectionRows, dedupePatientsForSelection, parsePatientOptionRowId } from "../lib/patient-list.js";
 import { createLogger } from "../logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../lib/alerting.js";
 
@@ -156,21 +156,27 @@ export class PatientCollectionService {
   // ─────────────────────────────────────────────────────────────
 
   async _presentPatientList({ clinic, message, row, patients, log }) {
+    const uniquePatients = dedupePatientsForSelection(patients);
     await this._wa.sendInteractiveList(clinic.whatsapp_phone_number_id, message.contactPhone, {
       bodyText: COLLECTING_PATIENT_COPY.LIST_BODY,
       buttonLabel: COLLECTING_PATIENT_COPY.LIST_BUTTON_LABEL,
-      rows: buildPatientSelectionRows(patients),
+      rows: buildPatientSelectionRows(uniquePatients),
     });
     await this._repo.update(row.id, {
       context: this._touch(row.context, message.waMessageId, {
         collectingPatientStep: COLLECTING_PATIENT_STEP.AWAITING_SELECTION,
-        patientOptions: patients.map((p) => ({ id: p.id, full_name: p.full_name })),
+        patientOptions: uniquePatients.map((p) => ({
+          id: p.id,
+          full_name: p.full_name,
+          age_years: p.age_years ?? null,
+          contact_phone: p.contact_phone ?? null,
+        })),
       }),
       last_message_at: new Date().toISOString(),
     });
     log.info("Presented existing-patient selection list", {
       contactPhone: message.contactPhone,
-      count: patients.length,
+      count: uniquePatients.length,
     });
     return { handled: true, action: "PATIENT_LIST_SENT", currentState: CONVERSATION_STATE.COLLECTING_PATIENT };
   }

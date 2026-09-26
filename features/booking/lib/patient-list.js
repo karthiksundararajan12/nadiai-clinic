@@ -30,12 +30,51 @@ export function parsePatientOptionRowId(replyId) {
 }
 
 /**
+ * One picker entry per person. `findByContact` reads `patients` directly
+ * (no appointment join); repeat bookings can still insert another row for
+ * the same name, age, and phone, and a fanned-out read can repeat one id.
+ * Keep the first occurrence — callers order oldest-first — and leave a
+ * different name or age on that phone as its own row.
+ *
+ * @param {Array<{ id?: string; full_name?: string; age_years?: number|null; contact_phone?: string|null }>|null|undefined} patients
+ * @returns {typeof patients}
+ */
+export function dedupePatientsForSelection(patients) {
+  /** @type {typeof patients} */
+  const unique = [];
+  const seenIds = new Set();
+  const seenPeople = new Set();
+  for (const patient of patients ?? []) {
+    const id = patient?.id;
+    if (!id || seenIds.has(id)) continue;
+    const personKey = selectionPersonKey(patient);
+    if (personKey && seenPeople.has(personKey)) continue;
+    seenIds.add(id);
+    if (personKey) seenPeople.add(personKey);
+    unique.push(patient);
+  }
+  return unique;
+}
+
+/**
+ * @param {{ id?: string; full_name?: string; age_years?: number|null; contact_phone?: string|null }} patient
+ * @returns {string|null}
+ */
+function selectionPersonKey(patient) {
+  const name = String(patient.full_name ?? "").trim().toLowerCase().replace(/\s+/g, " ");
+  if (!name) return null;
+  const phone = String(patient.contact_phone ?? "").trim();
+  const age = patient.age_years == null ? "" : String(patient.age_years);
+  return `${phone}\0${name}\0${age}`;
+}
+
+/**
  * @param {{ id: string; full_name: string; age_years?: number|null; date_of_birth?: string|null }[]} patients
  * @returns {Array<{ id: string; title: string; description?: string }>}
  */
 export function buildPatientSelectionRows(patients) {
   const maxExistingRows = WHATSAPP_CONFIG.MAX_LIST_ROWS - 1; // reserve one row for "Add new patient"
-  const rows = patients.slice(0, maxExistingRows).map((patient) => ({
+  const rows = dedupePatientsForSelection(patients).slice(0, maxExistingRows).map((patient) => ({
     id: patientOptionRowId(patient.id),
     title: truncate(patient.full_name, ROW_TITLE_MAX),
     description: truncate(describePatientAge(patient), ROW_DESCRIPTION_MAX),

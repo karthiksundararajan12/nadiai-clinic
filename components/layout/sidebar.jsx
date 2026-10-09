@@ -58,8 +58,8 @@ export function Sidebar({ collapsed, onToggle }) {
     >
       <div
         className={cn(
-          "flex items-center",
-          collapsed && "justify-center px-3 py-4",
+          "flex items-center border-b border-sidebar-border",
+          collapsed ? "justify-center px-3 py-4" : "px-4 py-4",
         )}
       >
         {collapsed ? (
@@ -68,15 +68,15 @@ export function Sidebar({ collapsed, onToggle }) {
           <Link
             href="/dashboard"
             onClick={(event) => navigateIfAllowed("/dashboard", event)}
-            className="block w-full"
+            className="inline-block"
           >
             <Image
-              src="/nadiai-header.png"
+              src="/nadiai-logo.png"
               alt="Nadi AI"
-              width={260}
-              height={72}
+              width={200}
+              height={48}
               priority
-              className="h-[72px] w-full object-contain object-left"
+              className="h-10 w-auto object-contain object-left"
             />
           </Link>
         )}

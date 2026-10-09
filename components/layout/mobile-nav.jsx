@@ -25,15 +25,15 @@ export function MobileNav({ open, onClose }) {
         className="fixed inset-y-0 left-0 w-[280px] animate-in slide-in-from-left bg-sidebar-background text-sidebar-foreground shadow-clinical"
         style={{ boxShadow: "var(--sidebar-shadow)" }}
       >
-        <div className="flex items-center">
-          <Link href="/dashboard" onClick={onClose} className="min-w-0 flex-1">
+        <div className="flex items-center border-b border-sidebar-border px-4 py-4">
+          <Link href="/dashboard" onClick={onClose} className="inline-block min-w-0 flex-1">
             <Image
-              src="/nadiai-header.png"
+              src="/nadiai-logo.png"
               alt="Nadi AI"
-              width={260}
-              height={72}
+              width={200}
+              height={48}
               priority
-              className="h-[72px] w-full object-contain object-left"
+              className="h-10 w-auto object-contain object-left"
             />
           </Link>
           <button

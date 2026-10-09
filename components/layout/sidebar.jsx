@@ -73,10 +73,10 @@ export function Sidebar({ collapsed, onToggle }) {
             <Image
               src="/nadiai-logo.png"
               alt="Nadi AI"
-              width={180}
-              height={40}
+              width={700}
+              height={260}
               priority
-              className="h-9 w-auto object-contain"
+              className="w-[150px] h-auto object-contain"
             />
           </Link>
         )}

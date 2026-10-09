@@ -46,7 +46,7 @@ export function BrandLogo({
           )}
         >
           <Image
-            src="/logo.png"
+            src="/nadiai-header.png"
             alt={showText ? "" : "Nadi AI"}
             width={512}
             height={512}
@@ -62,7 +62,7 @@ export function BrandLogo({
         </span>
       ) : (
         <Image
-          src="/logo.png"
+          src="/nadiai-header.png"
           alt="Nadi AI"
           width={512}
           height={512}

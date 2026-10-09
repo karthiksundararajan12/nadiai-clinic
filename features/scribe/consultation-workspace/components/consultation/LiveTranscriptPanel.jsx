@@ -1,14 +1,14 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { CircleNotch } from "@phosphor-icons/react";
 
 function MicIndicator({ micState, liveStatus, fallback }) {
   const connecting = liveStatus === "connecting" || liveStatus === "reconnecting";
 
   if (micState === "requesting" || (connecting && micState !== "recording" && micState !== "paused")) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700" role="status">
-        <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold scribe-text-muted" role="status">
+        <CircleNotch size={16} weight="bold" className="animate-spin scribe-icon" />
         {micState === "requesting" ? "Requesting microphone…" : "Connecting live transcript…"}
       </span>
     );
@@ -16,7 +16,7 @@ function MicIndicator({ micState, liveStatus, fallback }) {
 
   if (micState === "recording") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-red-700" role="status">
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-red-700" role="status">
         <span className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
         {connecting ? "Recording · connecting transcript…" : "Recording"}
       </span>
@@ -25,7 +25,7 @@ function MicIndicator({ micState, liveStatus, fallback }) {
 
   if (micState === "paused") {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-amber-800" role="status">
+      <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-amber-800" role="status">
         <span className="h-2 w-2 rounded-full bg-amber-500" />
         Paused
       </span>
@@ -34,14 +34,14 @@ function MicIndicator({ micState, liveStatus, fallback }) {
 
   if (fallback) {
     return (
-      <span className="text-xs font-medium text-amber-800" role="status">
+      <span className="text-sm font-semibold text-amber-800" role="status">
         Live transcript unavailable
       </span>
     );
   }
 
   return (
-    <span className="text-xs font-medium text-gray-700" role="status">
+    <span className="scribe-text-muted text-sm font-semibold" role="status">
       Microphone stopped
     </span>
   );
@@ -58,7 +58,7 @@ export function LiveTranscriptPanel({
 }) {
   return (
     <section
-      className="flex shrink-0 flex-col bg-card"
+      className="flex shrink-0 flex-col bg-[color:var(--scribe-card-bg)]"
       data-testid="live-transcript-panel"
       aria-label="Recorder status"
     >

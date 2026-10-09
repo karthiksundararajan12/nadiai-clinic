@@ -152,14 +152,14 @@ export function useTranscriptReview(sessionId, { enabled = true } = {}) {
     return result;
   }, [saveSegments, sessionId, load]);
 
-  const generateSOAP = useCallback(async () => {
+  const generateSOAP = useCallback(async (payload = {}) => {
     if (dirtyKeys.length > 0) {
       await saveSegments();
     }
     setGeneratingSOAP(true);
     setError(null);
     try {
-      const result = await generateSOAPNote(sessionId);
+      const result = await generateSOAPNote(sessionId, payload);
       await load();
       return result;
     } catch (err) {

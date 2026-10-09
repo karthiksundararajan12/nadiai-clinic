@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Languages, Loader2, Lock, Plus, Search, User } from "lucide-react";
+import {
+  CircleNotch,
+  Globe,
+  Lock,
+  MagnifyingGlass,
+  Plus,
+  User,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Toast } from "@/components/ui/toast";
@@ -74,7 +81,7 @@ function patientIdTag(patient) {
 function StatusBadge({ lockSelection, hasPatient }) {
   if (lockSelection) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950/50 dark:text-emerald-200">
+      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-800">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
         Consultation Locked
       </span>
@@ -82,13 +89,13 @@ function StatusBadge({ lockSelection, hasPatient }) {
   }
   if (hasPatient) {
     return (
-      <span className="shrink-0 rounded-full bg-primary/10 px-2.5 py-1 text-xs font-medium text-primary">
+      <span className="shrink-0 rounded-full bg-[color:var(--scribe-indigo-50)] px-2.5 py-1 text-sm font-bold text-[color:var(--scribe-indigo-600)]">
         Selected
       </span>
     );
   }
   return (
-    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-900">
       Required
     </span>
   );
@@ -179,15 +186,15 @@ export function PatientSelector({
         : "No active appointments to consult";
 
   const languageBlock = languageToggle ? (
-    <div className="mt-4 space-y-2 border-t border-border pt-4">
+    <div className="mt-4 space-y-2 border-t border-[color:var(--scribe-card-border)] pt-4">
       <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-1.5 text-xs font-medium text-foreground">
-          <Languages className="h-3.5 w-3.5 text-primary" aria-hidden />
+        <p className="flex items-center gap-2 text-sm font-bold text-[color:var(--scribe-heading)]">
+          <Globe size={20} weight="duotone" className="scribe-icon" aria-hidden />
           Consultation Language
         </p>
         {lockSelection ? (
-          <span className="inline-flex items-center gap-1 text-xs text-gray-700 dark:text-gray-300">
-            <Lock className="h-3 w-3" aria-hidden />
+          <span className="scribe-text-muted inline-flex items-center gap-1 text-sm font-medium">
+            <Lock size={16} weight="bold" className="scribe-icon" aria-hidden />
             Locked during capture
           </span>
         ) : null}
@@ -197,10 +204,12 @@ export function PatientSelector({
   ) : null;
 
   return (
-    <div className={cn("w-full bg-card px-4 py-4", className)} data-testid={patient ? "scribe-patient-header" : undefined}>
+    <div className={cn("w-full bg-[color:var(--scribe-card-bg)] px-4 py-4", className)} data-testid={patient ? "scribe-patient-header" : undefined}>
       <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2 text-sm font-semibold text-heading">
-          <User className="h-4 w-4 text-primary" aria-hidden />
+        <p className="flex items-center gap-2.5 text-sm font-bold text-[color:var(--scribe-heading)]">
+          <span className="scribe-icon-tile h-9 w-9">
+            <User size={22} weight="duotone" className="scribe-icon" aria-hidden />
+          </span>
           Patient
         </p>
         <StatusBadge lockSelection={lockSelection} hasPatient={Boolean(patient)} />
@@ -210,33 +219,35 @@ export function PatientSelector({
         {patient ? (
           <div className={cn(
             "flex items-center gap-3 rounded-lg border px-3 py-3",
-            lockSelection ? "border-border bg-muted/60" : "border-primary/15 bg-primary/10",
+            lockSelection
+              ? "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)]"
+              : "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)]",
           )}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-sm font-bold text-white">
               {initials(patient.name)}
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex min-w-0 items-center gap-2">
-                <p className="truncate text-sm font-semibold text-heading">{patient.name}</p>
+                <p className="truncate text-sm font-bold text-[color:var(--scribe-heading)]">{patient.name}</p>
                 {patientIdTag(patient) ? (
-                  <span className="shrink-0 rounded-full border border-primary/20 bg-card px-1.5 py-0.5 font-mono text-xs font-medium text-primary">
+                  <span className="shrink-0 rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-1.5 py-0.5 font-mono text-sm font-semibold text-[color:var(--scribe-indigo-600)]">
                     {patientIdTag(patient)}
                   </span>
                 ) : null}
               </div>
               {selectedMeta(patient) ? (
-                <p className="truncate text-xs text-gray-700 dark:text-gray-300">{selectedMeta(patient)}</p>
+                <p className="scribe-text-muted truncate text-sm font-medium">{selectedMeta(patient)}</p>
               ) : null}
             </div>
             {lockSelection ? (
-              <span className="inline-flex shrink-0 items-center gap-1 rounded-md bg-card px-2 py-1 text-xs font-medium text-gray-700 dark:text-gray-300">
-                <Lock className="h-3 w-3" aria-hidden />
+              <span className="scribe-text-muted inline-flex shrink-0 items-center gap-1 rounded-md bg-[color:var(--scribe-card-bg)] px-2 py-1 text-sm font-semibold">
+                <Lock size={16} weight="bold" className="scribe-icon" aria-hidden />
                 Locked
               </span>
             ) : (
               <button
                 type="button"
-                className="shrink-0 cursor-pointer text-xs font-semibold text-primary hover:underline"
+                className="shrink-0 cursor-pointer text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline"
                 onClick={onClear}
               >
                 Change
@@ -247,7 +258,12 @@ export function PatientSelector({
           <div className="flex min-h-0 flex-1 flex-col">
             <div className="flex items-center gap-2">
               <div className="relative min-w-0 flex-1">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" aria-hidden />
+                <MagnifyingGlass
+                  size={18}
+                  weight="bold"
+                  className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 scribe-icon"
+                  aria-hidden
+                />
                 <select
                   value={selectValue}
                   onChange={handleSelectChange}
@@ -256,7 +272,7 @@ export function PatientSelector({
                   aria-label="Select patient to start consultation"
                   aria-busy={loading || undefined}
                   className={cn(
-                    "h-10 w-full appearance-none rounded-lg border border-border bg-muted/40 pl-9 pr-8 text-xs text-foreground transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30",
+                    "h-10 w-full appearance-none rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-9 pr-8 text-sm font-medium text-[color:var(--scribe-heading)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
                     selectDisabled
                       ? loading
                         ? "cursor-wait opacity-70"
@@ -272,8 +288,10 @@ export function PatientSelector({
                   ))}
                 </select>
                 {loading && (
-                  <Loader2
-                    className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-gray-500"
+                  <CircleNotch
+                    size={18}
+                    weight="bold"
+                    className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 animate-spin scribe-icon"
                     aria-hidden
                   />
                 )}
@@ -282,18 +300,18 @@ export function PatientSelector({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="shrink-0 cursor-pointer gap-1 border-transparent bg-primary/10 text-xs text-primary hover:bg-primary/15"
+                className="shrink-0 cursor-pointer gap-1.5 border-transparent bg-[color:var(--scribe-indigo-50)] text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)]"
                 data-testid="scribe-create-patient"
                 onClick={() => setShowCreate(true)}
               >
-                <Plus className="h-3.5 w-3.5" />
+                <Plus size={18} weight="bold" />
                 <span className="sr-only">Create new patient</span>
                 <span aria-hidden="true">New patient</span>
               </Button>
             </div>
 
             {loadError && (
-              <p className="mt-2 text-xs text-destructive" data-testid="scribe-patient-select-error">
+              <p className="mt-2 text-sm font-medium text-destructive" data-testid="scribe-patient-select-error">
                 Couldn&apos;t load appointments. {loadError.message}{" "}
                 <button type="button" className="underline" onClick={() => void loadEligible()}>
                   Retry
@@ -301,7 +319,7 @@ export function PatientSelector({
               </p>
             )}
 
-            <p className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-gray-700 dark:text-gray-300">
+            <p className="mb-2 mt-4 text-sm font-bold uppercase tracking-wide text-[color:var(--scribe-heading)]">
               Today&apos;s appointments ({options.length})
             </p>
             {hasEligible ? (
@@ -310,20 +328,20 @@ export function PatientSelector({
                   <li key={opt.appointment_id}>
                     <button
                       type="button"
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-border px-2 py-2 text-left hover:bg-muted"
+                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-[color:var(--scribe-card-border)] px-2 py-2 text-left hover:bg-[color:var(--scribe-indigo-50)]"
                       onClick={() => onSelect?.(opt)}
                     >
-                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-100)] text-sm font-bold text-[color:var(--scribe-indigo-600)]">
                         {initials(opt.name)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-xs font-semibold text-heading">{opt.name}</span>
+                        <span className="block truncate text-sm font-bold text-[color:var(--scribe-heading)]">{opt.name}</span>
                         {appointmentMeta(opt) ? (
-                          <span className="block truncate text-xs text-gray-700 dark:text-gray-300">{appointmentMeta(opt)}</span>
+                          <span className="scribe-text-muted block truncate text-sm font-medium">{appointmentMeta(opt)}</span>
                         ) : null}
                       </span>
                       {slotTimeLabel(opt) ? (
-                        <span className="shrink-0 text-xs font-medium text-gray-700 dark:text-gray-300">
+                        <span className="scribe-text-muted shrink-0 text-sm font-semibold">
                           {slotTimeLabel(opt)}
                         </span>
                       ) : null}
@@ -332,7 +350,7 @@ export function PatientSelector({
                 ))}
               </ul>
             ) : !loading && !loadError ? (
-              <p className="text-xs text-gray-700 dark:text-gray-300">No active appointments to consult</p>
+              <p className="scribe-text-muted text-sm font-medium">No active appointments to consult</p>
             ) : null}
           </div>
         )}

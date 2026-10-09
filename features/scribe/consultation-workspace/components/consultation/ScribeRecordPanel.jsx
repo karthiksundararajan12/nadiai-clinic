@@ -1,7 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, Mic, Pause, Play, Plus } from "lucide-react";
+import {
+  CircleNotch,
+  Microphone,
+  Pause,
+  Play,
+  Plus,
+  Stop,
+  WarningCircle,
+} from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
 import { ScribeConversationChat } from "./ScribeConversationChat.jsx";
@@ -39,6 +47,8 @@ export function ScribeRecordPanel({
   statusStrip = null,
   sessionContext = RECORD_PANEL_CONTEXT.IDLE,
   children = null,
+  clinicalById,
+  onSoapTurnSelectionChange,
 }) {
   const [manualText, setManualText] = useState("");
 
@@ -80,16 +90,16 @@ export function ScribeRecordPanel({
 
   return (
     <aside className="relative flex h-full min-h-0 w-full flex-1 flex-col">
-      <div className="shrink-0 overflow-hidden rounded-xl border border-border bg-card shadow-clinical">
+      <div className="scribe-card shrink-0 overflow-hidden rounded-xl">
         {children}
-        <div className="flex flex-col items-center border-t border-border px-4 pb-5 pt-4">
+        <div className="flex flex-col items-center border-t border-[color:var(--scribe-card-border)] px-4 pb-5 pt-4">
         {manualMode ? (
           <div className="flex w-full flex-col gap-3">
             <button
               type="button"
               onClick={exitManualMode}
               disabled={manualSubmitting}
-              className="cursor-pointer self-start text-xs text-primary underline hover:text-primary/80 disabled:cursor-not-allowed disabled:opacity-60"
+              className="cursor-pointer self-start text-sm font-semibold text-[color:var(--scribe-indigo-600)] underline hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               ← Use microphone instead
             </button>
@@ -99,8 +109,8 @@ export function ScribeRecordPanel({
               disabled={manualSubmitting}
               placeholder="Paste or type the doctor-patient conversation here..."
               className={cn(
-                "min-h-[160px] w-full resize-y rounded-lg border border-border bg-card p-3 text-xs text-foreground",
-                "placeholder:text-gray-500 focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary",
+                "min-h-[160px] w-full resize-y rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] p-3 text-sm font-medium text-foreground",
+                "placeholder:scribe-text-muted focus:border-[color:var(--scribe-indigo-600)] focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             />
@@ -109,15 +119,15 @@ export function ScribeRecordPanel({
               disabled={!manualText.trim() || manualSubmitting}
               onClick={handleManualGenerate}
               className={cn(
-                "flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
-                "bg-primary text-xs font-semibold text-primary-foreground shadow-md shadow-primary/20",
-                "transition-all duration-200 hover:bg-primary/90",
+                "scribe-mic-button flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
+                "text-sm font-bold text-white",
+                "transition-all duration-200 hover:opacity-95",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
               {manualSubmitting ? (
                 <>
-                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <CircleNotch size={22} weight="bold" className="animate-spin" />
                   Generating…
                 </>
               ) : (
@@ -129,7 +139,7 @@ export function ScribeRecordPanel({
           <>
             <div className="flex h-7 items-center justify-center">
               {showRecordingControls && isLive && (
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-xs font-semibold tracking-wide text-red-600 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-sm font-bold tracking-wide text-red-600">
                   <span className="h-1.5 w-1.5 rounded-full bg-red-600" aria-hidden />
                   REC {durationLabel || "00:00"}
                 </span>
@@ -139,7 +149,7 @@ export function ScribeRecordPanel({
             <div className="relative flex h-24 w-24 items-center justify-center">
               {micReady && (
                 <span
-                  className="pointer-events-none absolute -inset-1.5 animate-pulse rounded-full ring-4 ring-primary/30"
+                  className="scribe-mic-ring pointer-events-none absolute -inset-1.5 animate-pulse rounded-full ring-4"
                   aria-hidden
                 />
               )}
@@ -150,16 +160,15 @@ export function ScribeRecordPanel({
                   disabled={disabled || isProcessing || isRequesting || !canStartRecording}
                   onClick={onStart}
                   className={cn(
-                    "relative z-10 flex h-24 w-24 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-md shadow-primary/25",
-                    "transition-all duration-200 hover:bg-primary/90",
-                    "disabled:cursor-not-allowed",
-                    !canStartRecording && "opacity-40",
+                    "scribe-mic-button relative z-10 flex h-24 w-24 cursor-pointer items-center justify-center rounded-full",
+                    "transition-all duration-200 hover:opacity-95",
+                    "disabled:cursor-not-allowed disabled:opacity-55",
                   )}
                 >
                   {isRequesting ? (
-                    <Loader2 className="h-8 w-8 animate-spin" />
+                    <CircleNotch size={32} weight="bold" className="animate-spin" />
                   ) : (
-                    <Mic className="h-8 w-8" />
+                    <Microphone size={32} weight="duotone" />
                   )}
                 </button>
               )}
@@ -170,60 +179,63 @@ export function ScribeRecordPanel({
                   onClick={onStop}
                   className="relative z-10 flex h-24 w-24 cursor-pointer items-center justify-center rounded-full bg-red-600 text-white shadow-md shadow-red-600/25 transition-all duration-200 hover:bg-red-700"
                 >
-                  <span className="h-5 w-5 rounded-[4px] bg-white" />
+                  <Stop size={28} weight="bold" />
                 </button>
               )}
               {isProcessing && (
-                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-muted text-gray-600 dark:text-gray-300">
-                  <Loader2 className="h-8 w-8 animate-spin" />
+                <div className="flex h-24 w-24 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-50)] text-[color:var(--scribe-indigo-600)]">
+                  <CircleNotch size={32} weight="bold" className="animate-spin" />
                 </div>
               )}
               {disabled && !isLive && !isProcessing && (
-                <div className="h-24 w-24 rounded-full bg-muted" aria-hidden />
+                <div
+                  className="h-24 w-24 rounded-full bg-[color:var(--scribe-indigo-50)] opacity-60"
+                  aria-hidden
+                />
               )}
             </div>
 
             <div className="mt-3 flex w-full max-w-[280px] flex-col items-center gap-1 text-center">
               {isLive && (
                 <>
-                  <p className="text-sm font-semibold text-heading">Stop recording</p>
-                  <p className="text-xs text-gray-700 dark:text-gray-300">
+                  <p className="text-sm font-bold text-[color:var(--scribe-heading)]">Stop recording</p>
+                  <p className="scribe-text-muted text-sm font-medium">
                     Capturing ambient doctor-patient dialogue
                   </p>
-                  <p className="text-xs text-gray-700 dark:text-gray-300">Minimum 10 seconds</p>
+                  <p className="scribe-text-muted text-sm font-medium">Minimum 10 seconds</p>
                 </>
               )}
               {(isIdle || isRequesting) && !disabled && (
                 <>
-                  <p className="text-sm font-semibold text-heading">Start recording</p>
+                  <p className="text-sm font-bold text-[color:var(--scribe-heading)]">Start recording</p>
                   {micReady ? (
-                    <p className="text-xs font-medium text-primary">
+                    <p className="text-sm font-semibold text-[color:var(--scribe-indigo-600)]">
                       Ready • Click the mic to record
                     </p>
                   ) : !canStartRecording ? (
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-                      <AlertCircle className="h-3 w-3" aria-hidden />
+                    <span className="mt-1 inline-flex items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-0.5 text-sm font-semibold text-amber-900">
+                      <WarningCircle size={16} weight="bold" aria-hidden />
                       {patientRequiredHint || "Select a patient to begin"}
                     </span>
                   ) : null}
                   {isRequesting && (
-                    <p className="text-xs text-gray-700 dark:text-gray-300">{statusTitle}</p>
+                    <p className="scribe-text-muted text-sm font-medium">{statusTitle}</p>
                   )}
-                  <p className="text-xs text-gray-700 dark:text-gray-300">Minimum 10 seconds</p>
+                  <p className="scribe-text-muted text-sm font-medium">Minimum 10 seconds</p>
                 </>
               )}
               {isProcessing && (
-                <p className="text-xs text-gray-700 dark:text-gray-300">
+                <p className="scribe-text-muted text-sm font-medium">
                   {statusMessage || "Processing…"}
                 </p>
               )}
               {disabled && !isLive && !isProcessing && (statusTitle || sessionHint) && (
                 <div
                   className={cn(
-                    "w-full rounded-xl border border-dashed px-4 py-3 text-center text-xs",
+                    "w-full rounded-xl border border-dashed px-4 py-3 text-center text-sm font-medium",
                     sessionContext === RECORD_PANEL_CONTEXT.APPROVED_REVIEW
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200"
-                      : "border-border bg-card text-gray-700 dark:text-gray-300",
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] scribe-text-muted",
                   )}
                   data-testid="record-panel-session-hint"
                 >
@@ -232,7 +244,7 @@ export function ScribeRecordPanel({
                 </div>
               )}
               {statusMessage && !transcriptLoading && !isProcessing && isLive && (
-                <p className="text-xs text-gray-700 dark:text-gray-300">{statusMessage}</p>
+                <p className="scribe-text-muted text-sm font-medium">{statusMessage}</p>
               )}
             </div>
 
@@ -242,12 +254,12 @@ export function ScribeRecordPanel({
                   type="button"
                   aria-label={isPaused ? "Resume recording" : "Pause recording"}
                   onClick={isPaused ? onResume : onPause}
-                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                  className="inline-flex cursor-pointer items-center gap-2 rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--scribe-heading)] transition-colors hover:bg-[color:var(--scribe-indigo-50)]"
                 >
                   {isPaused ? (
-                    <Play className="h-3.5 w-3.5 fill-current" />
+                    <Play size={18} weight="bold" className="scribe-icon" />
                   ) : (
-                    <Pause className="h-3.5 w-3.5" />
+                    <Pause size={18} weight="bold" className="scribe-icon" />
                   )}
                   {isPaused ? "Resume recording" : "Pause recording"}
                 </button>
@@ -262,7 +274,7 @@ export function ScribeRecordPanel({
               <button
                 type="button"
                 onClick={enterManualMode}
-                className="mt-3 cursor-pointer text-xs font-medium text-primary hover:underline"
+                className="mt-3 cursor-pointer text-sm font-semibold text-[color:var(--scribe-indigo-600)] hover:underline"
               >
                 Enter transcript manually
               </button>
@@ -273,7 +285,7 @@ export function ScribeRecordPanel({
 
         {isLive && (
           <div
-            className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-center text-xs font-medium text-amber-900 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200"
+            className="border-t border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-semibold text-amber-900"
             data-testid="recording-leave-warning"
             role="status"
           >
@@ -282,14 +294,14 @@ export function ScribeRecordPanel({
         )}
 
         {(canStartNewSession || footer) && (
-          <div className="space-y-3 border-t border-border px-4 py-4">
+          <div className="space-y-3 border-t border-[color:var(--scribe-card-border)] px-4 py-4">
             {canStartNewSession && (
               <Button
                 type="button"
-                className="w-full cursor-pointer gap-2"
+                className="scribe-mic-button w-full cursor-pointer gap-2 border-0 text-sm font-bold shadow-none hover:opacity-95"
                 onClick={onNewSession}
               >
-                <Plus className="h-4 w-4" />
+                <Plus size={20} weight="bold" />
                 New Session
               </Button>
             )}
@@ -298,7 +310,7 @@ export function ScribeRecordPanel({
         )}
       </div>
 
-      <div className="mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-clinical" data-testid="record-panel-conversation">
+      <div className="scribe-card mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl" data-testid="record-panel-conversation">
         {statusStrip}
         <ScribeConversationChat
           segments={transcriptPending ? [] : transcriptSegments}
@@ -308,6 +320,8 @@ export function ScribeRecordPanel({
           isLiveRecording={transcriptPending}
           animateWaveform={isRecording}
           hasPatient={canStartRecording}
+          clinicalById={clinicalById}
+          onSelectionChange={onSoapTurnSelectionChange}
         />
       </div>
     </aside>

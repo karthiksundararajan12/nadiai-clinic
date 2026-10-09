@@ -1,7 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { History } from "lucide-react";
+import { ClockCounterClockwise } from "@phosphor-icons/react";
+import { scribePageFont } from "@/components/scribe/scribe-font";
+import { cn } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
@@ -107,6 +109,17 @@ export function ScribeWorkflow() {
 
   const mountedRef = useRef(true);
   const appointmentPrefillAttemptedRef = useRef(false);
+  const soapTurnSelectionRef = useRef({
+    deleted_segment_ids: [],
+    segment_inclusion: {},
+  });
+  const getSoapTurnSelection = useCallback(() => soapTurnSelectionRef.current, []);
+  const handleSoapTurnSelectionChange = useCallback((next) => {
+    soapTurnSelectionRef.current = {
+      deleted_segment_ids: next?.deleted_segment_ids ?? [],
+      segment_inclusion: next?.segment_inclusion ?? {},
+    };
+  }, []);
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -407,6 +420,10 @@ export function ScribeWorkflow() {
     setManualSubmitting(false);
     setSessionsOpen(false);
     setAppointmentPrefillError(null);
+    soapTurnSelectionRef.current = {
+      deleted_segment_ids: [],
+      segment_inclusion: {},
+    };
     setWorkspaceState({
       segments: [],
       transcriptLoading: false,
@@ -418,6 +435,7 @@ export function ScribeWorkflow() {
       canApproveSOAP: false,
       canEditNote: false,
       approving: false,
+      clinicalById: {},
     });
     recording.resetRecording?.();
     live.reset();
@@ -583,6 +601,7 @@ export function ScribeWorkflow() {
         }
       }}
       onWorkspaceStateChange={setWorkspaceState}
+      getSoapTurnSelection={getSoapTurnSelection}
     />
   ) : (
     <ScribeSoapPlaceholder
@@ -603,7 +622,10 @@ export function ScribeWorkflow() {
 
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col bg-secondary"
+      className={cn(
+        "relative flex h-full min-h-0 flex-col",
+        scribePageFont.variable,
+      )}
       data-testid="scribe-workflow"
     >
       <Header
@@ -615,21 +637,21 @@ export function ScribeWorkflow() {
             type="button"
             variant="outline"
             size="sm"
-            className="cursor-pointer gap-1.5 text-xs"
+            className="scribe-card cursor-pointer gap-2 border-[color:var(--scribe-card-border)] text-sm font-semibold shadow-none"
             onClick={() => setSessionsOpen(true)}
           >
-            <History className="h-4 w-4" />
+            <ClockCounterClockwise size={20} weight="bold" className="scribe-icon" />
             Past sessions
           </Button>
         }
       />
       {appointmentPrefillLoading && (
-        <p className="border-b border-border bg-amber-50 px-6 py-2 text-xs text-amber-800">
+        <p className="border-b border-[color:var(--scribe-card-border)] bg-amber-50 px-6 py-2 text-sm font-medium text-amber-900">
           Loading appointment details…
         </p>
       )}
       {appointmentPrefillError && (
-        <p className="border-b border-border bg-destructive/5 px-6 py-2 text-xs text-destructive">
+        <p className="border-b border-[color:var(--scribe-card-border)] bg-destructive/5 px-6 py-2 text-sm font-medium text-destructive">
           {appointmentPrefillError.message}
         </p>
       )}
@@ -679,6 +701,8 @@ export function ScribeWorkflow() {
               patientRequiredHint="Select a patient to begin"
               sessionContext={recordPanelSessionContext}
               statusStrip={recorderStatus}
+              clinicalById={workspaceState.clinicalById}
+              onSoapTurnSelectionChange={handleSoapTurnSelectionChange}
             >
               <PatientSelector
                 patient={selectedPatient}
@@ -696,7 +720,7 @@ export function ScribeWorkflow() {
             </ScribeRecordPanel>
           </div>
 
-          <main className="flex h-full min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-clinical lg:min-h-0">
+          <main className="scribe-card flex h-full min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-xl lg:min-h-0">
             <div className="min-h-0 flex-1">{rightPanel}</div>
           </main>
         </div>

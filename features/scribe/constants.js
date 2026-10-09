@@ -346,10 +346,18 @@ export const SOAP_GENERATION_CONFIG = Object.freeze({
   DEFAULT_CLAUDE_MODEL: "claude-3-5-sonnet-latest",
   DEFAULT_OPENAI_MODEL: "gpt-4.1-mini",
   DEFAULT_GEMINI_MODEL: "gemini-2.5-flash",
-  PROMPT_VERSION: "soap_indian_gp_v2",
+  PROMPT_VERSION: "soap_indian_gp_v3",
   MAX_ATTEMPTS: 3,
   TEMPERATURE: 0.1,
   MAX_OUTPUT_TOKENS: 1800,
+});
+
+/** Fast Gemini classifier that flags clinically relevant transcript turns. */
+export const TRANSCRIPT_RELEVANCE_CONFIG = Object.freeze({
+  DEFAULT_GEMINI_MODEL: "gemini-2.5-flash-lite",
+  MAX_ATTEMPTS: 1,
+  TEMPERATURE: 0,
+  MAX_OUTPUT_TOKENS: 2048,
 });
 
 /** @enum {string} */

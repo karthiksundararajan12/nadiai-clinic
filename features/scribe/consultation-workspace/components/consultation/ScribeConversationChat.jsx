@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { Loader2 } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleNotch, Waveform } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../../transcript-review/components/Timestamp.jsx";
 
@@ -21,7 +21,7 @@ function WaveformBars({ animated = false, live = false }) {
     <div
       className={cn(
         "flex items-center justify-center gap-1 rounded-lg px-4",
-        live ? "h-16 bg-[#EEF0FF] dark:bg-primary/15" : "h-12 bg-muted",
+        live ? "h-16 bg-[color:var(--scribe-indigo-50)]" : "h-12 bg-[color:var(--scribe-indigo-50)]",
       )}
       aria-hidden
     >
@@ -30,7 +30,7 @@ function WaveformBars({ animated = false, live = false }) {
           key={index}
           className={cn(
             "w-1 rounded-full",
-            live ? "origin-center bg-primary" : "bg-gray-400 dark:bg-gray-500",
+            live ? "origin-center bg-[color:var(--scribe-indigo-600)]" : "bg-[color:var(--scribe-indigo-600)]/35",
             animated && "origin-center animate-[scribe-wave_1.15s_ease-in-out_infinite]",
           )}
           style={{
@@ -53,14 +53,17 @@ function ConversationHeading({ isLiveRecording, hasPatient }) {
 
   return (
     <div className="flex items-center justify-between gap-3">
-      <p className="flex items-center gap-2 text-sm font-semibold text-heading">
+      <p className="flex items-center gap-2.5 text-sm font-bold text-[color:var(--scribe-heading)]">
+        <span className="scribe-icon-tile h-9 w-9 shrink-0">
+          <Waveform size={22} weight="duotone" className="scribe-icon" aria-hidden />
+        </span>
         {isLiveRecording && (
           <span className="h-2 w-2 shrink-0 rounded-full bg-red-600" aria-hidden />
         )}
         {title}
       </p>
       {!isLiveRecording && (
-        <p className="text-xs text-gray-700 dark:text-gray-300">{standby}</p>
+        <p className="scribe-text-muted text-sm font-medium">{standby}</p>
       )}
     </div>
   );
@@ -74,8 +77,36 @@ export function ScribeConversationChat({
   isLiveRecording = false,
   animateWaveform = false,
   hasPatient = false,
+  clinicalById = {},
+  onSelectionChange,
 }) {
   const bottomRef = useRef(null);
+  const segmentKey = segments.map((segment) => segment.id).join("|");
+  const [selection, setSelection] = useState({
+    key: segmentKey,
+    inclusionOverrides: {},
+    deletedIds: [],
+  });
+  const inclusionOverrides = useMemo(
+    () => (selection.key === segmentKey ? selection.inclusionOverrides : {}),
+    [selection.key, selection.inclusionOverrides, segmentKey],
+  );
+  const deletedIds = useMemo(
+    () => (selection.key === segmentKey ? selection.deletedIds : []),
+    [selection.key, selection.deletedIds, segmentKey],
+  );
+
+  const visibleSegments = useMemo(
+    () => segments.filter((segment) => !deletedIds.includes(segment.id)),
+    [segments, deletedIds],
+  );
+
+  useEffect(() => {
+    onSelectionChange?.({
+      deleted_segment_ids: deletedIds,
+      segment_inclusion: inclusionOverrides,
+    });
+  }, [deletedIds, inclusionOverrides, onSelectionChange]);
 
   useEffect(() => {
     if (segments.length) {
@@ -83,14 +114,21 @@ export function ScribeConversationChat({
     }
   }, [segments]);
 
+  function isIncluded(segment) {
+    if (Object.prototype.hasOwnProperty.call(inclusionOverrides, segment.id)) {
+      return inclusionOverrides[segment.id] === true;
+    }
+    return clinicalById[segment.id] !== false;
+  }
+
   if (loading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3 bg-card px-4 py-4 text-left">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 bg-[color:var(--scribe-card-bg)] px-4 py-4 text-left">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
         <WaveformBars />
         <div className="flex items-center justify-center gap-2 py-4 text-center">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" />
-          <p className="text-xs text-gray-700 dark:text-gray-300">{loadingMessage ?? "Processing conversation…"}</p>
+          <CircleNotch size={20} weight="bold" className="animate-spin scribe-icon" />
+          <p className="scribe-text-muted text-sm font-medium">{loadingMessage ?? "Processing conversation…"}</p>
         </div>
       </div>
     );
@@ -99,13 +137,13 @@ export function ScribeConversationChat({
   if (!segments.length) {
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col gap-3 bg-card px-4 py-4"
+        className="flex min-h-0 flex-1 flex-col gap-3 bg-[color:var(--scribe-card-bg)] px-4 py-4"
         data-testid="conversation-placeholder"
       >
         <ConversationHeading isLiveRecording={isLiveRecording} hasPatient={hasPatient} />
         <WaveformBars animated={animateWaveform} live={isLiveRecording} />
         {isLiveRecording ? (
-          <p className="text-xs text-gray-700 dark:text-gray-300">
+          <p className="scribe-text-muted text-sm font-medium">
             Transcript will appear here once you stop recording.
           </p>
         ) : null}
@@ -114,47 +152,91 @@ export function ScribeConversationChat({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-card" data-testid="transcript-review-workspace">
-      <div className="shrink-0 border-b border-border px-4 py-3">
+    <div className="flex min-h-0 flex-1 flex-col bg-[color:var(--scribe-card-bg)]" data-testid="transcript-review-workspace">
+      <div className="shrink-0 border-b border-[color:var(--scribe-card-border)] px-4 py-3">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <div className="space-y-3">
-          {segments.map((segment) => {
+          {visibleSegments.map((segment) => {
             const doctor = isDoctor(segment);
             const label = speakerLabel(segment);
             const isHighlighted = highlightedSegmentId === segment.id;
             const isInterim = Boolean(segment.is_interim);
+            const included = isIncluded(segment);
             return (
               <div
                 key={segment.id}
                 id={`chat-segment-${segment.id}`}
                 className={cn(
-                  "rounded-lg border border-border bg-card px-3 py-2 shadow-clinical transition-all duration-300",
-                  isHighlighted && "animate-evidence-pulse ring-2 ring-primary/30 ring-offset-2",
+                  "scribe-card rounded-lg px-3 py-2 transition-all duration-300",
+                  isHighlighted && "animate-evidence-pulse ring-2 ring-[color:var(--scribe-indigo-100)] ring-offset-2",
+                  !included && "opacity-50",
                 )}
               >
                 <div className="mb-1 flex items-baseline justify-between gap-2">
                   <p
                     className={cn(
-                      "text-xs font-semibold uppercase tracking-wide",
-                      doctor ? "text-primary" : "text-gray-600 dark:text-gray-300",
+                      "text-sm font-bold uppercase tracking-wide",
+                      doctor ? "text-[color:var(--scribe-indigo-600)]" : "scribe-text-muted",
                     )}
                   >
                     {label}
                   </p>
-                  <span className="font-mono text-xs tabular-nums text-gray-600 dark:text-gray-300">
+                  <span className="scribe-text-muted font-mono text-sm tabular-nums font-medium">
                     {isInterim ? "draft" : formatTimestamp(segment.start_seconds ?? segment.start)}
                   </span>
                 </div>
                 <div
-                  className={cn("text-xs leading-relaxed text-foreground", isInterim && "italic text-gray-600 dark:text-gray-300")}
+                  className={cn(
+                    "text-sm font-medium leading-relaxed",
+                    included ? "text-[color:var(--scribe-heading)]" : "scribe-text-muted",
+                    isInterim && "italic scribe-text-muted",
+                  )}
                   data-testid={isInterim ? "live-interim-transcript" : undefined}
                 >
-                  <p className={cn("whitespace-pre-wrap", isInterim && "italic text-gray-600 dark:text-gray-300")}>
+                  <p className={cn("whitespace-pre-wrap", isInterim && "italic scribe-text-muted")}>
                     {segment.text}
                   </p>
                 </div>
+                {!isInterim && (
+                  <div className="mt-2 flex items-center justify-end gap-3">
+                    <button
+                      type="button"
+                      aria-pressed={included}
+                      data-testid={`include-in-note-${segment.id}`}
+                      className={cn(
+                        "cursor-pointer text-sm font-semibold",
+                        included ? "text-[color:var(--scribe-indigo-600)]" : "scribe-text-muted",
+                      )}
+                      onClick={() => {
+                        setSelection({
+                          key: segmentKey,
+                          inclusionOverrides: { ...inclusionOverrides, [segment.id]: !included },
+                          deletedIds,
+                        });
+                      }}
+                    >
+                      Include in note
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`delete-turn-${segment.id}`}
+                      className="scribe-text-muted cursor-pointer text-sm font-semibold hover:text-[color:var(--scribe-heading)]"
+                      onClick={() => {
+                        setSelection({
+                          key: segmentKey,
+                          inclusionOverrides,
+                          deletedIds: deletedIds.includes(segment.id)
+                            ? deletedIds
+                            : [...deletedIds, segment.id],
+                        });
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
             );
           })}

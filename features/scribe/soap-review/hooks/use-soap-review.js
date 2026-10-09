@@ -233,14 +233,14 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     return comparison;
   }, [sessionId]);
 
-  const regenerate = useCallback(async () => {
+  const regenerate = useCallback(async (payload = {}) => {
     if (dirtyKeys.length > 0) {
       await saveSections(dirtyKeys, "manual");
     }
     setRegenerating(true);
     setError(null);
     try {
-      const result = await regenerateSOAPNote(sessionId);
+      const result = await regenerateSOAPNote(sessionId, payload);
       await load({ silent: true });
       return result;
     } catch (err) {

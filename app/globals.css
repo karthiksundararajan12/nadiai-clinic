@@ -285,6 +285,127 @@
   50%       { box-shadow: 0 0 0 6px rgb(54 52 126 / 0.15); }
 }
 
+/* Scribe workflow (/scribe) — scoped premium tokens */
+[data-testid="scribe-workflow"] {
+  --scribe-page-bg: #fafaff;
+  --scribe-card-bg: #ffffff;
+  --scribe-card-border: #e6e8f5;
+  --scribe-card-shadow: 0 1px 2px rgb(79 70 229 / 0.06), 0 8px 24px rgb(79 70 229 / 0.06);
+  --scribe-indigo: #4f46e5;
+  --scribe-violet: #7c3aed;
+  --scribe-indigo-50: #eef2ff;
+  --scribe-indigo-100: #e0e7ff;
+  --scribe-indigo-600: #4f46e5;
+  --scribe-muted: #4b4f72;
+  --scribe-heading: #1a2332;
+  --scribe-mic-gradient: linear-gradient(135deg, var(--scribe-indigo), var(--scribe-violet));
+
+  background-color: var(--scribe-page-bg);
+  font-family: var(--font-scribe-sans), ui-sans-serif, system-ui, sans-serif;
+  font-weight: 500;
+  font-size: 0.875rem;
+  color: var(--scribe-heading);
+}
+
+[data-testid="scribe-workflow"] header {
+  background-color: var(--scribe-card-bg);
+  border-color: var(--scribe-card-border);
+}
+
+[data-testid="scribe-workflow"] header h1.type-title {
+  font-family: var(--font-scribe-sans), ui-sans-serif, system-ui, sans-serif;
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--scribe-heading);
+}
+
+[data-testid="scribe-workflow"] header .text-muted-foreground,
+[data-testid="scribe-workflow"] .scribe-text-muted {
+  color: var(--scribe-muted) !important;
+  font-weight: 500;
+  font-size: 0.875rem;
+}
+
+[data-testid="scribe-workflow"] .scribe-card {
+  background-color: var(--scribe-card-bg);
+  border: 1px solid var(--scribe-card-border);
+  box-shadow: var(--scribe-card-shadow);
+}
+
+[data-testid="scribe-workflow"] .scribe-icon {
+  color: var(--scribe-indigo-600);
+  flex-shrink: 0;
+}
+
+[data-testid="scribe-workflow"] .scribe-icon-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.625rem;
+  background-color: var(--scribe-indigo-100);
+  color: var(--scribe-indigo-600);
+}
+
+[data-testid="scribe-workflow"] .scribe-letter-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.375rem;
+  background-color: var(--scribe-indigo-600);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.75rem;
+  line-height: 1;
+}
+
+[data-testid="scribe-workflow"] .scribe-skeleton-bar {
+  background-color: var(--scribe-indigo-50);
+  border-radius: 9999px;
+}
+
+[data-testid="scribe-workflow"] .scribe-mic-button {
+  background: var(--scribe-mic-gradient);
+  color: #ffffff;
+  box-shadow: 0 4px 14px rgb(79 70 229 / 0.35);
+}
+
+[data-testid="scribe-workflow"] .scribe-mic-ring {
+  --tw-ring-color: rgb(79 70 229 / 0.35);
+}
+
+[data-testid="scribe-workflow"] .scribe-step-done {
+  background-color: var(--scribe-indigo-600);
+  color: #ffffff;
+}
+
+[data-testid="scribe-workflow"] .scribe-step-current {
+  border: 2px solid var(--scribe-indigo-600);
+  background-color: var(--scribe-card-bg);
+  color: var(--scribe-indigo-600);
+}
+
+[data-testid="scribe-workflow"] .scribe-step-upcoming {
+  border: 1px solid var(--scribe-indigo-100);
+  background-color: var(--scribe-indigo-50);
+  color: var(--scribe-muted);
+}
+
+[data-testid="scribe-workflow"] .scribe-step-label {
+  font-weight: 600;
+  font-size: 0.875rem;
+}
+
+[data-testid="scribe-workflow"] .scribe-step-label-active {
+  color: var(--scribe-indigo-600);
+  font-weight: 700;
+}
+
+[data-testid="scribe-workflow"] .scribe-step-connector {
+  background-color: var(--scribe-card-border);
+}
+
 @layer utilities {
   .font-display {
     font-family: var(--font-display);

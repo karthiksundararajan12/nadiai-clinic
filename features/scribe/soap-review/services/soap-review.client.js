@@ -43,10 +43,10 @@ export async function rejectSOAPNote(sessionId, reason) {
   });
 }
 
-export async function regenerateSOAPNote(sessionId) {
+export async function regenerateSOAPNote(sessionId, payload = {}) {
   return requestJson(`/api/scribe/sessions/${sessionId}/soap/retry`, {
     method: "POST",
-    body: { force: true },
+    body: { force: true, ...payload },
   });
 }
 

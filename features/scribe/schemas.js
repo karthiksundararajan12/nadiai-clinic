@@ -386,6 +386,8 @@ export const SOAPNoteSchema = z.object({
 export const GenerateSOAPNoteSchema = z.object({
   force: z.boolean().optional().default(false),
   transcript_version_id: uuidOptional,
+  deleted_segment_ids: z.array(z.string().min(1)).optional().default([]),
+  segment_inclusion: z.record(z.string(), z.boolean()).optional(),
 });
 
 /** @typedef {z.infer<typeof GenerateSOAPNoteSchema>} GenerateSOAPNoteInput */

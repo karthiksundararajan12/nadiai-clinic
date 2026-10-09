@@ -26,6 +26,11 @@ import {
 import { createLogger } from "../logger.js";
 import { buildSOAPPrompt, SOAP_JSON_SCHEMA } from "./soap-prompt.js";
 import { createSOAPAIProvider } from "./ai-providers/provider-factory.js";
+import { TranscriptRelevanceClassifier } from "./transcript-relevance.service.js";
+import {
+  formatTurnsAsTranscriptText,
+  selectTurnsForSoap,
+} from "../lib/soap-transcript-filter.js";
 import {
   toDbSoapNoteStatus,
   toDbSoapVersionSource,
@@ -39,12 +44,14 @@ export class SOAPGenerationService {
    * @param {import("../repository/soap.repository.js").SOAPRepository} soapRepository
    * @param {import("./audit.service.js").AuditService} auditService
    * @param {import("./ai-providers/ai-provider.js").AIProvider} [aiProvider]
+   * @param {TranscriptRelevanceClassifier} [relevanceClassifier]
    */
-  constructor(sessionRepository, soapRepository, auditService, aiProvider) {
+  constructor(sessionRepository, soapRepository, auditService, aiProvider, relevanceClassifier) {
     this._sessions = sessionRepository;
     this._soap = soapRepository;
     this._audit = auditService;
     this._aiProvider = aiProvider ?? createSOAPAIProvider();
+    this._classifier = relevanceClassifier ?? new TranscriptRelevanceClassifier();
     this._log = createLogger({ component: "SOAPGenerationService" });
   }
 
@@ -90,7 +97,17 @@ export class SOAPGenerationService {
       throw new SOAPNotReadyError("A reviewed transcript version is required before SOAP generation");
     }
 
-    const generationContext = buildGenerationContext(context, transcriptVersion);
+    const storedTurns = context.segments ?? [];
+    const classifications = await this._classifier.classify(storedTurns);
+    const soapTurns = storedTurns.length > 0
+      ? selectTurnsForSoap({
+          turns: storedTurns,
+          classifications,
+          inclusionOverrides: input.segment_inclusion ?? {},
+          deletedIds: input.deleted_segment_ids ?? [],
+        })
+      : null;
+    const generationContext = buildGenerationContext(context, transcriptVersion, soapTurns);
     const inputHash = hashInput(generationContext);
 
     if (!input.force) {
@@ -177,6 +194,8 @@ export class SOAPGenerationService {
           latencyMs: Date.now() - startedAt,
           attempts: generated.attempts,
           evidenceMappings,
+          clinicalClassifications: classifications,
+          includedSegmentIds: (soapTurns ?? storedTurns).map((turn) => turn.id).filter(Boolean),
         }, workflowAction),
         input_hash: inputHash,
         error_message: null,
@@ -268,7 +287,11 @@ export class SOAPGenerationService {
   async retry(sessionId, rawInput, ctx) {
     const parsed = RetrySOAPGenerationSchema.safeParse(rawInput);
     if (!parsed.success) throw new SessionValidationError(parsed.error);
-    return this.generate(sessionId, { force: true }, ctx);
+    return this.generate(sessionId, {
+      force: true,
+      deleted_segment_ids: rawInput?.deleted_segment_ids,
+      segment_inclusion: rawInput?.segment_inclusion,
+    }, ctx);
   }
 
   async _transitionToGenerating(session, ctx) {
@@ -381,13 +404,14 @@ export class SOAPGenerationService {
   }
 }
 
-function buildGenerationContext(context, transcriptVersion) {
+function buildGenerationContext(context, transcriptVersion, soapTurns = null) {
   // Prefer live segments — transcript_versions.full_text can lag after edits/restores.
-  const segmentText = (context.segments ?? [])
-    .map((segment) => `${segment.speaker_label}: ${segment.text}`)
-    .join("\n")
-    .trim();
-  const transcriptText = segmentText || transcriptVersion?.full_text?.trim() || "";
+  // SOAP input uses the clinical subset when provided; the stored transcript is unchanged.
+  const turnsForPrompt = soapTurns ?? context.segments ?? [];
+  const segmentText = formatTurnsAsTranscriptText(turnsForPrompt);
+  const transcriptText = segmentText
+    || (soapTurns ? "" : transcriptVersion?.full_text?.trim())
+    || "";
 
   return {
     patient: context.patient ? {

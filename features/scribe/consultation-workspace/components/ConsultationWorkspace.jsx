@@ -62,6 +62,7 @@ export function ConsultationWorkspace({
   selectedPatient,
   onSelectedPatientChange,
   onWorkspaceStateChange,
+  getSoapTurnSelection,
 }) {
   const lastKnownStatusRef = useRef("");
 
@@ -483,10 +484,15 @@ export function ConsultationWorkspace({
     setReviewModalOpen(true);
   }, []);
 
+  const soapTurnSelection = useCallback(
+    () => getSoapTurnSelection?.() ?? {},
+    [getSoapTurnSelection],
+  );
+
   const handleRegenerateFromReview = useCallback(async () => {
     setReviewModalOpen(false);
     try {
-      const result = await soap.regenerate();
+      const result = await soap.regenerate(soapTurnSelection());
       pendingVersionIdRef.current = result?.version?.id ?? null;
       setFeedbackAction("regenerated");
       setFeedbackModalOpen(true);
@@ -494,7 +500,7 @@ export function ConsultationWorkspace({
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to regenerate SOAP note");
     }
-  }, [soap, statusPoll]);
+  }, [soap, soapTurnSelection, statusPoll]);
 
   const handleEditManuallyFromReview = useCallback(() => {
     setReviewModalOpen(false);
@@ -547,9 +553,9 @@ export function ConsultationWorkspace({
   }, [feedbackAction, soap]);
 
   const handleRegenerateSOAP = useCallback(async () => {
-    await soap.regenerate();
+    await soap.regenerate(soapTurnSelection());
     await transcript.load();
-  }, [soap, transcript]);
+  }, [soap, soapTurnSelection, transcript]);
 
   const handleRegenerateEvidenceSoap = useCallback(async () => {
     setEvidenceModalOpen(false);
@@ -604,7 +610,7 @@ export function ConsultationWorkspace({
         await transcript.completeReview();
         await transcript.load();
       }
-      await transcript.generateSOAP();
+      await transcript.generateSOAP(soapTurnSelection());
       await statusPoll.refresh?.();
     });
 
@@ -627,6 +633,7 @@ export function ConsultationWorkspace({
     soap.load,
     statusPoll.refresh,
     transcript.completeReview,
+    soapTurnSelection,
     transcript.generateSOAP,
     transcript.load,
     transcript.segments.length,
@@ -660,7 +667,7 @@ export function ConsultationWorkspace({
           await transcript.completeReview();
           await transcript.load();
         }
-        await transcript.generateSOAP();
+        await transcript.generateSOAP(soapTurnSelection());
         await statusPoll.refresh?.();
         await soap.load();
       });
@@ -683,6 +690,7 @@ export function ConsultationWorkspace({
     transcript.completeReview,
     transcript.generateSOAP,
     transcript.load,
+    soapTurnSelection,
     soap.load,
     autoPipelineRunning,
     generatingSOAP,
@@ -705,6 +713,12 @@ export function ConsultationWorkspace({
         ? "Loading transcript…"
         : null;
 
+  const clinicalById = useMemo(() => {
+    const rows = soap.note?.generation_metadata?.clinicalClassifications;
+    if (!Array.isArray(rows)) return {};
+    return Object.fromEntries(rows.map((row) => [row.id, Boolean(row.clinical)]));
+  }, [soap.note?.generation_metadata?.clinicalClassifications]);
+
   useEffect(() => {
     const hideSegments = waitingForTranscript && transcript.segments.length === 0;
     onWorkspaceStateChange?.({
@@ -714,6 +728,7 @@ export function ConsultationWorkspace({
       sessionComplete,
       status: resolvedSessionStatus,
       highlightedSegmentId: activeSegmentId,
+      clinicalById,
     });
   }, [
     onWorkspaceStateChange,
@@ -726,6 +741,7 @@ export function ConsultationWorkspace({
     resolvedSessionStatus,
     soapApproved,
     activeSegmentId,
+    clinicalById,
   ]);
 
   const noteGenerating =

@@ -26,7 +26,7 @@ export function MobileNav({ open, onClose }) {
         style={{ boxShadow: "var(--sidebar-shadow)" }}
       >
         <div className="flex items-center justify-between border-b border-sidebar-border bg-card px-4 py-4">
-          <BrandLogo size="md" variant="shell" />
+          <BrandLogo size="md" />
           <button
             type="button"
             onClick={onClose}

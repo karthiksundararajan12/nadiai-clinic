@@ -57,14 +57,14 @@ export function Sidebar({ collapsed, onToggle }) {
     >
       <div
         className={cn(
-          "flex items-center border-b border-sidebar-border bg-card px-4 py-4",
+          "flex items-center border-b border-[#E6E8F5] bg-white px-4 py-4",
           collapsed && "justify-center px-3",
         )}
       >
         <BrandLogo
           size={collapsed ? "sm" : "md"}
           showText={!collapsed}
-          variant="shell"
+          textClassName="font-extrabold text-[20px] leading-none tracking-tight text-[#1E1B4B]"
         />
       </div>
 

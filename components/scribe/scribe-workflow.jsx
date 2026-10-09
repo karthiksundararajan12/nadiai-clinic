@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { History } from "lucide-react";
+import { Header } from "@/components/layout/header";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
@@ -13,8 +15,9 @@ import { RECORDING_LIMITS } from "@/features/scribe/recording/constants.js";
 import { ConsultationWorkspace } from "@/features/scribe/consultation-workspace";
 import { SessionsDrawer } from "@/features/scribe/consultation-workspace/components/SessionsDrawer.jsx";
 import { ScribeRecordPanel } from "@/features/scribe/consultation-workspace/components/consultation/ScribeRecordPanel.jsx";
-import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
+import { ScribeWorkflowStepper } from "@/features/scribe/consultation-workspace/components/consultation/ScribeWorkflowStepper.jsx";
 import { LiveTranscriptPanel } from "@/features/scribe/consultation-workspace/components/consultation/LiveTranscriptPanel.jsx";
+import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
 import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
 import { appointmentToPatientPrefill } from "@/features/appointments/appointment-prefill.js";
 import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
@@ -29,6 +32,7 @@ import {
   resolveRecordPanelContext,
 } from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
 import { hasDistinctClinicalSpeakers } from "@/features/scribe/lib/speaker-diarization.js";
+import { resolveScribeWorkflowStepIndex } from "@/features/scribe/consultation-workspace/lib/scribe-workflow-step.js";
 
 const TRANSCRIBE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -408,6 +412,12 @@ export function ScribeWorkflow() {
       transcriptLoading: false,
       transcriptLoadingMessage: null,
       sessionComplete: false,
+      highlightedSegmentId: null,
+      patient: null,
+      audioDurationSeconds: null,
+      canApproveSOAP: false,
+      canEditNote: false,
+      approving: false,
     });
     recording.resetRecording?.();
     live.reset();
@@ -522,7 +532,12 @@ export function ScribeWorkflow() {
   }, []);
 
   const languageToggle = (
-    <LanguageToggle value={language} onChange={setLanguage} />
+    <LanguageToggle
+      value={language}
+      onChange={setLanguage}
+      disabled={isRecordingLive}
+      variant="segmented"
+    />
   );
 
   const sessionsDrawer = (
@@ -543,19 +558,6 @@ export function ScribeWorkflow() {
       onDelete={deleteSession}
       canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
     />
-  );
-
-  const hasSessions = activeSessions.length + historySessions.length > 0;
-
-  const recordPanelFooter = (
-    <Button
-      variant="outline"
-      size="sm"
-      className="w-full cursor-pointer"
-      onClick={() => setSessionsOpen(true)}
-    >
-      View past sessions
-    </Button>
   );
 
   const rightPanel = activeSessionId ? (
@@ -586,89 +588,122 @@ export function ScribeWorkflow() {
     <ScribeSoapPlaceholder
       processing={pipelineBusy}
       message={pipelineMessage ?? "Processing…"}
-      onOpenSessions={() => setSessionsOpen(true)}
-      hasSessions={hasSessions}
+      recordState={recordState}
+      patientSelected={Boolean(selectedPatient)}
     />
   );
 
+  const recorderStatus = (isRecordingLive || recording.micState !== "inactive") ? (
+    <LiveTranscriptPanel
+      liveStatus={live.status}
+      fallback={live.fallback}
+      micState={recording.micState}
+    />
+  ) : null;
+
   return (
     <div
-      className="relative flex h-full min-h-0 flex-col"
+      className="relative flex h-full min-h-0 flex-col bg-secondary"
       data-testid="scribe-workflow"
     >
-      <PatientSelector
-        patient={selectedPatient}
-        onSelect={(next) => {
-          setSelectedPatient(next);
-          setAppointmentId(next?.appointment_id ?? null);
-        }}
-        onClear={() => {
-          setSelectedPatient(null);
-          setAppointmentId(null);
-        }}
+      <Header
+        title="AI Scribe"
+        subtitle="Record the consultation, review the SOAP note"
+        showClock={false}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="cursor-pointer gap-1.5 text-xs"
+            onClick={() => setSessionsOpen(true)}
+          >
+            <History className="h-4 w-4" />
+            Past sessions
+          </Button>
+        }
       />
       {appointmentPrefillLoading && (
-        <p className="border-b border-gray-200 bg-amber-50 px-6 py-2 text-xs text-amber-800">
+        <p className="border-b border-border bg-amber-50 px-6 py-2 text-xs text-amber-800">
           Loading appointment details…
         </p>
       )}
       {appointmentPrefillError && (
-        <p className="border-b border-gray-200 bg-destructive/5 px-6 py-2 text-xs text-destructive">
+        <p className="border-b border-border bg-destructive/5 px-6 py-2 text-xs text-destructive">
           {appointmentPrefillError.message}
         </p>
       )}
-      <div className="relative flex min-h-0 flex-1 flex-col md:flex-row">
-      <ScribeRecordPanel
-        recordState={recordState}
-        durationLabel={recording.formattedDuration}
-        statusMessage={pipelineMessage}
-        disabled={Boolean(activeSessionId)}
-        analyserNode={recording.analyserNode}
-        pauseSupported={recording.pauseSupported}
-        transcriptSegments={
-          live.segments.length > 0 && !workspaceState.segments?.length
-            ? live.segments
-            : workspaceState.segments
-        }
-        highlightedSegmentId={workspaceState.highlightedSegmentId}
-        transcriptLoading={
-          !isRecordingLive &&
-          (workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId)))
-        }
-        transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
-        canStartNewSession={Boolean(activeSessionId) && !pipelineBusy}
-        onStart={() => {
-          live.reset();
-          void recording.startRecording();
-        }}
-        onPause={recording.pauseRecording}
-        onResume={recording.resumeRecording}
-        onStop={handleStopRecording}
-        onNewSession={handleNewSession}
-        manualMode={manualInputMode}
-        onManualModeChange={setManualInputMode}
-        onManualSubmit={handleManualTranscriptSubmit}
-        manualSubmitting={manualSubmitting}
-        canStartRecording={Boolean(selectedPatient)}
-        patientRequiredHint="Select or create a patient to begin."
-        languageToggle={languageToggle}
-        footer={recordPanelFooter}
-        sessionContext={recordPanelSessionContext}
-      />
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:overflow-hidden lg:p-6">
+        <ScribeWorkflowStepper
+          activeIndex={resolveScribeWorkflowStepIndex({
+            recordState,
+            sessionStatus: workspaceState.status,
+            pipelineBusy,
+          })}
+          liveRecording={recordState === "recording" || recordState === "paused"}
+        />
+        <div className="grid grid-cols-1 items-stretch gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+          <div className="flex h-full min-h-[36rem] min-w-0 flex-col lg:min-h-0">
+            <ScribeRecordPanel
+              recordState={recordState}
+              durationLabel={recording.formattedDuration}
+              statusMessage={pipelineMessage}
+              disabled={Boolean(activeSessionId)}
+              analyserNode={recording.analyserNode}
+              pauseSupported={recording.pauseSupported}
+              transcriptSegments={
+                live.segments.length > 0 && !workspaceState.segments?.length
+                  ? live.segments
+                  : workspaceState.segments
+              }
+              highlightedSegmentId={workspaceState.highlightedSegmentId}
+              transcriptLoading={
+                !isRecordingLive &&
+                (workspaceState.transcriptLoading || (pipelineBusy && Boolean(activeSessionId)))
+              }
+              transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
+              canStartNewSession={Boolean(activeSessionId) && !pipelineBusy}
+              onStart={() => {
+                live.reset();
+                void recording.startRecording();
+              }}
+              onPause={recording.pauseRecording}
+              onResume={recording.resumeRecording}
+              onStop={handleStopRecording}
+              onNewSession={handleNewSession}
+              manualMode={manualInputMode}
+              onManualModeChange={setManualInputMode}
+              onManualSubmit={handleManualTranscriptSubmit}
+              manualSubmitting={manualSubmitting}
+              canStartRecording={Boolean(selectedPatient)}
+              patientRequiredHint="Select a patient to begin"
+              sessionContext={recordPanelSessionContext}
+              statusStrip={recorderStatus}
+            >
+              <PatientSelector
+                patient={selectedPatient}
+                lockSelection={isRecordingLive}
+                languageToggle={languageToggle}
+                onSelect={(next) => {
+                  setSelectedPatient(next);
+                  setAppointmentId(next?.appointment_id ?? null);
+                }}
+                onClear={() => {
+                  setSelectedPatient(null);
+                  setAppointmentId(null);
+                }}
+              />
+            </ScribeRecordPanel>
+          </div>
 
-      <main className="flex min-h-0 min-w-0 w-full flex-col bg-white md:w-[60%]">
-        {(isRecordingLive || recording.micState !== "inactive") && (
-          <LiveTranscriptPanel
-            liveStatus={live.status}
-            fallback={live.fallback}
-            micState={recording.micState}
-          />
-        )}
-        <div className="min-h-0 flex-1">{rightPanel}</div>
-      </main>
+          <main className="flex h-full min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card shadow-clinical lg:min-h-0">
+            <div className="min-h-0 flex-1">{rightPanel}</div>
+          </main>
+        </div>
+      </div>
 
       {uploadError && (
-        <div className="absolute bottom-4 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4 md:left-[calc(140px+50%)]">
+        <div className="absolute bottom-4 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4">
           <UploadErrorBanner
             error={uploadError}
             onDismiss={() => setUploadError(null)}
@@ -695,7 +730,6 @@ export function ScribeWorkflow() {
       )}
 
       {sessionsDrawer}
-    </div>
     </div>
   );
 }

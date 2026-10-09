@@ -7,7 +7,7 @@ function MicIndicator({ micState, liveStatus, fallback }) {
 
   if (micState === "requesting" || (connecting && micState !== "recording" && micState !== "paused")) {
     return (
-      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-600" role="status">
+      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700" role="status">
         <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
         {micState === "requesting" ? "Requesting microphone…" : "Connecting live transcript…"}
       </span>
@@ -41,7 +41,7 @@ function MicIndicator({ micState, liveStatus, fallback }) {
   }
 
   return (
-    <span className="text-xs font-medium text-gray-500" role="status">
+    <span className="text-xs font-medium text-gray-700" role="status">
       Microphone stopped
     </span>
   );
@@ -58,12 +58,11 @@ export function LiveTranscriptPanel({
 }) {
   return (
     <section
-      className="flex shrink-0 flex-col border-b border-gray-200 bg-white"
+      className="flex shrink-0 flex-col bg-card"
       data-testid="live-transcript-panel"
       aria-label="Recorder status"
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 px-4 py-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Microphone</p>
+      <div className="flex shrink-0 items-center justify-end gap-3 px-4 pt-3">
         <MicIndicator micState={micState} liveStatus={liveStatus} fallback={fallback} />
       </div>
     </section>

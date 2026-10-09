@@ -9,7 +9,14 @@ import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
 import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 
-export function Header({ title, subtitle, onMenuClick }) {
+export function Header({
+  title,
+  subtitle,
+  onMenuClick,
+  showClock = true,
+  showSearch = true,
+  actions = null,
+}) {
   const { theme, toggleTheme } = useTheme();
   const [currentTime, setCurrentTime] = useState("");
 
@@ -42,7 +49,7 @@ export function Header({ title, subtitle, onMenuClick }) {
           {subtitle && (
             <p className="text-caption font-medium text-muted-foreground">
               {subtitle}
-              {currentTime && (
+              {showClock && currentTime && (
                 <span className="ml-2 text-caption font-medium text-muted-foreground">
                   {currentTime}
                 </span>
@@ -53,17 +60,20 @@ export function Header({ title, subtitle, onMenuClick }) {
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="hidden md:block">
-          <Tooltip content="Coming soon" side="bottom">
-            <SearchInput
-              value=""
-              placeholder="Search patients, appointments..."
-              className="w-64"
-              disabled
-              title="Coming soon"
-            />
-          </Tooltip>
-        </div>
+        {actions}
+        {showSearch && (
+          <div className="hidden md:block">
+            <Tooltip content="Coming soon" side="bottom">
+              <SearchInput
+                value=""
+                placeholder="Search patients, appointments..."
+                className="w-64"
+                disabled
+                title="Coming soon"
+              />
+            </Tooltip>
+          </div>
+        )}
         <Button
           variant="ghost"
           size="icon"

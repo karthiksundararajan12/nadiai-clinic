@@ -28,7 +28,7 @@ export function MobileNav({ open, onClose }) {
         <div className="flex items-center border-b border-sidebar-border px-4 py-4">
           <Link href="/dashboard" onClick={onClose} className="inline-block min-w-0 flex-1">
             <Image
-              src="/nadiai-logo.png"
+              src="/nadiai-header.png"
               alt="Nadi AI"
               width={200}
               height={48}

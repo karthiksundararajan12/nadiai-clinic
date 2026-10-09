@@ -70,7 +70,7 @@ export function Sidebar({ collapsed, onToggle }) {
             className="inline-block"
           >
             <img
-              src="/nadiai-logo.png"
+              src="/nadiai-header.png"
               alt="Nadi AI"
               style={{ height: 56, width: "auto" }}
             />

@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
@@ -70,13 +69,10 @@ export function Sidebar({ collapsed, onToggle }) {
             onClick={(event) => navigateIfAllowed("/dashboard", event)}
             className="inline-block"
           >
-            <Image
+            <img
               src="/nadiai-logo.png"
               alt="Nadi AI"
-              width={700}
-              height={260}
-              priority
-              className="w-[150px] h-auto object-contain"
+              style={{ height: 56, width: "auto" }}
             />
           </Link>
         )}

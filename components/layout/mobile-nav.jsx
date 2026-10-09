@@ -1,8 +1,8 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BrandLogo } from "@/components/brand-logo";
 import { X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
@@ -25,12 +25,21 @@ export function MobileNav({ open, onClose }) {
         className="fixed inset-y-0 left-0 w-[280px] animate-in slide-in-from-left bg-sidebar-background text-sidebar-foreground shadow-clinical"
         style={{ boxShadow: "var(--sidebar-shadow)" }}
       >
-        <div className="flex items-center justify-between border-b border-sidebar-border bg-card px-4 py-4">
-          <BrandLogo size="md" />
+        <div className="flex items-center">
+          <Link href="/dashboard" onClick={onClose} className="min-w-0 flex-1">
+            <Image
+              src="/nadiai-header.png"
+              alt="Nadi AI"
+              width={260}
+              height={72}
+              priority
+              className="h-[72px] w-full object-contain object-left"
+            />
+          </Link>
           <button
             type="button"
             onClick={onClose}
-            className="toolbar-icon-button cursor-pointer"
+            className="toolbar-icon-button shrink-0 cursor-pointer"
             aria-label="Close menu"
           >
             <X size={20} weight="bold" aria-hidden />

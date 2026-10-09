@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
@@ -57,15 +58,28 @@ export function Sidebar({ collapsed, onToggle }) {
     >
       <div
         className={cn(
-          "flex items-center border-b border-[#E6E8F5] bg-white px-4 py-4",
-          collapsed && "justify-center px-3",
+          "flex items-center",
+          collapsed && "justify-center px-3 py-4",
         )}
       >
-        <BrandLogo
-          size={collapsed ? "sm" : "md"}
-          showText={!collapsed}
-          textClassName="font-extrabold text-[20px] leading-none tracking-tight text-[#1E1B4B]"
-        />
+        {collapsed ? (
+          <BrandLogo size="sm" showText={false} />
+        ) : (
+          <Link
+            href="/dashboard"
+            onClick={(event) => navigateIfAllowed("/dashboard", event)}
+            className="block w-full"
+          >
+            <Image
+              src="/nadiai-header.png"
+              alt="Nadi AI"
+              width={260}
+              height={72}
+              priority
+              className="h-[72px] w-full object-contain object-left"
+            />
+          </Link>
+        )}
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">

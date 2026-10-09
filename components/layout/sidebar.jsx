@@ -59,7 +59,7 @@ export function Sidebar({ collapsed, onToggle }) {
       <div
         className={cn(
           "flex items-center border-b border-sidebar-border",
-          collapsed ? "justify-center px-3 py-4" : "px-4 py-4",
+          collapsed ? "justify-center px-3 py-4" : "h-[72px] px-5",
         )}
       >
         {collapsed ? (
@@ -73,10 +73,10 @@ export function Sidebar({ collapsed, onToggle }) {
             <Image
               src="/nadiai-logo.png"
               alt="Nadi AI"
-              width={200}
-              height={48}
+              width={180}
+              height={40}
               priority
-              className="h-10 w-auto object-contain object-left"
+              className="h-9 w-auto object-contain"
             />
           </Link>
         )}

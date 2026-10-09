@@ -3,25 +3,12 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
-import {
-  LayoutDashboard,
-  Mic,
-  CalendarDays,
-  CreditCard,
-  Users,
-  Syringe,
-  Settings,
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
+import { CaretLeft, CaretRight, SignOut } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
 import { filterNavItems } from "@/lib/specialization-nav";
-import { ICON_SIZE_NAV, ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip } from "@/components/ui/tooltip";
-import { Separator } from "@/components/ui/separator";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useUser } from "@/hooks/use-user";
@@ -30,16 +17,7 @@ import {
   confirmRecordingLeave,
   shouldBlockNavigation,
 } from "@/features/scribe/recording/recording-guard.js";
-
-const ICON_MAP = {
-  LayoutDashboard,
-  Mic,
-  CalendarDays,
-  CreditCard,
-  Users,
-  Syringe,
-  Settings,
-};
+import { DashboardNavIcon } from "@/components/layout/dashboard-nav-icons.jsx";
 
 export function Sidebar({ collapsed, onToggle }) {
   const pathname = usePathname();
@@ -72,26 +50,27 @@ export function Sidebar({ collapsed, onToggle }) {
   return (
     <aside
       className={cn(
-        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-border bg-background text-foreground shadow-sm transition-all duration-300",
-        collapsed ? "w-[68px]" : "w-[260px]"
+        "fixed inset-y-0 left-0 z-40 flex flex-col border-r border-sidebar-border bg-sidebar-background text-sidebar-foreground transition-all duration-300",
+        collapsed ? "w-[68px]" : "w-[260px]",
       )}
+      style={{ boxShadow: "var(--sidebar-shadow)" }}
     >
       <div
         className={cn(
-          "flex items-center border-b border-border px-4 py-4",
-          collapsed && "justify-center px-3"
+          "flex items-center border-b border-sidebar-border bg-card px-4 py-4",
+          collapsed && "justify-center px-3",
         )}
       >
         <BrandLogo
           size={collapsed ? "sm" : "md"}
           showText={!collapsed}
+          variant="shell"
         />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-3 py-4 scrollbar-thin">
         <ul className="flex flex-col gap-1">
           {visibleNavItems.map((item) => {
-            const Icon = ICON_MAP[item.icon];
             const isActive =
               pathname === item.href ||
               (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -103,31 +82,27 @@ export function Sidebar({ collapsed, onToggle }) {
                   navigateIfAllowed(item.href, event);
                 }}
                 className={cn(
-                  "group flex items-center gap-3 rounded-lg px-3 py-2 text-body font-medium transition-colors",
+                  "group flex h-11 items-center gap-3 rounded-xl px-3 text-nav font-semibold transition-colors",
                   isActive
-                    ? "bg-primary-soft text-primary"
+                    ? "bg-primary text-primary-foreground shadow-sm"
                     : "text-muted-foreground hover:bg-primary-soft hover:text-primary",
-                  collapsed && "justify-center px-0"
+                  collapsed && "justify-center px-0",
                 )}
               >
-                {Icon && (
-                  <Icon
-                    className={cn(
-                      ICON_SIZE_NAV,
-                      isActive
-                        ? "text-primary"
-                        : "text-muted-foreground group-hover:text-primary"
-                    )}
-                    strokeWidth={ICON_STROKE}
-                  />
-                )}
+                <DashboardNavIcon
+                  iconKey={item.icon}
+                  active={isActive}
+                  className={cn(
+                    isActive ? "text-primary-foreground" : "text-icon-muted group-hover:text-primary",
+                  )}
+                />
                 {!collapsed && (
                   <>
                     <span className="flex-1">{item.title}</span>
                     {item.badge && (
                       <Badge
-                        variant="accent"
-                        className="h-5 px-2 text-caption font-semibold"
+                        variant={item.badge === "AI" ? "ai" : "accent"}
+                        className="h-6 px-2.5 text-caption font-bold"
                       >
                         {item.badge}
                       </Badge>
@@ -152,27 +127,26 @@ export function Sidebar({ collapsed, onToggle }) {
         </ul>
       </nav>
 
-      <div className="border-t border-border p-3">
-        <Separator className="mb-3 bg-border" />
+      <div className="border-t border-sidebar-border p-3">
         <div
           className={cn(
-            "flex items-center gap-3 rounded-lg px-3 py-2",
-            collapsed && "justify-center px-0"
+            "flex items-center gap-3 rounded-xl px-2 py-2",
+            collapsed && "justify-center px-0",
           )}
         >
-          <Avatar className="h-8 w-8">
+          <Avatar className="h-10 w-10 border border-border">
             <AvatarImage src={avatarUrl ?? undefined} alt={displayName} />
-            <AvatarFallback className="text-caption font-semibold">
+            <AvatarFallback className="bg-primary-muted text-sm font-bold text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
           {!collapsed && (
-            <div className="flex flex-1 flex-col min-w-0">
-              <span className="truncate text-body font-medium [color:var(--heading)]">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="truncate font-display text-sm font-bold text-[color:var(--heading)]">
                 {displayName}
               </span>
               {specialization && (
-                <span className="text-caption font-medium text-muted-foreground truncate">
+                <span className="truncate text-sm font-medium text-muted-foreground">
                   {specialization}
                 </span>
               )}
@@ -181,10 +155,12 @@ export function Sidebar({ collapsed, onToggle }) {
           {!collapsed && (
             <Tooltip content="Sign out" side="top">
               <button
+                type="button"
                 onClick={handleSignOut}
-                className="rounded-lg p-2 text-muted-foreground hover:bg-status-cancelled-bg hover:text-status-cancelled transition-colors"
+                className="toolbar-icon-button cursor-pointer hover:!bg-primary-soft hover:!text-primary"
+                aria-label="Sign out"
               >
-                <LogOut className={ICON_SIZE_MD} strokeWidth={ICON_STROKE} />
+                <SignOut size={20} weight="bold" aria-hidden />
               </button>
             </Tooltip>
           )}
@@ -192,13 +168,15 @@ export function Sidebar({ collapsed, onToggle }) {
       </div>
 
       <button
+        type="button"
         onClick={onToggle}
-        className="absolute -right-3 top-16 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground shadow-sm hover:bg-primary-soft hover:text-primary"
+        className="absolute -right-3 top-[4.25rem] flex h-7 w-7 cursor-pointer items-center justify-center rounded-full border border-border bg-card text-icon-muted shadow-clinical transition-colors hover:bg-primary-soft hover:text-primary"
+        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? (
-          <ChevronRight className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+          <CaretRight size={14} weight="bold" aria-hidden />
         ) : (
-          <ChevronLeft className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+          <CaretLeft size={14} weight="bold" aria-hidden />
         )}
       </button>
     </aside>

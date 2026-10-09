@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ClockCounterClockwise } from "@phosphor-icons/react";
 import { scribePageFont } from "@/components/scribe/scribe-font";
 import { cn } from "@/lib/utils";
-import { Header } from "@/components/layout/header";
+import { Header, HeaderToolbarButton } from "@/components/layout/header";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
@@ -633,16 +633,13 @@ export function ScribeWorkflow() {
         subtitle="Record the consultation, review the SOAP note"
         showClock={false}
         actions={
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="scribe-card cursor-pointer gap-2 border-[color:var(--scribe-card-border)] text-sm font-semibold shadow-none"
+          <HeaderToolbarButton
+            className="gap-2 px-3"
             onClick={() => setSessionsOpen(true)}
           >
-            <ClockCounterClockwise size={20} weight="bold" className="scribe-icon" />
+            <ClockCounterClockwise size={20} weight="bold" className="text-primary" />
             Past sessions
-          </Button>
+          </HeaderToolbarButton>
         }
       />
       {appointmentPrefillLoading && (

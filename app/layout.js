@@ -1,18 +1,6 @@
-import { Source_Sans_3, IBM_Plex_Sans, JetBrains_Mono } from "next/font/google";
+import { JetBrains_Mono } from "next/font/google";
+import { appFontDisplay, appFontSans } from "@/lib/app-fonts";
 import "./globals.css";
-
-const sourceSans = Source_Sans_3({
-  variable: "--font-source-sans",
-  subsets: ["latin"],
-  display: "swap",
-});
-
-const ibmPlexSans = IBM_Plex_Sans({
-  variable: "--font-ibm-plex",
-  subsets: ["latin"],
-  weight: ["500", "600"],
-  display: "swap",
-});
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-jetbrains-mono",
@@ -30,7 +18,7 @@ export default function RootLayout({ children }) {
   return (
     <html
       lang="en"
-      className={`${sourceSans.variable} ${ibmPlexSans.variable} ${jetbrainsMono.variable} h-full`}
+      className={`${appFontSans.variable} ${appFontDisplay.variable} ${jetbrainsMono.variable} h-full`}
     >
       <body className="min-h-full bg-background font-sans antialiased">
         {children}

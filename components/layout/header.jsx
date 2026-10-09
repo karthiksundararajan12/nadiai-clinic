@@ -1,13 +1,12 @@
 "use client";
 
-import { Menu, Sun, Moon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { List, Moon, Sun } from "@phosphor-icons/react";
 import { SearchInput } from "@/components/shared/search-input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
-import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
+import { cn } from "@/lib/utils";
 
 export function Header({
   title,
@@ -27,7 +26,7 @@ export function Header({
           hour: "2-digit",
           minute: "2-digit",
           hour12: true,
-        })
+        }),
       );
     };
     update();
@@ -36,21 +35,23 @@ export function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-background px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
       <div className="flex items-center gap-4">
         <button
+          type="button"
           onClick={onMenuClick}
-          className="rounded-lg p-2 text-muted-foreground transition-colors duration-150 hover:bg-primary-soft hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
+          className="toolbar-icon-button cursor-pointer lg:hidden"
+          aria-label="Open menu"
         >
-          <Menu className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
+          <List size={22} weight="bold" aria-hidden />
         </button>
         <div>
-          <h1 className="font-display type-title">{title}</h1>
+          <h1 className="type-title">{title}</h1>
           {subtitle && (
-            <p className="text-caption font-medium text-muted-foreground">
+            <p className="text-sm font-medium text-muted-foreground">
               {subtitle}
               {showClock && currentTime && (
-                <span className="ml-2 text-caption font-medium text-muted-foreground">
+                <span className="ml-2 text-sm font-medium text-muted-foreground">
                   {currentTime}
                 </span>
               )}
@@ -74,20 +75,36 @@ export function Header({
             </Tooltip>
           </div>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
+        <button
+          type="button"
           onClick={toggleTheme}
-          className="text-muted-foreground"
+          className="toolbar-icon-button cursor-pointer"
+          aria-label={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
         >
           {theme === "dark" ? (
-            <Sun className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
+            <Sun size={20} weight="bold" aria-hidden />
           ) : (
-            <Moon className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
+            <Moon size={20} weight="bold" aria-hidden />
           )}
-        </Button>
+        </button>
         <NotificationBell />
       </div>
     </header>
+  );
+}
+
+/** Wrap custom header actions (e.g. Past sessions) in the shell toolbar style. */
+export function HeaderToolbarButton({ className, children, ...props }) {
+  return (
+    <button
+      type="button"
+      className={cn(
+        "toolbar-icon-button inline-flex h-9 cursor-pointer gap-2 px-3 text-sm font-bold text-[color:var(--heading)]",
+        className,
+      )}
+      {...props}
+    >
+      {children}
+    </button>
   );
 }

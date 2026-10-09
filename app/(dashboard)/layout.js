@@ -28,8 +28,8 @@ export default function DashboardLayout({ children }) {
 
             <main
               className={cn(
-                "flex flex-1 flex-col transition-all duration-300",
-                collapsed ? "lg:ml-[68px]" : "lg:ml-[260px]"
+                "flex min-h-screen flex-1 flex-col bg-background transition-all duration-300",
+                collapsed ? "lg:ml-[68px]" : "lg:ml-[260px]",
               )}
             >
               {children}

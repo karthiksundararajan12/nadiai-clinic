@@ -5,7 +5,7 @@ import {
 } from "@/lib/constants";
 
 export const STATUS_PILL_BASE =
-  "inline-flex items-center rounded-full border px-3 py-1 text-caption font-medium";
+  "inline-flex items-center rounded-full border px-3 py-1 text-sm font-semibold";
 
 export function StatusBadge({ status, className }) {
   const config =

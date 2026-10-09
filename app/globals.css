@@ -4,48 +4,49 @@
 @custom-variant dark (&:is(.dark *));
 
 /*
- * Nadi clinical design tokens
- * ─────────────────────────
- * surface / paper  #FFFFFF  app backgrounds (white)
- * heading          #1A2332  titles / section headings
- * body             #374151  foreground (gray-700)
- * muted            #6B7280  secondary text (gray-500)
- * primary          #35327E  logo indigo circle mean (public/logo.png; not #36347E)
- * primary-hover    #2B2967  one shade darker than primary
- * primary-soft     #EBEBF2  ~10% primary on white
- * success          #2D6A4F
- * warning          #7A5200  (legacy token; status pending uses --status-pending)
- * danger           #B42318
+ * Nadi clinical design tokens (dashboard shell + app UI)
+ * ─────────────────────────────────────────────────────
+ * primary indigo   #4F46E5  hover #4338CA  active #3730A3
+ * accent violet    #7C3AED
+ * page background  #FAFAFF  card #FFFFFF  border #E6E8F5
+ * text             #1E1B4B  secondary #4B4F72  icons idle #6B6F8D
+ * soft tints       indigo-50 #EEF2FF  indigo-100 #E0E7FF
+ * focus ring       #C7D2FE
  */
 :root {
-  --radius: 0.5rem;
-  --heading: #1a2332;
+  --radius: 0.625rem;
+  --radius-card: 0.875rem;
+  --heading: #1e1b4b;
 
-  --background: #ffffff;
-  --foreground: #374151;
+  --background: #fafaff;
+  --foreground: #1e1b4b;
 
   --card: #ffffff;
-  --card-foreground: #1a2332;
+  --card-foreground: #1e1b4b;
 
   --popover: #ffffff;
-  --popover-foreground: #1a2332;
+  --popover-foreground: #1e1b4b;
 
-  --primary: #35327e;
+  --primary: #4f46e5;
   --clinical: var(--primary);
   --clinical-foreground: #ffffff;
-  --primary-hover: #2b2967;
-  --primary-active: #312f71;
-  --primary-soft: #ebebf2;
+  --primary-hover: #4338ca;
+  --primary-active: #3730a3;
+  --primary-soft: #eef2ff;
+  --primary-muted: #e0e7ff;
   --primary-foreground: #ffffff;
 
-  --secondary: #f9fafb;
-  --secondary-foreground: #1a2332;
+  --secondary: #fafaff;
+  --secondary-foreground: #1e1b4b;
 
-  --muted: #f9fafb;
-  --muted-foreground: #6b7280;
+  --muted: #eef2ff;
+  --muted-foreground: #4b4f72;
 
-  --accent: #36347e;
+  --accent: #7c3aed;
   --accent-foreground: #ffffff;
+
+  --icon-muted: #6b6f8d;
+  --focus-ring: #c7d2fe;
 
   --destructive: #b42318;
   --destructive-foreground: #ffffff;
@@ -70,29 +71,30 @@
   --status-completed-bg: #f9fafb;
   --status-completed-border: #e5e7eb;
 
-  --border: #e5e7eb;
-  --input: #e5e7eb;
-  --ring: #36347e;
+  --border: #e6e8f5;
+  --input: #e6e8f5;
+  --ring: #4f46e5;
 
   --sidebar-background: #ffffff;
-  --sidebar-foreground: #1a2332;
-  --sidebar-primary: #36347e;
+  --sidebar-foreground: #1e1b4b;
+  --sidebar-primary: #4f46e5;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f3f4f6;
-  --sidebar-accent-foreground: #1a2332;
-  --sidebar-border: #e5e7eb;
-  --sidebar-muted: #6b7280;
+  --sidebar-accent: #eef2ff;
+  --sidebar-accent-foreground: #4f46e5;
+  --sidebar-border: #e6e8f5;
+  --sidebar-muted: #4b4f72;
+  --sidebar-shadow: 4px 0 24px rgb(79 70 229 / 0.06);
 
-  --chart-1: #36347e;
+  --chart-1: #4f46e5;
   --chart-2: #2d6a4f;
   --chart-3: #7a5200;
   --chart-4: #b42318;
   --chart-5: #4b5563;
 
-  --shadow-clinical: 0 1px 2px rgb(26 35 50 / 0.04),
-    0 1px 3px rgb(26 35 50 / 0.06);
-  --shadow-md: 0 4px 12px rgb(26 35 50 / 0.08),
-    0 12px 28px rgb(26 35 50 / 0.12);
+  --shadow-clinical: 0 1px 2px rgb(79 70 229 / 0.06),
+    0 8px 24px rgb(79 70 229 / 0.06);
+  --shadow-md: 0 4px 12px rgb(79 70 229 / 0.08),
+    0 12px 28px rgb(79 70 229 / 0.1);
 }
 
 .dark {
@@ -105,22 +107,26 @@
   --popover: #161923;
   --popover-foreground: #f3f4f6;
 
-  --primary: #7b79c7;
+  --primary: #818cf8;
   --clinical: var(--primary);
   --clinical-foreground: #0f1117;
   --heading: #f3f4f6;
-  --primary-hover: #6a68b8;
-  --primary-active: #5c5aa8;
-  --primary-soft: #25273c;
+  --primary-hover: #6366f1;
+  --primary-active: #4f46e5;
+  --primary-soft: #1e1b4b;
+  --primary-muted: #312e81;
   --primary-foreground: #0f1117;
+
+  --accent: #a78bfa;
+  --icon-muted: #9ca3af;
+  --focus-ring: #4338ca;
 
   --secondary: #1e2230;
   --secondary-foreground: #f3f4f6;
 
   --muted: #1e2230;
-  --muted-foreground: #9ca3af;
+  --muted-foreground: #a1a6c4;
 
-  --accent: #7b79c7;
   --accent-foreground: #0f1117;
 
   --destructive: #f07167;
@@ -134,18 +140,20 @@
 
   --border: #2a2f3d;
   --input: #2a2f3d;
-  --ring: #7b79c7;
+  --ring: #818cf8;
+  --focus-ring: #6366f1;
 
   --sidebar-background: #0f1117;
   --sidebar-foreground: #f3f4f6;
-  --sidebar-primary: #7b79c7;
+  --sidebar-primary: #818cf8;
   --sidebar-primary-foreground: #0f1117;
-  --sidebar-accent: #1e2230;
-  --sidebar-accent-foreground: #f3f4f6;
+  --sidebar-accent: #1e1b4b;
+  --sidebar-accent-foreground: #c7d2fe;
   --sidebar-border: #2a2f3d;
-  --sidebar-muted: #9ca3af;
+  --sidebar-muted: #a1a6c4;
+  --sidebar-shadow: 4px 0 24px rgb(0 0 0 / 0.35);
 
-  --chart-1: #7b79c7;
+  --chart-1: #818cf8;
   --chart-2: #4ade80;
   --chart-3: #fbbf24;
   --chart-4: #f07167;
@@ -222,6 +230,9 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-muted: var(--sidebar-muted);
+  --color-icon-muted: var(--icon-muted);
+  --color-focus-ring: var(--focus-ring);
+  --color-primary-muted: var(--primary-muted);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -231,16 +242,17 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: var(--radius);
-  --font-sans: var(--font-source-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-ibm-plex), var(--font-source-sans), ui-sans-serif, sans-serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plus-jakarta), var(--font-inter), ui-sans-serif, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
   --shadow-clinical: var(--shadow-clinical);
   --shadow-sm: var(--shadow-clinical);
   --shadow-md: var(--shadow-md);
-  --text-title: 1.5rem;
+  --text-title: 1.75rem;
   --text-heading: 1.125rem;
   --text-body: 0.875rem;
-  --text-caption: 0.75rem;
+  --text-caption: 0.875rem;
+  --text-nav: 0.9375rem;
 }
 
 @layer base {
@@ -249,7 +261,8 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    font-weight: 500;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
 
@@ -258,8 +271,9 @@
   h3,
   [data-slot="card-title"] {
     font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.01em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: var(--heading);
   }
 }
 
@@ -281,27 +295,27 @@
 }
 
 @keyframes evidence-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgb(54 52 126 / 0.35); }
-  50%       { box-shadow: 0 0 0 6px rgb(54 52 126 / 0.15); }
+  0%, 100% { box-shadow: 0 0 0 0 rgb(79 70 229 / 0.35); }
+  50%       { box-shadow: 0 0 0 6px rgb(79 70 229 / 0.15); }
 }
 
 /* Scribe workflow (/scribe) — scoped premium tokens */
 [data-testid="scribe-workflow"] {
-  --scribe-page-bg: #fafaff;
-  --scribe-card-bg: #ffffff;
-  --scribe-card-border: #e6e8f5;
-  --scribe-card-shadow: 0 1px 2px rgb(79 70 229 / 0.06), 0 8px 24px rgb(79 70 229 / 0.06);
-  --scribe-indigo: #4f46e5;
-  --scribe-violet: #7c3aed;
-  --scribe-indigo-50: #eef2ff;
-  --scribe-indigo-100: #e0e7ff;
-  --scribe-indigo-600: #4f46e5;
-  --scribe-muted: #4b4f72;
-  --scribe-heading: #1a2332;
-  --scribe-mic-gradient: linear-gradient(135deg, var(--scribe-indigo), var(--scribe-violet));
+  --scribe-page-bg: var(--background);
+  --scribe-card-bg: var(--card);
+  --scribe-card-border: var(--border);
+  --scribe-card-shadow: var(--shadow-clinical);
+  --scribe-indigo: var(--primary);
+  --scribe-violet: var(--accent);
+  --scribe-indigo-50: var(--primary-soft);
+  --scribe-indigo-100: var(--primary-muted);
+  --scribe-indigo-600: var(--primary);
+  --scribe-muted: var(--muted-foreground);
+  --scribe-heading: var(--heading);
+  --scribe-mic-gradient: linear-gradient(135deg, var(--primary), var(--accent));
 
   background-color: var(--scribe-page-bg);
-  font-family: var(--font-scribe-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-plus-jakarta), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   font-weight: 500;
   font-size: 0.875rem;
   color: var(--scribe-heading);
@@ -313,7 +327,7 @@
 }
 
 [data-testid="scribe-workflow"] header h1.type-title {
-  font-family: var(--font-scribe-sans), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   font-size: 28px;
   font-weight: 800;
   line-height: 1.25;
@@ -406,26 +420,51 @@
   background-color: var(--scribe-card-border);
 }
 
-@layer utilities {
-  .font-display {
-    font-family: var(--font-display);
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
+.toolbar-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  flex-shrink: 0;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background-color: var(--card);
+  color: var(--icon-muted);
+  font-weight: 600;
+  transition: background-color 0.15s, color 0.15s;
+}
 
+.toolbar-icon-button:hover {
+  background-color: var(--primary-soft);
+  color: var(--primary);
+}
+
+.toolbar-icon-button:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--focus-ring);
+}
+
+@layer utilities {
   /* --text-heading (size) and --color-heading (color) both generate `text-heading`. */
   .type-title {
+    font-family: var(--font-display);
     font-size: var(--text-title);
     line-height: 2rem;
-    font-weight: 600;
+    font-weight: 800;
     color: var(--heading);
   }
 
   .type-heading {
+    font-family: var(--font-display);
     font-size: var(--text-heading);
     line-height: 1.75rem;
-    font-weight: 600;
+    font-weight: 700;
     color: var(--heading);
+  }
+
+  .font-display {
+    font-family: var(--font-display);
   }
 
   .shadow-clinical {

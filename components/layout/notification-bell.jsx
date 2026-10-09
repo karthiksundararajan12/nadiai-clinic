@@ -4,8 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { formatDistanceToNow } from "date-fns";
-import { Bell } from "lucide-react";
-import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
+import { Bell } from "@phosphor-icons/react";
 import { useNotifications } from "@/hooks/use-notifications";
 import { cn } from "@/lib/utils";
 
@@ -118,16 +117,16 @@ export function NotificationBell() {
         role="dialog"
         aria-label="Notifications"
         style={panelStyle}
-        className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-lg"
+        className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-card shadow-md"
       >
-        <div className="flex items-center justify-between border-b border-gray-100 px-3 py-2.5">
-          <p className="text-base font-semibold text-foreground">Notifications</p>
+        <div className="flex items-center justify-between border-b border-border px-3 py-2.5">
+          <p className="font-display text-base font-bold text-foreground">Notifications</p>
           <div className="flex items-center gap-2">
             {unreadCount > 0 && (
               <button
                 type="button"
                 onClick={handleMarkAll}
-                className="text-xs font-semibold text-primary hover:underline"
+                className="text-sm font-semibold text-primary hover:underline"
               >
                 Mark all read
               </button>
@@ -138,7 +137,7 @@ export function NotificationBell() {
                 setOpen(false);
                 router.push("/notifications");
               }}
-              className="text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline"
+              className="text-sm font-semibold text-muted-foreground hover:text-foreground hover:underline"
             >
               View all
             </button>
@@ -156,13 +155,13 @@ export function NotificationBell() {
               return (
                 <li
                   key={notification.id}
-                  className="border-b border-gray-50 last:border-0"
+                  className="border-b border-border/60 last:border-0"
                 >
                   <button
                     type="button"
                     onClick={() => handleItemClick(notification)}
                     className={cn(
-                      "w-full px-3 py-2.5 text-left transition-colors hover:bg-gray-50",
+                      "w-full px-3 py-2.5 text-left transition-colors hover:bg-primary-soft",
                       unread && "bg-primary/5",
                     )}
                   >
@@ -176,7 +175,7 @@ export function NotificationBell() {
                         {notification.title}
                       </p>
                       <time
-                        className="shrink-0 text-[11px] font-medium text-muted-foreground"
+                        className="shrink-0 text-sm font-medium text-muted-foreground"
                         dateTime={notification.created_at}
                       >
                         {formatRelative(notification.created_at)}
@@ -185,7 +184,7 @@ export function NotificationBell() {
                     {notification.message ? (
                       <p
                         className={cn(
-                          "mt-0.5 text-xs font-medium leading-snug text-muted-foreground",
+                          "mt-0.5 text-sm font-medium leading-snug text-muted-foreground",
                           unread && "text-foreground/80",
                         )}
                       >
@@ -207,10 +206,8 @@ export function NotificationBell() {
         ref={triggerRef}
         type="button"
         className={cn(
-          "relative inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground",
-          "transition-colors hover:bg-gray-50 hover:text-foreground",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-          open && "bg-gray-50 text-foreground",
+          "toolbar-icon-button relative cursor-pointer",
+          open && "bg-primary-soft text-primary",
         )}
         aria-label={
           unreadCount > 0
@@ -221,7 +218,7 @@ export function NotificationBell() {
         aria-haspopup="dialog"
         onClick={toggleOpen}
       >
-        <Bell className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} aria-hidden="true" />
+        <Bell size={20} weight="bold" aria-hidden="true" />
         {unreadCount > 0 && (
           <span
             className={cn(

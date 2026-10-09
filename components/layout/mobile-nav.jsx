@@ -3,32 +3,13 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/brand-logo";
-import { X } from "lucide-react";
-import {
-  LayoutDashboard,
-  Mic,
-  CalendarDays,
-  CreditCard,
-  Users,
-  Syringe,
-  Settings,
-} from "lucide-react";
+import { X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { NAV_ITEMS } from "@/lib/constants";
 import { filterNavItems } from "@/lib/specialization-nav";
-import { ICON_SIZE_NAV, ICON_STROKE } from "@/lib/icons";
 import { Badge } from "@/components/ui/badge";
 import { useUser } from "@/hooks/use-user";
-
-const ICON_MAP = {
-  LayoutDashboard,
-  Mic,
-  CalendarDays,
-  CreditCard,
-  Users,
-  Syringe,
-  Settings,
-};
+import { DashboardNavIcon } from "@/components/layout/dashboard-nav-icons.jsx";
 
 export function MobileNav({ open, onClose }) {
   const pathname = usePathname();
@@ -40,21 +21,25 @@ export function MobileNav({ open, onClose }) {
   return (
     <div className="fixed inset-0 z-50 lg:hidden">
       <div className="fixed inset-0 bg-black/50 glass" onClick={onClose} />
-      <div className="fixed inset-y-0 left-0 w-[280px] bg-background text-foreground shadow-sm animate-in slide-in-from-left">
-        <div className="flex items-center justify-between border-b border-border px-4 py-4">
-          <BrandLogo size="md" />
+      <div
+        className="fixed inset-y-0 left-0 w-[280px] animate-in slide-in-from-left bg-sidebar-background text-sidebar-foreground shadow-clinical"
+        style={{ boxShadow: "var(--sidebar-shadow)" }}
+      >
+        <div className="flex items-center justify-between border-b border-sidebar-border bg-card px-4 py-4">
+          <BrandLogo size="md" variant="shell" />
           <button
+            type="button"
             onClick={onClose}
-            className="rounded-lg p-2 text-muted-foreground hover:bg-primary-soft hover:text-primary"
+            className="toolbar-icon-button cursor-pointer"
+            aria-label="Close menu"
           >
-            <X className={ICON_SIZE_NAV} strokeWidth={ICON_STROKE} />
+            <X size={20} weight="bold" aria-hidden />
           </button>
         </div>
 
         <nav className="p-3">
           <ul className="flex flex-col gap-1">
             {visibleNavItems.map((item) => {
-              const Icon = ICON_MAP[item.icon];
               const isActive =
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href));
@@ -65,28 +50,24 @@ export function MobileNav({ open, onClose }) {
                     href={item.href}
                     onClick={onClose}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2 text-body font-medium transition-colors",
+                      "group flex h-11 items-center gap-3 rounded-xl px-3 text-nav font-semibold transition-colors",
                       isActive
-                        ? "bg-primary-soft text-primary"
-                        : "text-muted-foreground hover:bg-primary-soft hover:text-primary"
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:bg-primary-soft hover:text-primary",
                     )}
                   >
-                    {Icon && (
-                      <Icon
-                        className={cn(
-                          ICON_SIZE_NAV,
-                          isActive
-                            ? "text-primary"
-                            : "text-muted-foreground"
-                        )}
-                        strokeWidth={ICON_STROKE}
-                      />
-                    )}
+                    <DashboardNavIcon
+                      iconKey={item.icon}
+                      active={isActive}
+                      className={cn(
+                        isActive ? "text-primary-foreground" : "text-icon-muted group-hover:text-primary",
+                      )}
+                    />
                     <span className="flex-1">{item.title}</span>
                     {item.badge && (
                       <Badge
-                        variant="accent"
-                        className="h-5 px-2 text-caption font-semibold"
+                        variant={item.badge === "AI" ? "ai" : "accent"}
+                        className="h-6 px-2.5 text-caption font-bold"
                       >
                         {item.badge}
                       </Badge>

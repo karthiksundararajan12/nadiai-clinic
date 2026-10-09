@@ -12,7 +12,8 @@ const badgeVariants = cva(
         outline: "border-border bg-card text-foreground",
         success: "border-status-confirmed-border bg-status-confirmed-bg text-status-confirmed",
         warning: "border-status-pending-border bg-status-pending-bg text-status-pending",
-        accent: "border-primary/20 bg-primary-soft text-primary",
+        accent: "border-primary/20 bg-primary-soft text-primary font-semibold",
+        ai: "border-transparent bg-accent/15 text-accent font-bold",
       },
     },
     defaultVariants: {

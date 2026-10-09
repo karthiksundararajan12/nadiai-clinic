@@ -1,8 +1,7 @@
 "use client";
 
-import { Search, X } from "lucide-react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { ICON_SIZE_MD, ICON_SIZE_SM, ICON_STROKE } from "@/lib/icons";
 
 export function SearchInput({
   value,
@@ -14,9 +13,11 @@ export function SearchInput({
 }) {
   return (
     <div className={cn("relative", className)} title={title}>
-      <Search
-        className={`absolute left-3 top-1/2 ${ICON_SIZE_MD} -translate-y-1/2 text-muted-foreground`}
-        strokeWidth={ICON_STROKE}
+      <MagnifyingGlass
+        size={18}
+        weight="bold"
+        className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-icon-muted"
+        aria-hidden
       />
       <input
         type="text"
@@ -27,16 +28,18 @@ export function SearchInput({
         title={title}
         aria-disabled={disabled || undefined}
         className={cn(
-          "h-8 w-full rounded-lg border border-input bg-transparent pl-8 pr-8 text-body font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 focus-visible:border-ring",
+          "h-10 w-full rounded-[var(--radius)] border border-input bg-card pl-10 pr-10 text-body font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:border-primary",
           disabled && "cursor-not-allowed opacity-60",
         )}
       />
       {value && !disabled && (
         <button
+          type="button"
           onClick={() => onChange("")}
-          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+          className="absolute right-3 top-1/2 -translate-y-1/2 text-icon-muted transition-colors hover:text-foreground"
+          aria-label="Clear search"
         >
-          <X className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
+          <X size={16} weight="bold" aria-hidden />
         </button>
       )}
     </div>

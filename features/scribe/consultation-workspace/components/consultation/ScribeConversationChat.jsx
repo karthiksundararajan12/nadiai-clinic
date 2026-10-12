@@ -20,7 +20,7 @@ function WaveformBars({ animated = false, live = false }) {
   return (
     <div
       className={cn(
-        "flex items-center justify-center gap-1 rounded-lg px-4",
+        "flex max-w-full items-center justify-center gap-1 overflow-hidden rounded-lg px-4",
         live ? "h-16 bg-[color:var(--scribe-indigo-50)]" : "h-12 bg-[color:var(--scribe-indigo-50)]",
       )}
       aria-hidden
@@ -52,18 +52,18 @@ function ConversationHeading({ isLiveRecording, hasPatient }) {
   const standby = hasPatient ? "Standby (00:00)" : "Collapsed (Inactive)";
 
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="flex items-center gap-2.5 text-sm font-bold text-[color:var(--scribe-heading)]">
-        <span className="scribe-icon-tile h-9 w-9 shrink-0">
+    <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 sm:gap-3">
+      <p className="flex min-w-0 items-center gap-2.5 text-sm font-bold break-words text-[color:var(--scribe-heading)] min-[1920px]:text-lg">
+        <span className="scribe-icon-tile h-9 w-9 shrink-0 min-[1920px]:h-11 min-[1920px]:w-11">
           <Waveform size={22} weight="duotone" className="scribe-icon" aria-hidden />
         </span>
         {isLiveRecording && (
           <span className="h-2 w-2 shrink-0 rounded-full bg-red-600" aria-hidden />
         )}
-        {title}
+        <span className="min-w-0 break-words">{title}</span>
       </p>
       {!isLiveRecording && (
-        <p className="scribe-text-muted text-sm font-medium">{standby}</p>
+        <p className="scribe-text-muted shrink-0 text-sm font-medium">{standby}</p>
       )}
     </div>
   );
@@ -123,12 +123,12 @@ export function ScribeConversationChat({
 
   if (loading) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col gap-3 bg-[color:var(--scribe-card-bg)] px-4 py-4 text-left">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[color:var(--scribe-card-bg)] px-4 py-4 text-left min-[1920px]:gap-4 min-[1920px]:px-6 min-[1920px]:py-6">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
         <WaveformBars />
-        <div className="flex items-center justify-center gap-2 py-4 text-center">
-          <CircleNotch size={20} weight="bold" className="animate-spin scribe-icon" />
-          <p className="scribe-text-muted text-sm font-medium">{loadingMessage ?? "Processing conversation…"}</p>
+        <div className="flex min-w-0 items-center justify-center gap-2 py-4 text-center">
+          <CircleNotch size={20} weight="bold" className="animate-spin scribe-icon shrink-0" />
+          <p className="scribe-text-muted min-w-0 break-words text-sm font-medium min-[1920px]:text-lg">{loadingMessage ?? "Processing conversation…"}</p>
         </div>
       </div>
     );
@@ -137,13 +137,13 @@ export function ScribeConversationChat({
   if (!segments.length) {
     return (
       <div
-        className="flex min-h-0 flex-1 flex-col gap-3 bg-[color:var(--scribe-card-bg)] px-4 py-4"
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[color:var(--scribe-card-bg)] px-4 py-4 min-[1920px]:gap-4 min-[1920px]:px-6 min-[1920px]:py-6"
         data-testid="conversation-placeholder"
       >
         <ConversationHeading isLiveRecording={isLiveRecording} hasPatient={hasPatient} />
         <WaveformBars animated={animateWaveform} live={isLiveRecording} />
         {isLiveRecording ? (
-          <p className="scribe-text-muted text-sm font-medium">
+          <p className="scribe-text-muted break-words text-sm font-medium min-[1920px]:text-lg">
             Transcript will appear here once you stop recording.
           </p>
         ) : null}
@@ -152,12 +152,12 @@ export function ScribeConversationChat({
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-[color:var(--scribe-card-bg)]" data-testid="transcript-review-workspace">
-      <div className="shrink-0 border-b border-[color:var(--scribe-card-border)] px-4 py-3">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--scribe-card-bg)]" data-testid="transcript-review-workspace">
+      <div className="shrink-0 border-b border-[color:var(--scribe-card-border)] px-4 py-3 min-[1920px]:px-6 min-[1920px]:py-4">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
-        <div className="space-y-3">
+      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 min-[1920px]:px-5 min-[1920px]:py-5">
+        <div className="space-y-3 min-[1920px]:space-y-4">
           {visibleSegments.map((segment) => {
             const doctor = isDoctor(segment);
             const label = speakerLabel(segment);
@@ -169,44 +169,44 @@ export function ScribeConversationChat({
                 key={segment.id}
                 id={`chat-segment-${segment.id}`}
                 className={cn(
-                  "scribe-card rounded-lg px-3 py-2 transition-all duration-300",
+                  "scribe-card min-w-0 overflow-hidden rounded-lg px-3 py-2 transition-all duration-300 min-[1920px]:px-4 min-[1920px]:py-3",
                   isHighlighted && "animate-evidence-pulse ring-2 ring-[color:var(--scribe-indigo-100)] ring-offset-2",
                   !included && "opacity-50",
                 )}
               >
-                <div className="mb-1 flex items-baseline justify-between gap-2">
+                <div className="mb-1 flex min-w-0 items-baseline justify-between gap-2">
                   <p
                     className={cn(
-                      "text-sm font-bold uppercase tracking-wide",
+                      "min-w-0 truncate text-sm font-bold uppercase tracking-wide min-[1920px]:text-base",
                       doctor ? "text-[color:var(--scribe-indigo-600)]" : "scribe-text-muted",
                     )}
                   >
                     {label}
                   </p>
-                  <span className="scribe-text-muted font-mono text-sm tabular-nums font-medium">
+                  <span className="scribe-text-muted shrink-0 font-mono text-sm font-medium tabular-nums">
                     {isInterim ? "draft" : formatTimestamp(segment.start_seconds ?? segment.start)}
                   </span>
                 </div>
                 <div
                   className={cn(
-                    "text-sm font-medium leading-relaxed",
+                    "min-w-0 text-sm font-medium leading-relaxed min-[1920px]:text-lg",
                     included ? "text-[color:var(--scribe-heading)]" : "scribe-text-muted",
                     isInterim && "italic scribe-text-muted",
                   )}
                   data-testid={isInterim ? "live-interim-transcript" : undefined}
                 >
-                  <p className={cn("whitespace-pre-wrap", isInterim && "italic scribe-text-muted")}>
+                  <p className={cn("break-words whitespace-pre-wrap", isInterim && "italic scribe-text-muted")}>
                     {segment.text}
                   </p>
                 </div>
                 {!isInterim && (
-                  <div className="mt-2 flex items-center justify-end gap-3">
+                  <div className="mt-2 flex flex-col items-stretch gap-1 sm:flex-row sm:items-center sm:justify-end sm:gap-3">
                     <button
                       type="button"
                       aria-pressed={included}
                       data-testid={`include-in-note-${segment.id}`}
                       className={cn(
-                        "cursor-pointer text-sm font-semibold",
+                        "inline-flex min-h-11 cursor-pointer items-center justify-center text-sm font-semibold sm:justify-end min-[1920px]:text-lg",
                         included ? "text-[color:var(--scribe-indigo-600)]" : "scribe-text-muted",
                       )}
                       onClick={() => {
@@ -222,7 +222,7 @@ export function ScribeConversationChat({
                     <button
                       type="button"
                       data-testid={`delete-turn-${segment.id}`}
-                      className="scribe-text-muted cursor-pointer text-sm font-semibold hover:text-[color:var(--scribe-heading)]"
+                      className="scribe-text-muted inline-flex min-h-11 cursor-pointer items-center justify-center text-sm font-semibold hover:text-[color:var(--scribe-heading)] sm:justify-end min-[1920px]:text-lg"
                       onClick={() => {
                         setSelection({
                           key: segmentKey,

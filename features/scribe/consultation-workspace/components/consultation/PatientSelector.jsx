@@ -81,7 +81,7 @@ function patientIdTag(patient) {
 function StatusBadge({ lockSelection, hasPatient }) {
   if (lockSelection) {
     return (
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-semibold text-emerald-800">
+      <span className="inline-flex max-w-full shrink-0 items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-sm font-semibold break-words text-emerald-800 min-[1920px]:text-base">
         <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" aria-hidden />
         Consultation Locked
       </span>
@@ -89,13 +89,13 @@ function StatusBadge({ lockSelection, hasPatient }) {
   }
   if (hasPatient) {
     return (
-      <span className="shrink-0 rounded-full bg-[color:var(--scribe-indigo-50)] px-2.5 py-1 text-sm font-bold text-[color:var(--scribe-indigo-600)]">
+      <span className="shrink-0 rounded-full bg-[color:var(--scribe-indigo-50)] px-2.5 py-1 text-sm font-bold text-[color:var(--scribe-indigo-600)] min-[1920px]:text-base">
         Selected
       </span>
     );
   }
   return (
-    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-900">
+    <span className="shrink-0 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-900 min-[1920px]:text-base">
       Required
     </span>
   );
@@ -186,28 +186,28 @@ export function PatientSelector({
         : "No active appointments to consult";
 
   const languageBlock = languageToggle ? (
-    <div className="mt-4 space-y-2 border-t border-[color:var(--scribe-card-border)] pt-4">
-      <div className="flex items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm font-bold text-[color:var(--scribe-heading)]">
-          <Globe size={20} weight="duotone" className="scribe-icon" aria-hidden />
+    <div className="mt-4 space-y-2 border-t border-[color:var(--scribe-card-border)] pt-4 min-[1920px]:mt-6 min-[1920px]:pt-6">
+      <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">
+          <Globe size={20} weight="duotone" className="scribe-icon shrink-0" aria-hidden />
           Consultation Language
         </p>
         {lockSelection ? (
           <span className="scribe-text-muted inline-flex items-center gap-1 text-sm font-medium">
-            <Lock size={16} weight="bold" className="scribe-icon" aria-hidden />
+            <Lock size={16} weight="bold" className="scribe-icon shrink-0" aria-hidden />
             Locked during capture
           </span>
         ) : null}
       </div>
-      {languageToggle}
+      <div className="min-w-0 w-full">{languageToggle}</div>
     </div>
   ) : null;
 
   return (
-    <div className={cn("w-full bg-[color:var(--scribe-card-bg)] px-4 py-4", className)} data-testid={patient ? "scribe-patient-header" : undefined}>
-      <div className="mb-3 flex items-center justify-between gap-3">
-        <p className="flex items-center gap-2.5 text-sm font-bold text-[color:var(--scribe-heading)]">
-          <span className="scribe-icon-tile h-9 w-9">
+    <div className={cn("w-full min-w-0 bg-[color:var(--scribe-card-bg)] px-4 py-4 md:px-5 min-[1920px]:px-6 min-[1920px]:py-6", className)} data-testid={patient ? "scribe-patient-header" : undefined}>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+        <p className="flex min-w-0 items-center gap-2.5 text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">
+          <span className="scribe-icon-tile h-9 w-9 shrink-0 min-[1920px]:h-11 min-[1920px]:w-11">
             <User size={22} weight="duotone" className="scribe-icon" aria-hidden />
           </span>
           Patient
@@ -218,19 +218,17 @@ export function PatientSelector({
       <div className="flex flex-col">
         {patient ? (
           <div className={cn(
-            "flex items-center gap-3 rounded-lg border px-3 py-3",
-            lockSelection
-              ? "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)]"
-              : "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)]",
+            "flex min-w-0 flex-wrap items-center gap-3 rounded-lg border px-3 py-3 sm:flex-nowrap",
+            "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)]",
           )}>
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-sm font-bold text-white">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-sm font-bold text-white min-[1920px]:h-12 min-[1920px]:w-12 min-[1920px]:text-base">
               {initials(patient.name)}
             </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex min-w-0 items-center gap-2">
-                <p className="truncate text-sm font-bold text-[color:var(--scribe-heading)]">{patient.name}</p>
+            <div className="min-w-0 flex-1 basis-[10rem]">
+              <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
+                <p className="min-w-0 max-w-full truncate text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">{patient.name}</p>
                 {patientIdTag(patient) ? (
-                  <span className="shrink-0 rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-1.5 py-0.5 font-mono text-sm font-semibold text-[color:var(--scribe-indigo-600)]">
+                  <span className="max-w-full truncate rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-1.5 py-0.5 font-mono text-sm font-semibold text-[color:var(--scribe-indigo-600)]">
                     {patientIdTag(patient)}
                   </span>
                 ) : null}
@@ -240,14 +238,14 @@ export function PatientSelector({
               ) : null}
             </div>
             {lockSelection ? (
-              <span className="scribe-text-muted inline-flex shrink-0 items-center gap-1 rounded-md bg-[color:var(--scribe-card-bg)] px-2 py-1 text-sm font-semibold">
+              <span className="scribe-text-muted inline-flex min-h-11 shrink-0 items-center gap-1 rounded-md bg-[color:var(--scribe-card-bg)] px-2 py-1 text-sm font-semibold">
                 <Lock size={16} weight="bold" className="scribe-icon" aria-hidden />
                 Locked
               </span>
             ) : (
               <button
                 type="button"
-                className="shrink-0 cursor-pointer text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline"
+                className="inline-flex min-h-11 shrink-0 cursor-pointer items-center text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline min-[1920px]:text-lg"
                 onClick={onClear}
               >
                 Change
@@ -256,8 +254,8 @@ export function PatientSelector({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col">
-            <div className="flex items-center gap-2">
-              <div className="relative min-w-0 flex-1">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              <div className="relative min-w-0 w-full flex-1">
                 <MagnifyingGlass
                   size={18}
                   weight="bold"
@@ -272,7 +270,7 @@ export function PatientSelector({
                   aria-label="Select patient to start consultation"
                   aria-busy={loading || undefined}
                   className={cn(
-                    "h-10 w-full appearance-none rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-9 pr-8 text-sm font-medium text-[color:var(--scribe-heading)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
+                    "h-11 min-h-11 w-full min-w-0 appearance-none truncate rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-9 pr-8 text-base font-medium text-[color:var(--scribe-heading)] transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)] min-[1920px]:h-12 min-[1920px]:min-h-12 min-[1920px]:text-lg",
                     selectDisabled
                       ? loading
                         ? "cursor-wait opacity-70"
@@ -300,7 +298,7 @@ export function PatientSelector({
                 type="button"
                 variant="secondary"
                 size="sm"
-                className="shrink-0 cursor-pointer gap-1.5 border-transparent bg-[color:var(--scribe-indigo-50)] text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)]"
+                className="h-11 min-h-11 w-full shrink-0 cursor-pointer gap-1.5 border-transparent bg-[color:var(--scribe-indigo-50)] text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)] sm:w-auto min-[1920px]:h-12 min-[1920px]:min-h-12 min-[1920px]:text-lg"
                 data-testid="scribe-create-patient"
                 onClick={() => setShowCreate(true)}
               >
@@ -311,37 +309,37 @@ export function PatientSelector({
             </div>
 
             {loadError && (
-              <p className="mt-2 text-sm font-medium text-destructive" data-testid="scribe-patient-select-error">
+              <p className="mt-2 break-words text-sm font-medium text-destructive" data-testid="scribe-patient-select-error">
                 Couldn&apos;t load appointments. {loadError.message}{" "}
-                <button type="button" className="underline" onClick={() => void loadEligible()}>
+                <button type="button" className="inline-flex min-h-11 items-center underline" onClick={() => void loadEligible()}>
                   Retry
                 </button>
               </p>
             )}
 
-            <p className="mb-2 mt-4 text-sm font-bold uppercase tracking-wide text-[color:var(--scribe-heading)]">
+            <p className="mb-2 mt-4 text-sm font-bold uppercase tracking-wide text-[color:var(--scribe-heading)] min-[1920px]:text-base">
               Today&apos;s appointments ({options.length})
             </p>
             {hasEligible ? (
-              <ul className="max-h-40 space-y-2 overflow-y-auto">
+              <ul className="max-h-40 space-y-2 overflow-x-hidden overflow-y-auto md:max-h-52 lg:max-h-48 min-[1920px]:max-h-72">
                 {options.map((opt) => (
-                  <li key={opt.appointment_id}>
+                  <li key={opt.appointment_id} className="min-w-0">
                     <button
                       type="button"
-                      className="flex w-full cursor-pointer items-center gap-3 rounded-lg border border-[color:var(--scribe-card-border)] px-2 py-2 text-left hover:bg-[color:var(--scribe-indigo-50)]"
+                      className="flex min-h-11 w-full min-w-0 cursor-pointer items-center gap-3 overflow-hidden rounded-lg border border-[color:var(--scribe-card-border)] px-2 py-2 text-left hover:bg-[color:var(--scribe-indigo-50)]"
                       onClick={() => onSelect?.(opt)}
                     >
                       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-100)] text-sm font-bold text-[color:var(--scribe-indigo-600)]">
                         {initials(opt.name)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-bold text-[color:var(--scribe-heading)]">{opt.name}</span>
+                        <span className="block truncate text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">{opt.name}</span>
                         {appointmentMeta(opt) ? (
                           <span className="scribe-text-muted block truncate text-sm font-medium">{appointmentMeta(opt)}</span>
                         ) : null}
                       </span>
                       {slotTimeLabel(opt) ? (
-                        <span className="scribe-text-muted shrink-0 text-sm font-semibold">
+                        <span className="scribe-text-muted max-w-[40%] shrink-0 truncate text-sm font-semibold">
                           {slotTimeLabel(opt)}
                         </span>
                       ) : null}
@@ -350,7 +348,7 @@ export function PatientSelector({
                 ))}
               </ul>
             ) : !loading && !loadError ? (
-              <p className="scribe-text-muted text-sm font-medium">No active appointments to consult</p>
+              <p className="scribe-text-muted break-words text-sm font-medium">No active appointments to consult</p>
             ) : null}
           </div>
         )}

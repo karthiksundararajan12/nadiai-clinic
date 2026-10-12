@@ -623,46 +623,68 @@ export function ScribeWorkflow() {
   return (
     <div
       className={cn(
-        "relative flex h-full min-h-0 flex-col",
+        "relative flex h-dvh max-h-dvh min-h-dvh w-full min-w-0 flex-col overflow-hidden",
+        "min-[1920px]:text-lg",
         scribePageFont.variable,
       )}
       data-testid="scribe-workflow"
     >
+      <div
+        className={cn(
+          "mx-auto flex h-full min-h-0 w-full min-w-0 max-w-full flex-1 flex-col overflow-visible lg:overflow-hidden",
+          "sm:max-w-2xl lg:max-w-none xl:max-w-7xl min-[1920px]:max-w-[1600px]",
+        )}
+      >
       <Header
         title="AI Scribe"
         subtitle="Record the consultation, review the SOAP note"
         showClock={false}
         actions={
           <HeaderToolbarButton
-            className="gap-2 px-3"
+            className="h-11 min-h-11 !w-auto min-w-11 shrink-0 gap-2 px-3 min-[1920px]:h-12 min-[1920px]:min-h-12 min-[1920px]:px-4 min-[1920px]:text-lg"
+            aria-label="Past sessions"
             onClick={() => setSessionsOpen(true)}
           >
-            <ClockCounterClockwise size={20} weight="bold" className="text-primary" />
-            Past sessions
+            <ClockCounterClockwise size={20} weight="bold" className="shrink-0 text-primary" />
+            <span className="hidden sm:inline">Past sessions</span>
           </HeaderToolbarButton>
         }
       />
       {appointmentPrefillLoading && (
-        <p className="border-b border-[color:var(--scribe-card-border)] bg-amber-50 px-6 py-2 text-sm font-medium text-amber-900">
+        <p className="break-words border-b border-[color:var(--scribe-card-border)] bg-amber-50 px-4 py-2 text-base font-medium text-amber-900 sm:px-6 min-[1920px]:px-8 min-[1920px]:text-lg">
           Loading appointment details…
         </p>
       )}
       {appointmentPrefillError && (
-        <p className="border-b border-[color:var(--scribe-card-border)] bg-destructive/5 px-6 py-2 text-sm font-medium text-destructive">
+        <p className="break-words border-b border-[color:var(--scribe-card-border)] bg-destructive/5 px-4 py-2 text-base font-medium text-destructive sm:px-6 min-[1920px]:px-8 min-[1920px]:text-lg">
           {appointmentPrefillError.message}
         </p>
       )}
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4 lg:overflow-hidden lg:p-6">
-        <ScribeWorkflowStepper
-          activeIndex={resolveScribeWorkflowStepIndex({
-            recordState,
-            sessionStatus: workspaceState.status,
-            pipelineBusy,
-          })}
-          liveRecording={recordState === "recording" || recordState === "paused"}
-        />
-        <div className="grid grid-cols-1 items-stretch gap-4 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
-          <div className="flex h-full min-h-[36rem] min-w-0 flex-col lg:min-h-0">
+      <div
+        className={cn(
+          "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-visible px-4 py-4 lg:overflow-hidden",
+          "md:gap-5 lg:gap-6 lg:px-6 lg:py-6",
+          "min-[1920px]:gap-8 min-[1920px]:px-8 min-[1920px]:py-8",
+          !manualInputMode &&
+            (isRecordingLive
+              ? "max-lg:pb-[calc(15rem+env(safe-area-inset-bottom))]"
+              : activeSessionId
+                ? "max-lg:pb-[calc(13rem+env(safe-area-inset-bottom))]"
+                : "max-lg:pb-[calc(10rem+env(safe-area-inset-bottom))]"),
+        )}
+      >
+        <div className="w-full min-w-0 overflow-hidden">
+          <ScribeWorkflowStepper
+            activeIndex={resolveScribeWorkflowStepIndex({
+              recordState,
+              sessionStatus: workspaceState.status,
+              pipelineBusy,
+            })}
+            liveRecording={recordState === "recording" || recordState === "paused"}
+          />
+        </div>
+        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-visible md:gap-5 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-stretch lg:gap-6 lg:overflow-hidden min-[1920px]:gap-8">
+          <div className="flex min-h-0 min-w-0 flex-[1.25] flex-col overflow-visible lg:h-full lg:flex-none lg:overflow-hidden">
             <ScribeRecordPanel
               recordState={recordState}
               durationLabel={recording.formattedDuration}
@@ -717,14 +739,27 @@ export function ScribeWorkflow() {
             </ScribeRecordPanel>
           </div>
 
-          <main className="scribe-card flex h-full min-h-[36rem] min-w-0 flex-col overflow-hidden rounded-xl lg:min-h-0">
-            <div className="min-h-0 flex-1">{rightPanel}</div>
+          <main className="scribe-card flex min-h-[9rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl lg:h-full lg:min-h-0">
+            <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
           </main>
         </div>
       </div>
+      </div>
 
       {uploadError && (
-        <div className="absolute bottom-4 left-1/2 z-30 w-full max-w-md -translate-x-1/2 px-4">
+        <div
+          className={cn(
+            "fixed inset-x-0 z-40 mx-auto w-full max-w-md px-4",
+            manualInputMode
+              ? "bottom-[max(1rem,env(safe-area-inset-bottom))]"
+              : isRecordingLive
+                ? "bottom-[calc(15.25rem+env(safe-area-inset-bottom))]"
+                : activeSessionId
+                  ? "bottom-[calc(13.25rem+env(safe-area-inset-bottom))]"
+                  : "bottom-[calc(10.25rem+env(safe-area-inset-bottom))]",
+            "lg:absolute lg:bottom-4 lg:left-1/2 lg:z-30 lg:mx-0 lg:w-full lg:-translate-x-1/2",
+          )}
+        >
           <UploadErrorBanner
             error={uploadError}
             onDismiss={() => setUploadError(null)}
@@ -760,15 +795,15 @@ function UploadErrorBanner({ error, onDismiss, onRelease }) {
     /already active/i.test(error?.message ?? "");
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white px-4 py-3 text-center space-y-2 shadow-lg">
-      <p className="text-[13px] text-red-600">{error.message}</p>
-      <div className="flex justify-center gap-2">
+    <div className="space-y-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-center shadow-lg">
+      <p className="break-words text-base text-red-600 sm:text-sm">{error.message}</p>
+      <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
         {isBlocked && (
-          <Button type="button" variant="outline" size="sm" className="cursor-pointer" onClick={onRelease}>
+          <Button type="button" variant="outline" size="sm" className="min-h-11 w-full cursor-pointer sm:w-auto min-[1920px]:min-h-12 min-[1920px]:text-lg" onClick={onRelease}>
             Clear stuck session
           </Button>
         )}
-        <Button type="button" variant="ghost" size="sm" className="cursor-pointer" onClick={onDismiss}>
+        <Button type="button" variant="ghost" size="sm" className="min-h-11 w-full cursor-pointer sm:w-auto min-[1920px]:min-h-12 min-[1920px]:text-lg" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>

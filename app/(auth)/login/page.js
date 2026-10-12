@@ -1,31 +1,24 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { BrandLogo } from "@/components/brand-logo";
-import { Shield, Mic, CalendarDays, ArrowRight, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Eye, EyeOff, FileText, Loader2, MessageCircle, Mic } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
 
-const FEATURES = [
-  {
-    icon: Mic,
-    title: "AI Scribe",
-    desc: "Hinglish voice transcription with auto clinical notes",
-  },
-  {
-    icon: CalendarDays,
-    title: "Smart Scheduling",
-    desc: "Manage appointments and patient visits in one place",
-  },
-  {
-    icon: Shield,
-    title: "DPDP Aligned",
-    desc: "Built to align with India's DPDP Act 2023",
-  },
+const BENEFITS = [
+  { icon: MessageCircle, label: "WhatsApp booking" },
+  { icon: Mic, label: "AI scribe with doctor approval" },
+  { icon: FileText, label: "Prescriptions in one tap" },
 ];
 
 function GoogleIcon() {
   return (
-    <svg viewBox="0 0 24 24" width="20" height="20">
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden>
       <path
         d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
         fill="#4285F4"
@@ -46,9 +39,20 @@ function GoogleIcon() {
   );
 }
 
+function fieldErrorId(name) {
+  return `${name}-error`;
+}
+
 export default function LoginPage() {
   const [loading, setLoading] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const busy = loading || emailLoading;
 
   // OAuth leaves this page via full navigation. If the user returns via
   // back/forward cache (or the redirect never fires), React state can still
@@ -96,137 +100,220 @@ export default function LoginPage() {
     }
   };
 
+  const handleEmailSignIn = async (event) => {
+    event.preventDefault();
+    const nextErrors = {};
+    const trimmed = email.trim();
+    if (!trimmed) nextErrors.email = "Enter your email.";
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      nextErrors.email = "Enter a valid email address.";
+    }
+    if (!password) nextErrors.password = "Enter your password.";
+    setFieldErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
+
+    setEmailLoading(true);
+    setError(null);
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const signIn = supabase.auth.signInWithPassword;
+      if (typeof signIn !== "function") {
+        throw new Error("Sign-in failed. Please try again.");
+      }
+      const { error: signInError } = await signIn.call(supabase.auth, {
+        email: trimmed,
+        password,
+      });
+      if (signInError) throw signInError;
+      window.location.assign("/");
+    } catch (err) {
+      setError(err.message || "Sign-in failed. Please try again.");
+      setEmailLoading(false);
+    }
+  };
+
   return (
-    <div className="flex min-h-screen">
-      {/* Left panel — branding */}
-      <div className="relative hidden w-1/2 lg:flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#1a1035] via-[#2a1f5c] to-[#150d2e] p-12 text-white">
-        <div className="absolute inset-0 opacity-[0.03]" style={{
-          backgroundImage: `radial-gradient(circle at 1px 1px, white 1px, transparent 0)`,
-          backgroundSize: '40px 40px',
-        }} />
-        <div className="absolute -bottom-32 -right-32 h-96 w-96 rounded-full bg-primary/10 blur-3xl" />
-        <div className="absolute -top-20 -left-20 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
-
-        <div className="relative z-10">
-          <BrandLogo
-            size="xl"
-            onDark
-            textClassName="text-white text-2xl"
-            priority
-          />
-        </div>
-
-        <div className="relative z-10 max-w-md">
-          <h2 className="text-4xl font-bold leading-[1.15] tracking-tight mb-6">
-            The AI assistant
-            <br />
-            <span className="text-[#c5c3f0]">doctors trust</span>
-          </h2>
-          <p className="text-base text-white/75 leading-relaxed mb-10">
-            Transform your practice with AI-powered clinical documentation
-            and seamless patient management — all in Hinglish.
-          </p>
-
-          <div className="space-y-5">
-            {FEATURES.map((f, i) => (
-              <div key={i} className="flex items-start gap-4">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white/30 border border-white/60">
-                  <f.icon className="h-5 w-5 text-white" strokeWidth={2.25} />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-white">
-                    {f.title}
-                  </p>
-                  <p className="text-sm text-white/75 mt-0.5">{f.desc}</p>
-                </div>
-              </div>
-            ))}
+    <div className="min-h-dvh bg-background text-foreground 2xl:text-lg">
+      <div className="mx-auto flex min-h-dvh w-full flex-col lg:max-w-6xl lg:flex-row lg:px-6 lg:py-8 2xl:max-w-[1600px] 2xl:px-8 2xl:py-10">
+        <aside className="hidden flex-col justify-between bg-primary px-10 py-12 text-primary-foreground lg:flex lg:w-[45%] lg:rounded-l-2xl 2xl:px-14 2xl:py-16">
+          <BrandLogo size="xl" onDark textClassName="text-primary-foreground text-2xl 2xl:text-3xl" priority />
+          <div className="max-w-md">
+            <h1 className="font-display text-4xl font-bold leading-[1.15] tracking-tight text-primary-foreground 2xl:text-5xl">
+              Run your clinic on WhatsApp.
+            </h1>
+            <ul className="mt-8 space-y-4 2xl:mt-10 2xl:space-y-5">
+              {BENEFITS.map((item) => (
+                <li key={item.label} className="flex items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary-foreground/15">
+                    <item.icon className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+                  </span>
+                  <span className="text-base font-semibold 2xl:text-lg">{item.label}</span>
+                </li>
+              ))}
+            </ul>
           </div>
-        </div>
-
-        <div className="relative z-10 border-t border-white/20 pt-6">
-          <p className="text-xs font-medium text-white/65">
-            Built for Indian outpatient clinics
+          <p className="border-t border-primary-foreground/25 pt-6 text-sm font-medium text-primary-foreground/80 2xl:text-base">
+            DPDP Act 2023 compliant
           </p>
-        </div>
-      </div>
+        </aside>
 
-      {/* Right panel — login form */}
-      <div className="flex flex-1 flex-col items-center justify-center px-6 py-12 bg-background">
-        <div className="w-full max-w-[400px]">
-          {/* Mobile logo */}
-          <div className="mb-10 flex justify-center lg:hidden">
+        <main className="flex flex-1 flex-col justify-center px-4 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:items-center lg:w-[55%] lg:rounded-r-2xl lg:border lg:border-l-0 lg:border-border lg:bg-card lg:px-12 lg:py-10 2xl:px-16">
+          <div className="mb-8 w-full sm:max-w-md lg:hidden">
             <BrandLogo size="lg" priority />
+            <h1 className="mt-4 font-display text-2xl font-bold leading-tight tracking-tight text-foreground 2xl:text-3xl">
+              Run your clinic on WhatsApp.
+            </h1>
           </div>
 
-          <div className="mb-8">
-            <h2 className="text-2xl font-bold text-foreground tracking-tight">
-              Welcome back
-            </h2>
-            <p className="text-sm text-muted-foreground mt-2">
-              Sign in to access your clinical dashboard
+          <div className="w-full sm:max-w-md">
+            <div className="mb-6 2xl:mb-8">
+              <h2 className="font-display text-2xl font-bold tracking-tight text-foreground 2xl:text-3xl">
+                Welcome back
+              </h2>
+              <p className="mt-2 text-base text-muted-foreground 2xl:text-lg">
+                Sign in to your clinic dashboard
+              </p>
+            </div>
+
+            {error && (
+              <div
+                className="mb-5 rounded-lg border border-destructive/30 bg-destructive/10 p-3"
+                role="alert"
+                aria-live="assertive"
+              >
+                <p className="text-base font-medium text-destructive 2xl:text-lg">{error}</p>
+              </div>
+            )}
+
+            <Button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={busy}
+              aria-busy={loading || undefined}
+              className="h-11 min-h-11 w-full gap-3 text-base 2xl:h-12 2xl:min-h-12 2xl:text-lg"
+            >
+              {loading ? (
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              ) : (
+                <span className="flex h-6 w-6 items-center justify-center rounded-full bg-card">
+                  <GoogleIcon />
+                </span>
+              )}
+              {loading ? "Signing in..." : "Continue with Google"}
+            </Button>
+
+            <div className="relative my-6 2xl:my-8">
+              <div className="absolute inset-0 flex items-center" aria-hidden>
+                <div className="w-full border-t border-border" />
+              </div>
+              <div className="relative flex justify-center">
+                <span className="bg-background px-3 text-sm text-muted-foreground lg:bg-card 2xl:text-base">
+                  or
+                </span>
+              </div>
+            </div>
+
+            <form className="space-y-4 2xl:space-y-5" onSubmit={handleEmailSignIn} noValidate>
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-base text-foreground 2xl:text-lg">
+                  Email
+                </Label>
+                <Input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  inputMode="email"
+                  spellCheck={false}
+                  value={email}
+                  disabled={busy}
+                  aria-invalid={fieldErrors.email ? true : undefined}
+                  aria-describedby={fieldErrors.email ? fieldErrorId("email") : undefined}
+                  onChange={(event) => {
+                    setEmail(event.target.value);
+                    if (fieldErrors.email) {
+                      setFieldErrors((prev) => ({ ...prev, email: undefined }));
+                    }
+                  }}
+                  className="h-11 min-h-11 text-base 2xl:h-12 2xl:min-h-12 2xl:text-lg"
+                />
+                {fieldErrors.email ? (
+                  <p id={fieldErrorId("email")} className="text-sm font-medium text-destructive 2xl:text-base" role="alert">
+                    {fieldErrors.email}
+                  </p>
+                ) : null}
+              </div>
+
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="password" className="text-base text-foreground 2xl:text-lg">
+                    Password
+                  </Label>
+                  <a
+                    id="forgot-password"
+                    href="#forgot-password"
+                    className="rounded-sm text-sm font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring 2xl:text-base"
+                  >
+                    Forgot password?
+                  </a>
+                </div>
+                <div className="relative">
+                  <Input
+                    id="password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={password}
+                    disabled={busy}
+                    aria-invalid={fieldErrors.password ? true : undefined}
+                    aria-describedby={fieldErrors.password ? fieldErrorId("password") : undefined}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                      if (fieldErrors.password) {
+                        setFieldErrors((prev) => ({ ...prev, password: undefined }));
+                      }
+                    }}
+                    className="h-11 min-h-11 pr-12 text-base 2xl:h-12 2xl:min-h-12 2xl:text-lg"
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-1 top-1/2 inline-flex h-11 min-h-11 w-11 min-w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword((value) => !value)}
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" aria-hidden /> : <Eye className="h-5 w-5" aria-hidden />}
+                  </button>
+                </div>
+                {fieldErrors.password ? (
+                  <p id={fieldErrorId("password")} className="text-sm font-medium text-destructive 2xl:text-base" role="alert">
+                    {fieldErrors.password}
+                  </p>
+                ) : null}
+              </div>
+
+              <Button
+                type="submit"
+                disabled={busy}
+                aria-busy={emailLoading || undefined}
+                className={cn("h-11 min-h-11 w-full text-base 2xl:h-12 2xl:min-h-12 2xl:text-lg")}
+              >
+                {emailLoading ? <Loader2 className="h-5 w-5 animate-spin" aria-hidden /> : null}
+                {emailLoading ? "Signing in..." : "Sign in"}
+              </Button>
+            </form>
+
+            <p className="mt-6 text-center text-base text-muted-foreground 2xl:mt-8 2xl:text-lg">
+              New to Nadi AI?{" "}
+              <Link
+                href="/onboarding"
+                className="font-semibold text-primary underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring rounded-sm"
+              >
+                Request onboarding
+              </Link>
             </p>
           </div>
-
-          {error && (
-            <div className="mb-6 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
-              <p className="text-sm text-destructive">{error}</p>
-            </div>
-          )}
-
-          <button
-            onClick={handleGoogleLogin}
-            disabled={loading}
-            className="group flex w-full items-center justify-center gap-3 rounded-xl border-2 border-gray-400 bg-white px-4 py-3.5 text-sm font-medium text-foreground shadow-sm transition-all hover:border-gray-500 hover:bg-gray-50 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {loading ? (
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-            ) : (
-              <GoogleIcon />
-            )}
-            {loading ? "Signing in..." : "Continue with Google"}
-            {!loading && (
-              <ArrowRight className="h-4 w-4 text-muted-foreground opacity-0 -translate-x-2 transition-all group-hover:opacity-100 group-hover:translate-x-0" />
-            )}
-          </button>
-
-          <div className="relative my-8">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-border" />
-            </div>
-            <div className="relative flex justify-center text-xs">
-              <span className="bg-background px-3 text-muted-foreground">
-                Secure authentication via Supabase
-              </span>
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-border bg-muted/30 p-4">
-            <div className="flex items-start gap-3">
-              <Shield className="h-5 w-5 text-primary shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm font-medium text-foreground">
-                  Your data is secure
-                </p>
-                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
-                  Patient data is encrypted and never sold. Built to align with
-                  India&apos;s DPDP Act 2023.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <p className="mt-8 text-center text-xs text-muted-foreground">
-            By signing in, you agree to our{" "}
-            <a href="#" className="text-primary hover:underline">
-              Terms of Service
-            </a>{" "}
-            and{" "}
-            <a href="#" className="text-primary hover:underline">
-              Privacy Policy
-            </a>
-          </p>
-        </div>
+        </main>
       </div>
     </div>
   );

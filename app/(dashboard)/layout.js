@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
-import { MobileNav } from "@/components/layout/mobile-nav";
+import { DashboardMenuProvider } from "@/components/layout/mobile-nav";
 import { ThemeProvider } from "@/hooks/use-theme";
 import { NotificationsProvider } from "@/hooks/use-notifications";
 import { DoctorProfileSettingsProvider } from "@/hooks/use-doctor-profile-settings";
@@ -10,31 +10,30 @@ import { cn } from "@/lib/utils";
 
 export default function DashboardLayout({ children }) {
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <ThemeProvider>
       <NotificationsProvider>
         <DoctorProfileSettingsProvider>
-          <div className="flex min-h-screen">
-            <div className="hidden lg:block">
-              <Sidebar
-                collapsed={collapsed}
-                onToggle={() => setCollapsed(!collapsed)}
-              />
+          <DashboardMenuProvider>
+            <div className="flex min-h-screen">
+              <div className="hidden lg:block">
+                <Sidebar
+                  collapsed={collapsed}
+                  onToggle={() => setCollapsed(!collapsed)}
+                />
+              </div>
+
+              <main
+                className={cn(
+                  "flex min-h-screen min-w-0 flex-1 flex-col bg-background transition-all duration-300",
+                  collapsed ? "lg:ml-[68px]" : "lg:ml-[260px]",
+                )}
+              >
+                {children}
+              </main>
             </div>
-
-            <MobileNav open={mobileOpen} onClose={() => setMobileOpen(false)} />
-
-            <main
-              className={cn(
-                "flex min-h-screen flex-1 flex-col bg-background transition-all duration-300",
-                collapsed ? "lg:ml-[68px]" : "lg:ml-[260px]",
-              )}
-            >
-              {children}
-            </main>
-          </div>
+          </DashboardMenuProvider>
         </DoctorProfileSettingsProvider>
       </NotificationsProvider>
     </ThemeProvider>

@@ -4,6 +4,7 @@ import { List, Moon, Sun } from "@phosphor-icons/react";
 import { SearchInput } from "@/components/shared/search-input";
 import { Tooltip } from "@/components/ui/tooltip";
 import { NotificationBell } from "@/components/layout/notification-bell";
+import { useDashboardMenu } from "@/components/layout/mobile-nav";
 import { useTheme } from "@/hooks/use-theme";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,8 @@ export function Header({
   actions = null,
 }) {
   const { theme, toggleTheme } = useTheme();
+  const menu = useDashboardMenu();
+  const menuOpen = menu?.open ?? false;
   const [currentTime, setCurrentTime] = useState("");
 
   useEffect(() => {
@@ -34,33 +37,39 @@ export function Header({
     return () => clearInterval(interval);
   }, []);
 
+  const dateLine = [
+    subtitle,
+    showClock && currentTime ? currentTime : null,
+  ].filter(Boolean).join(" · ");
+
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-card px-6">
-      <div className="flex items-center gap-4">
+    <header className="sticky top-0 z-30 flex min-h-14 w-full min-w-0 items-center gap-2 border-b border-border bg-card px-3 py-3 sm:gap-3 sm:px-4 lg:min-h-16 lg:px-6">
+      <div className="shrink-0 lg:hidden">
         <button
+          ref={menu?.menuButtonRef}
           type="button"
-          onClick={onMenuClick}
-          className="toolbar-icon-button cursor-pointer lg:hidden"
-          aria-label="Open menu"
+          id="dashboard-menu-button"
+          onClick={onMenuClick ?? (() => menu?.setOpen((value) => !value))}
+          className="toolbar-icon-button cursor-pointer"
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+          aria-controls="dashboard-nav-drawer"
         >
           <List size={22} weight="bold" aria-hidden />
         </button>
-        <div>
-          <h1 className="type-title">{title}</h1>
-          {subtitle && (
-            <p className="text-sm font-medium text-muted-foreground">
-              {subtitle}
-              {showClock && currentTime && (
-                <span className="ml-2 text-sm font-medium text-muted-foreground">
-                  {currentTime}
-                </span>
-              )}
-            </p>
-          )}
-        </div>
+      </div>
+      <div className="min-w-0 flex-1">
+        <h1 className="break-words font-display text-lg font-extrabold leading-tight text-[color:var(--heading)] sm:text-xl md:text-2xl lg:text-[1.75rem] lg:leading-8">
+          {title}
+        </h1>
+        {dateLine ? (
+          <p className="mt-0.5 break-words text-xs font-medium leading-4 text-muted-foreground">
+            {dateLine}
+          </p>
+        ) : null}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
         {actions}
         {showSearch && (
           <div className="hidden md:block">

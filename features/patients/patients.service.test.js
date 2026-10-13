@@ -28,13 +28,31 @@ const PATIENTS = [
   },
 ];
 
-function createService({ patients = PATIENTS, appointments = [], createResult, vaccinationSeedingService } = {}) {
-  const calls = { findAllForClinic: [], findForClinic: [], create: [] };
+function createService({
+  patients = PATIENTS,
+  appointments = [],
+  createResult,
+  vaccinationSeedingService,
+  contacts = [],
+} = {}) {
+  const calls = { findAllForClinic: [], findForClinic: [], create: [], findByContact: [] };
 
   const patientRepository = {
     async findAllForClinic(clinicId) {
       calls.findAllForClinic.push(clinicId);
       return patients;
+    },
+    async findByContact(clinicId, contactPhone) {
+      calls.findByContact.push({ clinicId, contactPhone });
+      return contacts
+        .filter(
+          (patient) =>
+            patient.clinic_id === clinicId &&
+            patient.contact_phone === contactPhone &&
+            patient.deleted_at == null,
+        )
+        .slice()
+        .sort((a, b) => String(a.created_at ?? "").localeCompare(String(b.created_at ?? "")));
     },
     async create(data) {
       calls.create.push(data);
@@ -46,6 +64,8 @@ function createService({ patients = PATIENTS, appointments = [], createResult, v
           age_years: data.age_years ?? null,
           gender: data.gender ?? null,
           date_of_birth: data.date_of_birth ?? null,
+          consent_given: data.consent_given,
+          consent_given_at: data.consent_given_at,
           created_at: "2026-07-15T10:00:00.000Z",
         }
       );
@@ -145,6 +165,12 @@ test("create writes a validated patient row scoped to the clinic", async () => {
     age_years: 34,
     gender: "Male",
     date_of_birth: null,
+    consent_given: false,
+    consent_given_at: null,
+  });
+  assert.deepEqual(calls.findByContact[0], {
+    clinicId: "clinic-1",
+    contactPhone: "919840227132",
   });
   assert.equal(result.patient.name, "Karthik Sundar");
   assert.equal(result.patient.phone, "+91 9840227132");
@@ -344,4 +370,186 @@ test("listOptions returns id and name for appointment dropdowns", async () => {
     { id: "patient-1", name: "Karthik Sundar" },
     { id: "patient-2", name: "Asha Kumar" },
   ]);
+});
+
+const CONSENT_NOW = new Date("2026-10-13T12:30:00.000Z");
+
+const EXISTING_CONTACT = {
+  id: "patient-existing",
+  clinic_id: "clinic-1",
+  contact_phone: "919840227132",
+  full_name: "Karthik Sundar",
+  created_at: "2026-01-01T00:00:00.000Z",
+  deleted_at: null,
+};
+
+test("create persists consent_given and consent_given_at only when consentGiven is true", async () => {
+  const consented = createService();
+  await consented.service.create(
+    "clinic-1",
+    {
+      name: "Karthik Sundar",
+      phone: "9840227132",
+      consentGiven: true,
+    },
+    CONSENT_NOW,
+  );
+  assert.equal(consented.calls.create[0].consent_given, true);
+  assert.equal(consented.calls.create[0].consent_given_at, "2026-10-13T12:30:00.000Z");
+
+  const declined = createService();
+  await declined.service.create(
+    "clinic-1",
+    {
+      name: "Karthik Sundar",
+      phone: "9840227132",
+      consentGiven: false,
+    },
+    CONSENT_NOW,
+  );
+  assert.equal(declined.calls.create[0].consent_given, false);
+  assert.equal(declined.calls.create[0].consent_given_at, null);
+
+  const omitted = createService();
+  await omitted.service.create(
+    "clinic-1",
+    {
+      name: "Karthik Sundar",
+      phone: "9840227132",
+      consentGiven: "true",
+      consent_given: true,
+      consent_given_at: "2020-01-01T00:00:00.000Z",
+    },
+    CONSENT_NOW,
+  );
+  assert.equal(omitted.calls.create[0].consent_given, false);
+  assert.equal(omitted.calls.create[0].consent_given_at, null);
+});
+
+test("create returns 409 when the clinic already has that phone", async () => {
+  const vaccinationSeedingService = createFakeVaccinationSeedingService();
+  const { service, calls } = createService({
+    contacts: [
+      {
+        id: "patient-younger",
+        clinic_id: "clinic-1",
+        contact_phone: "919840227132",
+        full_name: "Younger Sibling",
+        created_at: "2026-06-01T00:00:00.000Z",
+        deleted_at: null,
+      },
+      EXISTING_CONTACT,
+      {
+        id: "patient-deleted",
+        clinic_id: "clinic-1",
+        contact_phone: "919840227132",
+        full_name: "Deleted Person",
+        created_at: "2025-01-01T00:00:00.000Z",
+        deleted_at: "2026-02-01T00:00:00.000Z",
+      },
+    ],
+    vaccinationSeedingService,
+  });
+
+  await assert.rejects(
+    () =>
+      service.create("clinic-1", {
+        name: "Little Kiran",
+        phone: "+91 98402 27132",
+        dateOfBirth: "2020-01-01",
+      }),
+    (error) =>
+      error instanceof PatientRequestError &&
+      error.statusCode === 409 &&
+      error.message === "A patient with this number already exists" &&
+      error.existingPatient.id === "patient-existing" &&
+      error.existingPatient.full_name === "Karthik Sundar",
+  );
+
+  assert.equal(calls.create.length, 0);
+  assert.equal(vaccinationSeedingService.calls.length, 0);
+  assert.deepEqual(calls.findByContact[0], {
+    clinicId: "clinic-1",
+    contactPhone: "919840227132",
+  });
+});
+
+test("create add-anyway inserts a different name on the same phone and still blocks the same name", async () => {
+  const { service, calls } = createService({ contacts: [EXISTING_CONTACT] });
+
+  const created = await service.create("clinic-1", {
+    name: "Little Kiran",
+    phone: "9840227132",
+    allowFamilyMember: true,
+    consentGiven: true,
+  }, CONSENT_NOW);
+
+  assert.equal(created.patient.name, "Little Kiran");
+  assert.equal(calls.create.length, 1);
+  assert.equal(calls.create[0].clinic_id, "clinic-1");
+  assert.equal(calls.create[0].contact_phone, "919840227132");
+  assert.equal(calls.create[0].full_name, "Little Kiran");
+  assert.equal(calls.create[0].consent_given, true);
+  assert.equal(calls.create[0].consent_given_at, "2026-10-13T12:30:00.000Z");
+
+  await assert.rejects(
+    () =>
+      service.create("clinic-1", {
+        name: "  karthik   sundar ",
+        phone: "919840227132",
+        allowFamilyMember: true,
+      }),
+    (error) =>
+      error instanceof PatientRequestError &&
+      error.statusCode === 409 &&
+      error.existingPatient.id === "patient-existing" &&
+      error.existingPatient.full_name === "Karthik Sundar",
+  );
+  assert.equal(calls.create.length, 1);
+
+  await assert.rejects(
+    () =>
+      service.create("clinic-1", {
+        name: "Another Child",
+        phone: "9840227132",
+        allowFamilyMember: "true",
+      }),
+    (error) => error instanceof PatientRequestError && error.statusCode === 409,
+  );
+  assert.equal(calls.create.length, 1);
+});
+
+test("create scopes the duplicate lookup to the requesting clinic and ignores deleted patients", async () => {
+  const { service, calls } = createService({
+    contacts: [
+      {
+        id: "other-clinic",
+        clinic_id: "clinic-2",
+        contact_phone: "919840227132",
+        full_name: "Other Clinic Patient",
+        created_at: "2026-01-01T00:00:00.000Z",
+        deleted_at: null,
+      },
+      {
+        id: "deleted-here",
+        clinic_id: "clinic-1",
+        contact_phone: "919840227132",
+        full_name: "Deleted Here",
+        created_at: "2026-01-01T00:00:00.000Z",
+        deleted_at: "2026-03-01T00:00:00.000Z",
+      },
+    ],
+  });
+
+  const result = await service.create("clinic-1", {
+    name: "New Patient",
+    phone: "9840227132",
+    clinicId: "clinic-2",
+    clinic_id: "clinic-2",
+  });
+
+  assert.equal(result.patient.name, "New Patient");
+  assert.equal(calls.findByContact[0].clinicId, "clinic-1");
+  assert.equal(calls.create[0].clinic_id, "clinic-1");
+  assert.equal(calls.create.length, 1);
 });

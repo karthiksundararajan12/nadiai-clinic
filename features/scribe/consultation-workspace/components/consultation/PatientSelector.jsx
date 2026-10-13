@@ -156,12 +156,17 @@ export function PatientSelector({
     void loadEligible();
   };
 
+  const handleUseExisting = (existing) => {
+    onSelect?.({ ...existing, appointment_id: null });
+  };
+
   const createModal = (
     <>
       <NewPatientModal
         open={showCreate}
         onOpenChange={setShowCreate}
         onCreated={handleCreated}
+        onUseExisting={handleUseExisting}
         onError={(message) => setToast({ message, variant: "error" })}
       />
       {toast ? (
@@ -205,54 +210,60 @@ export function PatientSelector({
   ) : null;
 
   if (compact) {
+    const showEmpty = !patient && !loading && !loadError && !hasEligible;
     return (
       <div
-        className={cn("flex w-full min-w-0 flex-wrap items-center gap-2 bg-[color:var(--scribe-card-bg)] px-3 py-2", className)}
+        className={cn("flex w-full flex-col gap-2 bg-[color:var(--scribe-card-bg)] px-3 py-2", className)}
         data-testid={patient ? "scribe-patient-header" : "scribe-patient-compact"}
       >
-        {patient ? (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-xs font-bold text-white">
-              {initials(patient.name)}
+        {showEmpty ? (
+          <p className="text-sm font-medium text-[color:var(--scribe-heading)]" data-testid="scribe-patient-empty">
+            No appointments today. Search a patient or add a new one.
+          </p>
+        ) : null}
+        <div className="flex w-full items-center gap-2">
+          {patient ? (
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-xs font-bold text-white">
+                {initials(patient.name)}
+              </div>
+              <p className="min-w-0 flex-1 break-words text-sm font-bold text-[color:var(--scribe-heading)]">{patient.name}</p>
+              {lockSelection ? (
+                <span className="scribe-text-muted inline-flex shrink-0 items-center gap-1 text-sm font-semibold">
+                  <Lock size={14} weight="bold" className="scribe-icon" aria-hidden />
+                  Locked
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  className="inline-flex h-9 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline"
+                  onClick={onClear}
+                >
+                  Change
+                </button>
+              )}
             </div>
-            <p className="min-w-0 truncate text-sm font-bold text-[color:var(--scribe-heading)]">{patient.name}</p>
-            {lockSelection ? (
-              <span className="scribe-text-muted inline-flex shrink-0 items-center gap-1 text-xs font-semibold">
-                <Lock size={14} weight="bold" className="scribe-icon" aria-hidden />
-                Locked
-              </span>
-            ) : (
-              <button
-                type="button"
-                className="inline-flex h-8 shrink-0 cursor-pointer items-center text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline"
-                onClick={onClear}
-              >
-                Change
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="flex min-w-0 flex-1 items-center gap-2">
+          ) : (
             <div className="relative min-w-0 flex-1">
               <MagnifyingGlass
                 size={16}
                 weight="bold"
-                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 scribe-icon"
+                className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 scribe-icon"
                 aria-hidden
               />
               <select
                 value={selectValue}
                 onChange={handleSelectChange}
-                disabled={selectDisabled}
+                disabled={loading || Boolean(loadError)}
                 data-testid="scribe-patient-select"
                 aria-label="Select patient to start consultation"
                 aria-busy={loading || undefined}
                 className={cn(
-                  "h-9 min-h-9 w-full min-w-0 appearance-none truncate rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-8 pr-7 text-sm font-medium text-[color:var(--scribe-heading)] focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
-                  selectDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+                  "h-10 min-h-10 w-full min-w-0 rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-9 pr-3 text-sm font-medium text-[color:var(--scribe-heading)] focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
+                  loading || loadError ? "cursor-not-allowed opacity-70" : "cursor-pointer",
                 )}
               >
-                <option value="">{placeholder}</option>
+                <option value="">{loading ? "Loading patients…" : loadError ? "Unable to load appointments" : "Search a patient"}</option>
                 {options.map((opt) => (
                   <option key={opt.appointment_id} value={opt.appointment_id}>
                     {optionLabel(opt)}
@@ -260,25 +271,23 @@ export function PatientSelector({
                 ))}
               </select>
             </div>
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              className="h-9 min-h-9 shrink-0 cursor-pointer gap-1 border-transparent bg-[color:var(--scribe-indigo-50)] px-2 text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)]"
-              data-testid="scribe-create-patient"
-              onClick={() => setShowCreate(true)}
-            >
-              <Plus size={16} weight="bold" />
-              <span className="sr-only">Create new patient</span>
-            </Button>
-          </div>
-        )}
-        {languageToggle ? (
-          <div className="min-w-[9rem] max-w-full flex-1 sm:max-w-[16rem]">{languageToggle}</div>
-        ) : null}
+          )}
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={lockSelection}
+            className="h-10 min-h-10 shrink-0 cursor-pointer gap-1.5 whitespace-nowrap border-transparent bg-[color:var(--scribe-indigo-50)] px-3 text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)]"
+            data-testid="scribe-create-patient"
+            onClick={() => setShowCreate(true)}
+          >
+            <Plus size={16} weight="bold" aria-hidden />
+            New patient
+          </Button>
+        </div>
         {loadError && (
-          <p className="w-full truncate text-xs font-medium text-destructive" data-testid="scribe-patient-select-error">
-            Couldn&apos;t load appointments.{" "}
+          <p className="text-sm font-medium text-destructive" data-testid="scribe-patient-select-error">
+            Couldn&apos;t load appointments. {loadError.message}{" "}
             <button type="button" className="underline" onClick={() => void loadEligible()}>
               Retry
             </button>

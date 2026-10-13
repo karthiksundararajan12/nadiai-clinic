@@ -147,6 +147,36 @@ test("conversation area stays above the record controls and keeps the transcript
   }
 });
 
+test("patient row sits above the conversation and the hint is a full line above the mic", async () => {
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    canStartRecording: false,
+    patientRequiredHint: "Select a patient to begin",
+    children: createElement("p", { "data-testid": "patient-slot" }, "Search a patient"),
+  });
+  try {
+    const patient = view.host.querySelector("[data-testid='record-panel-patient']");
+    const area = conversationArea(view.host);
+    const hint = view.host.querySelector("[data-testid='record-patient-required']");
+    const mic = view.host.querySelector("button[aria-label='Start recording']");
+    assert.ok(patient && area && hint && mic);
+    assert.equal(patient.textContent.includes("Search a patient"), true);
+    assert.ok(
+      patient.compareDocumentPosition(area) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      "patient row should sit above the conversation",
+    );
+    assert.equal(hint.textContent, "Select a patient to begin");
+    assert.equal(hint.className.includes("truncate"), false);
+    assert.ok(
+      hint.compareDocumentPosition(mic) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      "patient hint should sit above the mic button",
+    );
+    assert.equal(view.host.textContent.includes("Start recording"), true);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("processing spinner is suppressed while recording and shown after stop", async () => {
   const view = render(ScribeRecordPanel, {
     recordState: "recording",

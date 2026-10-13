@@ -6,6 +6,11 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isDuplicatePatientError } from "@/features/patients/patients.client.js";
+import {
+  DuplicatePatientNotice,
+  WhatsAppConsentField,
+} from "@/features/patients/components/new-patient-fields.jsx";
 import { createPatient } from "../../services/patient.client.js";
 
 export const EMPTY_NEW_PATIENT_FORM = {
@@ -13,6 +18,7 @@ export const EMPTY_NEW_PATIENT_FORM = {
   phone: "",
   age: "",
   gender: "Male",
+  consentGiven: false,
 };
 
 const FOCUSABLE =
@@ -22,12 +28,14 @@ const FOCUSABLE =
  * Same client payload the inline form posted: the raw form fields.
  * Phone normalization and age/DOB checks stay on POST /api/patients.
  */
-export function buildNewPatientPayload(form) {
+export function buildNewPatientPayload(form, { allowFamilyMember = false } = {}) {
   return {
     name: form.name,
     phone: form.phone,
     age: form.age,
     gender: form.gender,
+    consentGiven: form.consentGiven === true,
+    ...(allowFamilyMember === true ? { allowFamilyMember: true } : {}),
   };
 }
 
@@ -47,7 +55,8 @@ export function isNewPatientFormDirty(form) {
     form.name !== EMPTY_NEW_PATIENT_FORM.name ||
     form.phone !== EMPTY_NEW_PATIENT_FORM.phone ||
     form.age !== EMPTY_NEW_PATIENT_FORM.age ||
-    form.gender !== EMPTY_NEW_PATIENT_FORM.gender
+    form.gender !== EMPTY_NEW_PATIENT_FORM.gender ||
+    form.consentGiven !== EMPTY_NEW_PATIENT_FORM.consentGiven
   );
 }
 
@@ -56,10 +65,11 @@ export function isNewPatientFormDirty(form) {
  *   open: boolean;
  *   onOpenChange: (open: boolean) => void;
  *   onCreated: (patient: object) => void;
+ *   onUseExisting?: (patient: object) => void;
  *   onError?: (message: string) => void;
  * }} props
  */
-export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
+export function NewPatientModal({ open, onOpenChange, onCreated, onUseExisting, onError }) {
   const titleId = useId();
   const descriptionId = useId();
   const dialogRef = useRef(null);
@@ -68,6 +78,7 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
   const [form, setForm] = useState(EMPTY_NEW_PATIENT_FORM);
   const [errors, setErrors] = useState({});
   const [formError, setFormError] = useState("");
+  const [duplicatePatient, setDuplicatePatient] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -75,6 +86,7 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
       setForm(EMPTY_NEW_PATIENT_FORM);
       setErrors({});
       setFormError("");
+      setDuplicatePatient(null);
       setSubmitting(false);
       submittingRef.current = false;
     }
@@ -125,6 +137,7 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
   function updateField(key, value) {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: undefined }));
+    if (key === "phone") setDuplicatePatient(null);
   }
 
   function requestClose({ confirmIfDirty }) {
@@ -136,8 +149,23 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
     onOpenChange(false);
   }
 
-  async function handleSubmit(event) {
-    event.preventDefault();
+  function useExistingPatient() {
+    if (!duplicatePatient) return;
+    const patient = {
+      id: duplicatePatient.id,
+      name: duplicatePatient.full_name,
+      phone: form.phone,
+      age: null,
+      gender: null,
+      last_visit: null,
+    };
+    if (onUseExisting) onUseExisting(patient);
+    else onCreated?.(patient);
+    onOpenChange(false);
+  }
+
+  async function handleSubmit(event, allowFamilyMember = false) {
+    event?.preventDefault?.();
     if (submittingRef.current) return;
 
     const nextErrors = validateNewPatientForm(form);
@@ -148,10 +176,17 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
     setSubmitting(true);
     setFormError("");
     try {
-      const created = await createPatient(buildNewPatientPayload(form));
+      const created = await createPatient(
+        buildNewPatientPayload(form, { allowFamilyMember: allowFamilyMember === true }),
+      );
+      setDuplicatePatient(null);
       onCreated?.(created);
       onOpenChange(false);
     } catch (err) {
+      if (isDuplicatePatientError(err)) {
+        setDuplicatePatient(err.existingPatient);
+        return;
+      }
       const message = err instanceof Error ? err.message : String(err);
       setFormError(message);
       onError?.(message);
@@ -176,7 +211,7 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
         aria-describedby={descriptionId}
         data-testid="new-patient-modal"
         className={cn(
-          "relative z-50 w-full max-w-lg rounded-2xl border border-border bg-card p-6 shadow-md",
+          "relative z-50 max-h-[min(90vh,40rem)] w-full max-w-lg overflow-y-auto rounded-2xl border border-border bg-card p-6 shadow-md",
           "animate-in fade-in-0 zoom-in-95 duration-200",
         )}
       >
@@ -283,6 +318,27 @@ export function NewPatientModal({ open, onOpenChange, onCreated, onError }) {
               </select>
             </div>
           </div>
+
+          <div className="mt-4">
+            <WhatsAppConsentField
+              id="new-patient-whatsapp-consent"
+              checked={form.consentGiven === true}
+              disabled={submitting}
+              onChange={(checked) => updateField("consentGiven", checked === true)}
+            />
+          </div>
+
+          {duplicatePatient ? (
+            <div className="mt-4">
+              <DuplicatePatientNotice
+                fullName={duplicatePatient.full_name}
+                typedName={form.name}
+                disabled={submitting}
+                onUseExisting={useExistingPatient}
+                onAddAnyway={() => handleSubmit(null, true)}
+              />
+            </div>
+          ) : null}
 
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button

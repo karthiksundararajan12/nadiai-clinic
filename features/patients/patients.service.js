@@ -8,6 +8,7 @@ import { formatPaymentStatusLabel } from "../booking/lib/payment-list.js";
 import { formatSlotLabel } from "../booking/lib/slot-engine.js";
 import { createLogger } from "../booking/logger.js";
 import { alertOps, OPS_ALERT_STEP } from "../booking/lib/alerting.js";
+import { patientNamesMatch } from "./lib/patient-identity.js";
 import { resolvePatientRegisteredDateRange } from "./lib/patient-list.js";
 
 const log = createLogger({ component: "PatientsService" });
@@ -22,10 +23,16 @@ const VISIT_STATUSES = new Set([
 ]);
 
 export class PatientRequestError extends Error {
-  constructor(message, statusCode = 400) {
+  /**
+   * @param {string} message
+   * @param {number} [statusCode]
+   * @param {{ existingPatient?: { id: string, full_name: string }|null }} [extra]
+   */
+  constructor(message, statusCode = 400, extra = null) {
     super(message);
     this.name = "PatientRequestError";
     this.statusCode = statusCode;
+    this.existingPatient = extra?.existingPatient ?? null;
   }
 }
 
@@ -397,16 +404,46 @@ export class PatientsService {
    * registrations; the manual /vaccinations/new form remains available for
    * exceptions, catch-up doses, and edits regardless of whether auto-seed
    * ran.
+   *
+   * `clinicId` is the authenticated clinic from resolveRequestContext.
+   * A clinic id on the request body is ignored. Consent is written only
+   * when `consentGiven` is boolean true; anything else stays false/null.
+   * A matching non-deleted phone in this clinic returns 409 unless the
+   * caller explicitly sets `allowFamilyMember` and the name differs.
+   *
+   * @param {string} clinicId
+   * @param {object} input
+   * @param {Date} [now]
    */
-  async create(clinicId, input) {
+  async create(clinicId, input, now = new Date()) {
     const dateOfBirth = parseDateOfBirth(input.dateOfBirth);
+    const fullName = parseFullName(input.name);
+    const contactPhone = parseContactPhone(input.phone);
+    const consentGiven = input.consentGiven === true;
+
+    const existing = await this._patients.findByContact(clinicId, contactPhone);
+    if (existing.length > 0) {
+      const sameName = existing.find((patient) => patientNamesMatch(patient.full_name, fullName));
+      const allowFamilyMember = input.allowFamilyMember === true && !sameName;
+      if (!allowFamilyMember) {
+        const match = sameName ?? existing[0];
+        throw new PatientRequestError(
+          "A patient with this number already exists",
+          409,
+          { existingPatient: { id: match.id, full_name: match.full_name } },
+        );
+      }
+    }
+
     const created = await this._patients.create({
       clinic_id: clinicId,
-      contact_phone: parseContactPhone(input.phone),
-      full_name: parseFullName(input.name),
+      contact_phone: contactPhone,
+      full_name: fullName,
       age_years: parseAgeYears(input.age),
       gender: parseGender(input.gender),
       date_of_birth: dateOfBirth,
+      consent_given: consentGiven,
+      consent_given_at: consentGiven ? now.toISOString() : null,
     });
 
     if (this._vaccinationSeeding && dateOfBirth) {

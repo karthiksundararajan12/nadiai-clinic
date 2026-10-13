@@ -11,6 +11,7 @@ import {
 } from "../constants.js";
 import { patientOptionRowId } from "../lib/patient-list.js";
 import { parseAgeOrDob } from "../lib/patient-input.js";
+import { buildPatientInsert } from "../lib/patient-insert.js";
 
 const CLINIC = { id: "clinic-1", name: "Test Clinic", whatsapp_phone_number_id: "PNID_1" };
 
@@ -75,11 +76,8 @@ function createFakePatientRepo(initialPatients = []) {
     async create(data) {
       const patient = {
         id: `patient-${idCounter++}`,
-        relationship_to_contact: "self",
         gender: null,
-        ...data,
-        consent_given: true,
-        consent_given_at: new Date().toISOString(),
+        ...buildPatientInsert(data),
       };
       patients.set(patient.id, patient);
       return patient;

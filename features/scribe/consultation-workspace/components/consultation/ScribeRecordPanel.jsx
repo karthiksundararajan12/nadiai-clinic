@@ -8,7 +8,6 @@ import {
   Play,
   Plus,
   Stop,
-  WarningCircle,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useAudioLevel } from "@/features/scribe/recording/use-audio-level.js";
@@ -106,8 +105,13 @@ export function ScribeRecordPanel({
 
   return (
     <aside className="relative flex h-full min-h-[16rem] w-full min-w-0 flex-1 flex-col gap-2 overflow-hidden lg:min-h-0">
+      {children ? (
+        <div className="scribe-card shrink-0 overflow-visible rounded-xl" data-testid="record-panel-patient">
+          {children}
+        </div>
+      ) : null}
       <div
-        className="scribe-card flex h-[calc(100dvh-16rem)] max-h-[calc(100dvh-16rem)] min-h-[16rem] w-full min-w-0 flex-none flex-col overflow-hidden rounded-xl lg:h-auto lg:max-h-none lg:min-h-[16rem] lg:flex-1"
+        className="scribe-card flex h-[calc(100dvh-20rem)] max-h-[calc(100dvh-20rem)] min-h-[16rem] w-full min-w-0 flex-none flex-col overflow-hidden rounded-xl lg:h-auto lg:max-h-none lg:min-h-[16rem] lg:flex-1"
         data-testid="record-panel-conversation"
       >
         {statusStrip}
@@ -125,11 +129,10 @@ export function ScribeRecordPanel({
         />
       </div>
 
-      <div className="scribe-card shrink-0 overflow-hidden rounded-xl" data-testid="record-panel-controls">
-        {children}
+      <div className="scribe-card shrink-0 overflow-visible rounded-xl" data-testid="record-panel-controls">
         <div
           className={cn(
-            "flex flex-col gap-2 border-t border-[color:var(--scribe-card-border)] px-3 py-2",
+            "flex flex-col gap-2 px-3 py-2",
             manualMode && "pb-3",
           )}
         >
@@ -176,7 +179,16 @@ export function ScribeRecordPanel({
             </button>
           </div>
         ) : (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <div className="flex flex-col gap-2">
+            {(isIdle || isRequesting) && !disabled && !canStartRecording && (
+              <p
+                className="text-sm font-semibold text-amber-900"
+                data-testid="record-patient-required"
+              >
+                {patientRequiredHint || "Select a patient to begin"}
+              </p>
+            )}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center">
               {micReady && (
                 <span
@@ -224,7 +236,7 @@ export function ScribeRecordPanel({
               )}
             </div>
 
-            <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               {showRecordingControls && isLive && (
                 <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-bold tracking-wide text-red-600">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />
@@ -232,29 +244,23 @@ export function ScribeRecordPanel({
                 </span>
               )}
               {isLive && (
-                <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--scribe-heading)]">
+                <p className="shrink-0 text-sm font-semibold text-[color:var(--scribe-heading)]">
                   Stop recording
                 </p>
               )}
               {(isIdle || isRequesting) && !disabled && (
-                <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--scribe-heading)]">
-                  {isRequesting ? statusTitle : micReady ? "Ready to record" : "Start recording"}
+                <p className="shrink-0 text-sm font-semibold text-[color:var(--scribe-heading)]">
+                  {isRequesting ? statusTitle : "Start recording"}
                 </p>
               )}
-              {(isIdle || isRequesting) && !disabled && !canStartRecording && (
-                <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900">
-                  <WarningCircle size={14} weight="bold" className="shrink-0" aria-hidden />
-                  <span className="truncate">{patientRequiredHint || "Select a patient to begin"}</span>
-                </span>
-              )}
               {isProcessing && (
-                <p className="scribe-text-muted min-w-0 truncate text-sm font-medium">
+                <p className="scribe-text-muted text-sm font-medium">
                   {statusMessage || "Processing…"}
                 </p>
               )}
               {disabled && !isLive && !isProcessing && statusTitle && (
                 <p
-                  className="min-w-0 truncate text-sm font-medium text-[color:var(--scribe-heading)]"
+                  className="text-sm font-medium text-[color:var(--scribe-heading)]"
                   data-testid="record-panel-session-hint"
                   title={sessionHint || undefined}
                 >
@@ -262,7 +268,7 @@ export function ScribeRecordPanel({
                 </p>
               )}
               {statusMessage && !transcriptLoading && !isProcessing && isLive && (
-                <p className="scribe-text-muted min-w-0 truncate text-sm font-medium">{statusMessage}</p>
+                <p className="scribe-text-muted text-sm font-medium">{statusMessage}</p>
               )}
             </div>
 
@@ -282,15 +288,11 @@ export function ScribeRecordPanel({
               </button>
             )}
 
-            {languageToggle && !isLive && !isProcessing && (isIdle || isRequesting) && !disabled && (
-              <div className="min-w-[8rem] flex-1">{languageToggle}</div>
-            )}
-
             {canUseManualEntry && (
               <button
                 type="button"
                 onClick={enterManualMode}
-                className="inline-flex h-9 min-h-9 shrink-0 cursor-pointer items-center text-sm font-semibold text-[color:var(--scribe-indigo-600)] hover:underline"
+                className="inline-flex h-9 min-h-9 shrink-0 cursor-pointer items-center whitespace-nowrap text-sm font-semibold text-[color:var(--scribe-indigo-600)] hover:underline"
               >
                 Enter manually
               </button>
@@ -298,11 +300,15 @@ export function ScribeRecordPanel({
 
             {newSessionButton}
           </div>
+          {languageToggle && !isLive && !isProcessing && (isIdle || isRequesting) && !disabled && (
+            <div className="w-full">{languageToggle}</div>
+          )}
+          </div>
         )}
 
         {isLive && (
           <p
-            className="truncate text-xs font-semibold text-amber-900"
+            className="text-xs font-semibold text-amber-900"
             data-testid="recording-leave-warning"
             role="status"
           >

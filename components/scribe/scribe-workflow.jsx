@@ -878,6 +878,7 @@ export function ScribeWorkflow() {
               transcriptLoadingMessage={workspaceState.transcriptLoadingMessage ?? pipelineMessage}
               sessionStatus={workspaceState.status}
               canStartNewSession={Boolean(activeSessionId) && !pipelineBusy}
+              languageToggle={languageToggle}
               onStart={() => {
                 live.reset();
                 void recording.startRecording();
@@ -901,7 +902,6 @@ export function ScribeWorkflow() {
                 compact
                 patient={selectedPatient}
                 lockSelection={isRecordingLive}
-                languageToggle={languageToggle}
                 onSelect={(next) => {
                   setSelectedPatient(next);
                   setAppointmentId(next?.appointment_id ?? null);

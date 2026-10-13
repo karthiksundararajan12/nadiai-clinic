@@ -10,6 +10,7 @@
 
 import { BaseRepository } from "./base.repository.js";
 import { DatabaseError } from "../errors.js";
+import { buildPatientInsert } from "../lib/patient-insert.js";
 import { escapeIlikePattern } from "../lib/payment-list.js";
 
 /**
@@ -220,6 +221,8 @@ export class PatientRepository extends BaseRepository {
    *   date_of_birth?: string|null;
    *   date_of_birth_is_approximate?: boolean;
    *   relationship_to_contact?: string;
+   *   consent_given?: boolean;
+   *   consent_given_at?: string|null;
    * }} data
    * @returns {Promise<BookingPatient>}
    */
@@ -228,12 +231,7 @@ export class PatientRepository extends BaseRepository {
       () =>
         this._db
           .from(this._table)
-          .insert({
-            relationship_to_contact: "self",
-            ...data,
-            consent_given: true,
-            consent_given_at: new Date().toISOString(),
-          })
+          .insert(buildPatientInsert(data))
           .select("*")
           .single(),
       "create",

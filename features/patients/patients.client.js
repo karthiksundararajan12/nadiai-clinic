@@ -1,7 +1,41 @@
+export class PatientApiError extends Error {
+  /**
+   * @param {string} message
+   * @param {{ status?: number, existingPatient?: { id: string, full_name: string }|null }} [extra]
+   */
+  constructor(message, { status = 500, existingPatient = null } = {}) {
+    super(message);
+    this.name = "PatientApiError";
+    this.status = status;
+    this.existingPatient = existingPatient;
+  }
+}
+
+/**
+ * 409 from POST /api/patients when this clinic already has a non-deleted
+ * patient on the same WhatsApp phone.
+ *
+ * @param {unknown} error
+ * @returns {error is PatientApiError}
+ */
+export function isDuplicatePatientError(error) {
+  return (
+    error instanceof PatientApiError &&
+    error.status === 409 &&
+    typeof error.existingPatient?.id === "string" &&
+    error.existingPatient.id.length > 0 &&
+    typeof error.existingPatient?.full_name === "string" &&
+    error.existingPatient.full_name.length > 0
+  );
+}
+
 async function readResponse(response) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.error ?? "Failed to process patient request");
+    throw new PatientApiError(payload.error ?? "Failed to process patient request", {
+      status: response.status,
+      existingPatient: payload.existingPatient ?? null,
+    });
   }
   return payload;
 }

@@ -2,8 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   buildHighlightRedirectPath,
+  createPatient,
   deletePatient,
   fetchPatientDeletionImpact,
+  isDuplicatePatientError,
+  PatientApiError,
 } from "./patients.client.js";
 
 // Covers the redirect used by the dashboard "Add Patient" flow: after a
@@ -51,6 +54,31 @@ test("fetchPatientDeletionImpact GETs deletion-impact endpoint", async () => {
     const payload = await fetchPatientDeletionImpact("patient-1");
     assert.equal(calls[0].url, "/api/patients/patient-1/deletion-impact");
     assert.equal(payload.impact.appointments, 2);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("createPatient surfaces a 409 existing patient", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 409,
+    async json() {
+      return {
+        error: "A patient with this number already exists",
+        existingPatient: { id: "patient-existing", full_name: "Ravi Kumar" },
+      };
+    },
+  });
+  try {
+    await assert.rejects(
+      () => createPatient({ name: "Little Kiran", phone: "9840227132" }),
+      (error) =>
+        error instanceof PatientApiError &&
+        isDuplicatePatientError(error) &&
+        error.existingPatient.full_name === "Ravi Kumar",
+    );
   } finally {
     globalThis.fetch = originalFetch;
   }

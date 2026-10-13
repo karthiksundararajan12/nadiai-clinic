@@ -17,7 +17,10 @@ const log = bookingLogger.child({ component: "API /api/patients" });
 function errorResponse(error) {
   if (error instanceof PatientRequestError) {
     return NextResponse.json(
-      { error: error.message },
+      {
+        error: error.message,
+        ...(error.existingPatient ? { existingPatient: error.existingPatient } : {}),
+      },
       { status: error.statusCode },
     );
   }

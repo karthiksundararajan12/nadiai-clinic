@@ -26,16 +26,30 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+  DuplicatePatientNotice,
+  WhatsAppConsentField,
+} from "@/features/patients/components/new-patient-fields";
+import {
   createPatient,
   buildHighlightRedirectPath,
   fetchPatientDeletionImpact,
   deletePatient,
+  isDuplicatePatientError,
 } from "@/features/patients/patients.client";
 import { formatDateOnly } from "@/lib/date-only";
 import { cn } from "@/lib/utils";
 
 const PAGE_SIZE = 20;
 const DEBOUNCE_MS = 300;
+
+const EMPTY_NEW_PATIENT = {
+  name: "",
+  age: "",
+  gender: "Male",
+  dateOfBirth: "",
+  phone: "",
+  consentGiven: false,
+};
 
 const RANGE_OPTIONS = [
   { value: "all", label: "All time" },
@@ -84,13 +98,8 @@ function PatientsPageContent() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  const [newPatient, setNewPatient] = useState({
-    name: "",
-    age: "",
-    gender: "Male",
-    dateOfBirth: "",
-    phone: "",
-  });
+  const [duplicatePatient, setDuplicatePatient] = useState(null);
+  const [newPatient, setNewPatient] = useState(EMPTY_NEW_PATIENT);
 
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deleteImpact, setDeleteImpact] = useState(null);
@@ -204,12 +213,42 @@ function PatientsPageContent() {
     }
   }
 
-  async function handleAddPatient() {
+  function openAddDialog() {
+    setSaveError("");
+    setDuplicatePatient(null);
+    setNewPatient((prev) => ({ ...prev, consentGiven: false }));
+    setDialogOpen(true);
+  }
+
+  function closeAddDialog() {
+    setDialogOpen(false);
+    setSaveError("");
+    setDuplicatePatient(null);
+    setNewPatient((prev) => ({ ...prev, consentGiven: false }));
+  }
+
+  function useExistingPatient() {
+    const patientId = duplicatePatient?.id;
+    if (!patientId) return;
+    closeAddDialog();
+    router.push(`/patients/${encodeURIComponent(patientId)}`);
+  }
+
+  async function handleAddPatient(allowFamilyMember = false) {
     setSaveError("");
     setSaving(true);
     try {
-      const result = await createPatient(newPatient);
-      setNewPatient({ name: "", age: "", gender: "Male", dateOfBirth: "", phone: "" });
+      const result = await createPatient({
+        name: newPatient.name,
+        age: newPatient.age,
+        gender: newPatient.gender,
+        dateOfBirth: newPatient.dateOfBirth,
+        phone: newPatient.phone,
+        consentGiven: newPatient.consentGiven === true,
+        ...(allowFamilyMember === true ? { allowFamilyMember: true } : {}),
+      });
+      setNewPatient(EMPTY_NEW_PATIENT);
+      setDuplicatePatient(null);
       setDialogOpen(false);
       await load();
       const redirectPath = buildHighlightRedirectPath(result.patient?.id);
@@ -217,6 +256,11 @@ function PatientsPageContent() {
         router.push(redirectPath);
       }
     } catch (err) {
+      if (isDuplicatePatientError(err)) {
+        setDuplicatePatient(err.existingPatient);
+        setSaveError("");
+        return;
+      }
       setSaveError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
@@ -314,10 +358,7 @@ function PatientsPageContent() {
             <Button
               size="sm"
               className="gap-1.5"
-              onClick={() => {
-                setSaveError("");
-                setDialogOpen(true);
-              }}
+              onClick={openAddDialog}
             >
               <Plus className={ICON_SIZE_SM} strokeWidth={ICON_STROKE} />
               Add Patient
@@ -339,7 +380,7 @@ function PatientsPageContent() {
             title="No patients found"
             description="Try adjusting search or filters. Add your first patient or wait for bookings to create records automatically."
             action={
-              <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Button size="sm" onClick={openAddDialog}>
                 <Plus className={`${ICON_SIZE_SM} mr-1.5`} strokeWidth={ICON_STROKE} />
                 Add Patient
               </Button>
@@ -450,8 +491,8 @@ function PatientsPageContent() {
         )}
       </div>
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent onClose={() => setDialogOpen(false)}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => (open ? setDialogOpen(true) : closeAddDialog())}>
+        <DialogContent onClose={closeAddDialog} className="max-h-[min(90vh,40rem)] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Add New Patient</DialogTitle>
           </DialogHeader>
@@ -536,14 +577,32 @@ function PatientsPageContent() {
                 placeholder="+91 98765 43210"
                 value={newPatient.phone}
                 disabled={saving}
-                onChange={(e) =>
+                onChange={(e) => {
                   setNewPatient((prev) => ({
                     ...prev,
                     phone: e.target.value,
-                  }))
-                }
+                  }));
+                  setDuplicatePatient(null);
+                }}
               />
             </div>
+            <WhatsAppConsentField
+              id="patient-whatsapp-consent"
+              checked={newPatient.consentGiven === true}
+              disabled={saving}
+              onChange={(checked) =>
+                setNewPatient((prev) => ({ ...prev, consentGiven: checked === true }))
+              }
+            />
+            {duplicatePatient ? (
+              <DuplicatePatientNotice
+                fullName={duplicatePatient.full_name}
+                typedName={newPatient.name}
+                disabled={saving}
+                onUseExisting={useExistingPatient}
+                onAddAnyway={() => handleAddPatient(true)}
+              />
+            ) : null}
             {saveError && (
               <p className="text-sm font-medium text-destructive">{saveError}</p>
             )}
@@ -552,12 +611,12 @@ function PatientsPageContent() {
             <Button
               variant="outline"
               disabled={saving}
-              onClick={() => setDialogOpen(false)}
+              onClick={closeAddDialog}
             >
               Cancel
             </Button>
             <Button
-              onClick={handleAddPatient}
+              onClick={() => handleAddPatient(false)}
               disabled={saving || !newPatient.name.trim() || !newPatient.phone.trim()}
             >
               {saving ? "Saving…" : "Add Patient"}

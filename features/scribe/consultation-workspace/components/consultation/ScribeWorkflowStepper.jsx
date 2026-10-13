@@ -2,16 +2,12 @@
 
 import { Check } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { SCRIBE_WORKFLOW_STEPS } from "../../lib/scribe-workflow-step.js";
-
-const DISPLAY_LABELS = ["Record", "Transcribe", "Note", "Prescription", "Approve"];
+import {
+  SCRIBE_WORKFLOW_STEPS,
+  resolveScribeWorkflowStepVisual,
+} from "../../lib/scribe-workflow-step.js";
 
 export function ScribeWorkflowStepper({ activeIndex = 0, liveRecording = false }) {
-  const current = Math.min(
-    Math.max(activeIndex, 0),
-    SCRIBE_WORKFLOW_STEPS.length - 1,
-  );
-
   return (
     <nav
       aria-label="Scribe workflow"
@@ -20,11 +16,12 @@ export function ScribeWorkflowStepper({ activeIndex = 0, liveRecording = false }
     >
       <ol className="flex min-w-max items-center lg:min-w-0 lg:w-full">
         {SCRIBE_WORKFLOW_STEPS.map((step, index) => {
-          const active = index === current;
-          const done = index < current;
-          const upcoming = index > current;
+          const state = resolveScribeWorkflowStepVisual(index, activeIndex);
+          const done = state === "done";
+          const active = state === "current";
+          const upcoming = state === "upcoming";
           const live = liveRecording && active && index === 0;
-          const label = live ? "Record (Live)" : (DISPLAY_LABELS[index] ?? step.label);
+          const label = live ? "Record (Live)" : step.label;
           return (
             <li key={step.id} className={cn("flex items-center", index > 0 && "lg:flex-1")}>
               {index > 0 && (
@@ -36,6 +33,8 @@ export function ScribeWorkflowStepper({ activeIndex = 0, liveRecording = false }
               <div
                 className="flex items-center gap-2.5"
                 aria-current={active ? "step" : undefined}
+                data-step-id={step.id}
+                data-step-state={live ? "live" : state}
               >
                 <span
                   className={cn(

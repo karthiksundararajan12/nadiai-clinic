@@ -861,6 +861,7 @@ export function ScribeWorkflow() {
               recordState,
               sessionStatus: workspaceState.status,
               pipelineBusy,
+              prescriptionApproved: workspaceState.prescriptionApproved,
             })}
             liveRecording={recordState === "recording" || recordState === "paused"}
           />

@@ -772,6 +772,8 @@ export function ConsultationWorkspace({
       status: resolvedSessionStatus,
       highlightedSegmentId: activeSegmentId,
       clinicalById,
+      prescriptionApproved:
+        prescription.approved || resolvedSessionStatus === "PRESCRIPTION_APPROVED",
     });
   }, [
     onWorkspaceStateChange,
@@ -786,6 +788,7 @@ export function ConsultationWorkspace({
     soapApproved,
     activeSegmentId,
     clinicalById,
+    prescription.approved,
   ]);
 
   const noteGenerating =

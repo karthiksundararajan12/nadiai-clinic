@@ -3,12 +3,28 @@ import { SESSION_STATUS } from "../../constants.js";
 export const SCRIBE_WORKFLOW_STEPS = Object.freeze([
   { id: "record", label: "Record" },
   { id: "transcribe", label: "Transcribe" },
-  { id: "generate", label: "Generate Note" },
-  { id: "review", label: "Review & Edit" },
-  { id: "approve", label: "Approve" },
+  { id: "note", label: "Note" },
+  { id: "prescription", label: "Prescription" },
 ]);
 
-const APPROVED_STATUSES = new Set([
+/** SOAP note is written and reviewed here. Prescription starts only after SOAP approval. */
+const NOTE_STATUSES = new Set([
+  SESSION_STATUS.TRANSCRIBED,
+  SESSION_STATUS.REVIEWING,
+  SESSION_STATUS.REVIEW_COMPLETED,
+  SESSION_STATUS.READY_FOR_SOAP,
+  SESSION_STATUS.GENERATING_SOAP,
+  SESSION_STATUS.SOAP_READY,
+  SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+  SESSION_STATUS.SOAP_REVIEWING,
+]);
+
+/**
+ * Prescription is the active last step from SOAP approval through draft review.
+ * SOAP approval currently lands on COMPLETED before a prescription exists, so
+ * COMPLETED stays on this step instead of marking the workflow finished.
+ */
+const PRESCRIPTION_STATUSES = new Set([
   SESSION_STATUS.SOAP_APPROVED,
   SESSION_STATUS.COMPLETED,
   SESSION_STATUS.READY_FOR_PRESCRIPTION,
@@ -16,21 +32,6 @@ const APPROVED_STATUSES = new Set([
   SESSION_STATUS.PRESCRIPTION_DRAFT_READY,
   SESSION_STATUS.PRESCRIPTION_REVIEW_REQUIRED,
   SESSION_STATUS.PRESCRIPTION_REVIEWING,
-  SESSION_STATUS.PRESCRIPTION_APPROVED,
-]);
-
-const REVIEW_STATUSES = new Set([
-  SESSION_STATUS.SOAP_READY,
-  SESSION_STATUS.SOAP_REVIEW_REQUIRED,
-  SESSION_STATUS.SOAP_REVIEWING,
-]);
-
-const GENERATE_STATUSES = new Set([
-  SESSION_STATUS.TRANSCRIBED,
-  SESSION_STATUS.REVIEWING,
-  SESSION_STATUS.REVIEW_COMPLETED,
-  SESSION_STATUS.READY_FOR_SOAP,
-  SESSION_STATUS.GENERATING_SOAP,
 ]);
 
 const TRANSCRIBE_STATUSES = new Set([
@@ -42,13 +43,15 @@ const TRANSCRIBE_STATUSES = new Set([
 ]);
 
 /**
- * Maps live record state + existing session status onto the 5-step scribe layout.
- * Index is derived only from current props — no extra UI state.
+ * Maps live record state + session status onto Record, Transcribe, Note, Prescription.
+ * An index equal to the step count means every step, including Prescription, is done.
+ * That happens only after the prescription itself is approved.
  *
  * @param {{
  *   recordState?: string;
  *   sessionStatus?: string | null;
  *   pipelineBusy?: boolean;
+ *   prescriptionApproved?: boolean;
  * }} input
  * @returns {number}
  */
@@ -56,6 +59,7 @@ export function resolveScribeWorkflowStepIndex({
   recordState = "idle",
   sessionStatus = null,
   pipelineBusy = false,
+  prescriptionApproved = false,
 } = {}) {
   if (
     recordState === "recording" ||
@@ -66,11 +70,25 @@ export function resolveScribeWorkflowStepIndex({
   }
 
   const status = sessionStatus ?? "";
-  if (APPROVED_STATUSES.has(status)) return 4;
-  if (REVIEW_STATUSES.has(status)) return 3;
-  if (GENERATE_STATUSES.has(status)) return 2;
+  if (prescriptionApproved || status === SESSION_STATUS.PRESCRIPTION_APPROVED) {
+    return SCRIBE_WORKFLOW_STEPS.length;
+  }
+  if (PRESCRIPTION_STATUSES.has(status)) return 3;
+  if (NOTE_STATUSES.has(status)) return 2;
   if (pipelineBusy || recordState === "processing" || TRANSCRIBE_STATUSES.has(status)) {
     return 1;
   }
   return 0;
+}
+
+/**
+ * @param {number} stepIndex
+ * @param {number} activeIndex
+ * @returns {"done" | "current" | "upcoming"}
+ */
+export function resolveScribeWorkflowStepVisual(stepIndex, activeIndex) {
+  const index = Math.max(activeIndex, 0);
+  if (index >= SCRIBE_WORKFLOW_STEPS.length || stepIndex < index) return "done";
+  if (stepIndex === index) return "current";
+  return "upcoming";
 }

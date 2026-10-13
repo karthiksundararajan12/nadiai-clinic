@@ -4,7 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleNotch, Waveform } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../../transcript-review/components/Timestamp.jsx";
-import { resolveConversationChatView } from "../../lib/conversation-chat-view.js";
+import {
+  resolveConversationChatView,
+  resolveConversationScrollTarget,
+} from "../../lib/conversation-chat-view.js";
 import { logScribeTiming } from "../../lib/scribe-client-log.js";
 
 const WAVE_BARS = [10, 18, 28, 14, 36, 22, 12, 32, 20, 16, 30, 12, 24, 18, 10, 26];
@@ -83,7 +86,8 @@ export function ScribeConversationChat({
   onSelectionChange,
   sessionStatus = null,
 }) {
-  const bottomRef = useRef(null);
+  const scrollerRef = useRef(null);
+  const wasLiveRef = useRef(false);
   const segmentKey = segments.map((segment) => segment.id).join("|");
   const [selection, setSelection] = useState({
     key: segmentKey,
@@ -112,10 +116,18 @@ export function ScribeConversationChat({
   }, [deletedIds, inclusionOverrides, onSelectionChange]);
 
   useEffect(() => {
-    if (segments.length) {
-      bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    const scroller = scrollerRef.current;
+    const target = resolveConversationScrollTarget(isLiveRecording);
+    if (target === "latest") {
+      wasLiveRef.current = true;
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+      return;
     }
-  }, [segments]);
+    if (wasLiveRef.current && scroller) {
+      scroller.scrollTop = 0;
+      wasLiveRef.current = false;
+    }
+  }, [isLiveRecording, segments]);
 
   const view = resolveConversationChatView({
     segments,
@@ -182,7 +194,11 @@ export function ScribeConversationChat({
       <div className="shrink-0 border-b border-[color:var(--scribe-card-border)] px-4 py-3 min-[1920px]:px-6 min-[1920px]:py-4">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
       </div>
-      <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 min-[1920px]:px-5 min-[1920px]:py-5">
+      <div
+        ref={scrollerRef}
+        data-scroll-pin={resolveConversationScrollTarget(isLiveRecording)}
+        className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-3 py-3 min-[1920px]:px-5 min-[1920px]:py-5"
+      >
         <div className="space-y-3 min-[1920px]:space-y-4">
           {visibleSegments.map((segment) => {
             const doctor = isDoctor(segment);
@@ -266,7 +282,6 @@ export function ScribeConversationChat({
               </div>
             );
           })}
-          <div ref={bottomRef} />
         </div>
       </div>
     </div>

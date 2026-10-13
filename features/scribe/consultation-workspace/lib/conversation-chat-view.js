@@ -17,6 +17,17 @@
  *   sessionStatus: string | null;
  * }}
  */
+/**
+ * While recording, follow the newest turn. After stop, leave the transcript
+ * pinned at the first turn so later updates do not jump the pane.
+ *
+ * @param {boolean} isLiveRecording
+ * @returns {"latest" | "start"}
+ */
+export function resolveConversationScrollTarget(isLiveRecording) {
+  return isLiveRecording ? "latest" : "start";
+}
+
 export function resolveConversationChatView({
   segments = [],
   loading = false,

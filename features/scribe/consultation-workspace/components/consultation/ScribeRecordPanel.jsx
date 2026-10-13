@@ -90,34 +90,56 @@ export function ScribeRecordPanel({
   };
 
   const micControlClass =
-    "relative z-10 flex h-14 w-14 min-h-11 min-w-11 shrink-0 items-center justify-center rounded-full lg:h-24 lg:w-24 min-[1920px]:h-28 min-[1920px]:w-28";
+    "relative z-10 flex h-10 w-10 min-h-10 min-w-10 shrink-0 items-center justify-center rounded-full";
+
+  const newSessionButton = canStartNewSession ? (
+    <Button
+      type="button"
+      size="sm"
+      className="scribe-mic-button h-9 min-h-9 shrink-0 cursor-pointer gap-1.5 border-0 px-3 text-sm font-bold shadow-none hover:opacity-95"
+      onClick={onNewSession}
+    >
+      <Plus size={16} weight="bold" />
+      New Session
+    </Button>
+  ) : null;
 
   return (
-    <aside className="relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:overflow-hidden">
-      <div className="flex min-h-0 w-full min-w-0 shrink flex-col lg:scribe-card lg:shrink-0 lg:overflow-hidden lg:rounded-xl">
-        <div className="min-h-0 max-h-[min(16rem,46%)] overflow-x-hidden overflow-y-auto rounded-xl border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] shadow-[var(--shadow-clinical)] lg:max-h-[min(22rem,48%)] lg:shrink lg:overflow-y-auto lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none">
+    <aside className="relative flex h-full min-h-[16rem] w-full min-w-0 flex-1 flex-col gap-2 overflow-hidden lg:min-h-0">
+      <div
+        className="scribe-card flex h-[calc(100dvh-16rem)] max-h-[calc(100dvh-16rem)] min-h-[16rem] w-full min-w-0 flex-none flex-col overflow-hidden rounded-xl lg:h-auto lg:max-h-none lg:min-h-[16rem] lg:flex-1"
+        data-testid="record-panel-conversation"
+      >
+        {statusStrip}
+        <ScribeConversationChat
+          segments={transcriptSegments}
+          highlightedSegmentId={highlightedSegmentId}
+          loading={!transcriptPending && transcriptLoading}
+          loadingMessage={transcriptLoadingMessage ?? statusMessage}
+          isLiveRecording={transcriptPending}
+          animateWaveform={isRecording}
+          hasPatient={canStartRecording}
+          clinicalById={clinicalById}
+          onSelectionChange={onSoapTurnSelectionChange}
+          sessionStatus={sessionStatus}
+        />
+      </div>
+
+      <div className="scribe-card shrink-0 overflow-hidden rounded-xl" data-testid="record-panel-controls">
         {children}
-        </div>
         <div
           className={cn(
-            "flex shrink-0 flex-col border-t border-[color:var(--scribe-card-border)]",
-            !manualMode &&
-              "max-lg:fixed max-lg:bottom-0 max-lg:z-30 max-lg:bg-[color:var(--scribe-card-bg)] max-lg:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-lg:shadow-[0_-8px_24px_rgb(79_70_229/0.12)] max-sm:inset-x-0 sm:max-lg:left-1/2 sm:max-lg:w-full sm:max-lg:max-w-2xl sm:max-lg:-translate-x-1/2",
-          )}
-        >
-        <div
-          className={cn(
-            "flex flex-col items-center px-4 pt-3 lg:pt-4 min-[1920px]:px-6 min-[1920px]:pt-6",
-            manualMode ? "pb-5 min-[1920px]:pb-8" : "lg:pb-5 min-[1920px]:pb-8",
+            "flex flex-col gap-2 border-t border-[color:var(--scribe-card-border)] px-3 py-2",
+            manualMode && "pb-3",
           )}
         >
         {manualMode ? (
-          <div className="flex w-full min-w-0 flex-col gap-3">
+          <div className="flex w-full min-w-0 flex-col gap-2">
             <button
               type="button"
               onClick={exitManualMode}
               disabled={manualSubmitting}
-              className="inline-flex min-h-11 cursor-pointer items-center self-start text-base font-semibold text-[color:var(--scribe-indigo-600)] underline hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60 min-[1920px]:text-lg"
+              className="inline-flex min-h-9 cursor-pointer items-center self-start text-sm font-semibold text-[color:var(--scribe-indigo-600)] underline hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               ← Use microphone instead
             </button>
@@ -127,8 +149,7 @@ export function ScribeRecordPanel({
               disabled={manualSubmitting}
               placeholder="Paste or type the doctor-patient conversation here..."
               className={cn(
-                "max-h-[30vh] min-h-[120px] w-full resize-y rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] p-3 text-base font-medium text-foreground lg:max-h-none lg:min-h-[160px]",
-                "min-[1920px]:min-h-[200px] min-[1920px]:text-lg",
+                "max-h-32 min-h-[4.5rem] w-full resize-y rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] p-2 text-sm font-medium text-foreground",
                 "placeholder:scribe-text-muted focus:border-[color:var(--scribe-indigo-600)] focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
@@ -138,15 +159,15 @@ export function ScribeRecordPanel({
               disabled={!manualText.trim() || manualSubmitting}
               onClick={handleManualGenerate}
               className={cn(
-                "scribe-mic-button flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-xl px-5 py-3",
-                "text-base font-bold text-white min-[1920px]:min-h-12 min-[1920px]:text-lg",
+                "scribe-mic-button flex min-h-9 w-full cursor-pointer items-center justify-center gap-2 rounded-lg px-3 py-2",
+                "text-sm font-bold text-white",
                 "transition-all duration-200 hover:opacity-95",
                 "disabled:cursor-not-allowed disabled:opacity-60",
               )}
             >
               {manualSubmitting ? (
                 <>
-                  <CircleNotch size={22} weight="bold" className="animate-spin" />
+                  <CircleNotch size={18} weight="bold" className="animate-spin" />
                   Generating…
                 </>
               ) : (
@@ -155,21 +176,11 @@ export function ScribeRecordPanel({
             </button>
           </div>
         ) : (
-          <>
-            <div className="flex h-7 w-full items-center justify-center empty:hidden lg:empty:flex">
-              {showRecordingControls && isLive && (
-                <span className="inline-flex max-w-full items-center gap-1.5 truncate rounded-full border border-red-200 bg-red-50 px-2.5 py-0.5 text-sm font-bold tracking-wide text-red-600 min-[1920px]:text-base">
-                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />
-                  REC {durationLabel || "00:00"}
-                </span>
-              )}
-            </div>
-
-            <div className="flex w-full min-w-0 items-center gap-3 lg:flex-col lg:gap-0">
-            <div className="relative flex h-14 w-14 shrink-0 items-center justify-center lg:h-24 lg:w-24 min-[1920px]:h-28 min-[1920px]:w-28">
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="relative flex h-10 w-10 shrink-0 items-center justify-center">
               {micReady && (
                 <span
-                  className="scribe-mic-ring pointer-events-none absolute -inset-1.5 animate-pulse rounded-full ring-4"
+                  className="scribe-mic-ring pointer-events-none absolute -inset-1 animate-pulse rounded-full ring-2"
                   aria-hidden
                 />
               )}
@@ -187,9 +198,9 @@ export function ScribeRecordPanel({
                   )}
                 >
                   {isRequesting ? (
-                    <CircleNotch size={32} weight="bold" className="animate-spin" />
+                    <CircleNotch size={18} weight="bold" className="animate-spin" />
                   ) : (
-                    <Microphone size={32} weight="duotone" />
+                    <Microphone size={18} weight="duotone" />
                   )}
                 </button>
               )}
@@ -200,156 +211,113 @@ export function ScribeRecordPanel({
                   onClick={onStop}
                   className={cn(
                     micControlClass,
-                    "cursor-pointer bg-red-600 text-white shadow-md shadow-red-600/25 transition-all duration-200 hover:bg-red-700",
+                    "cursor-pointer bg-red-600 text-white shadow-sm shadow-red-600/25 transition-all duration-200 hover:bg-red-700",
                   )}
                 >
-                  <Stop size={28} weight="bold" />
+                  <Stop size={16} weight="bold" />
                 </button>
               )}
               {isProcessing && (
                 <div className={cn(micControlClass, "bg-[color:var(--scribe-indigo-50)] text-[color:var(--scribe-indigo-600)]")}>
-                  <CircleNotch size={32} weight="bold" className="animate-spin" />
+                  <CircleNotch size={18} weight="bold" className="animate-spin" />
                 </div>
-              )}
-              {disabled && !isLive && !isProcessing && (
-                <div
-                  className="h-14 w-14 rounded-full bg-[color:var(--scribe-indigo-50)] opacity-60 lg:h-24 lg:w-24 min-[1920px]:h-28 min-[1920px]:w-28"
-                  aria-hidden
-                />
               )}
             </div>
 
-            <div className="flex min-w-0 flex-1 flex-col items-start gap-1 text-left lg:mt-3 lg:w-full lg:max-w-[280px] lg:flex-none lg:items-center lg:text-center min-[1920px]:max-w-sm min-[1920px]:gap-2">
+            <div className="flex min-w-0 flex-1 items-center gap-2">
+              {showRecordingControls && isLive && (
+                <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2 py-0.5 text-xs font-bold tracking-wide text-red-600">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-red-600" aria-hidden />
+                  REC {durationLabel || "00:00"}
+                </span>
+              )}
               {isLive && (
-                <>
-                  <p className="break-words text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">Stop recording</p>
-                  <p className="scribe-text-muted break-words text-sm font-medium">
-                    Capturing ambient doctor-patient dialogue
-                  </p>
-                  <p className="scribe-text-muted break-words text-sm font-medium">Minimum 10 seconds</p>
-                </>
+                <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--scribe-heading)]">
+                  Stop recording
+                </p>
               )}
               {(isIdle || isRequesting) && !disabled && (
-                <>
-                  <p className="break-words text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">Start recording</p>
-                  {micReady ? (
-                    <p className="break-words text-sm font-semibold text-[color:var(--scribe-indigo-600)] min-[1920px]:text-lg">
-                      Ready • Click the mic to record
-                    </p>
-                  ) : !canStartRecording ? (
-                    <span className="mt-1 inline-flex max-w-full items-center gap-1.5 rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-left text-sm font-semibold break-words text-amber-900 min-[1920px]:text-base">
-                      <WarningCircle size={16} weight="bold" className="shrink-0" aria-hidden />
-                      {patientRequiredHint || "Select a patient to begin"}
-                    </span>
-                  ) : null}
-                  {isRequesting && (
-                    <p className="scribe-text-muted break-words text-sm font-medium">{statusTitle}</p>
-                  )}
-                  <p className="scribe-text-muted break-words text-sm font-medium">Minimum 10 seconds</p>
-                </>
+                <p className="min-w-0 truncate text-sm font-semibold text-[color:var(--scribe-heading)]">
+                  {isRequesting ? statusTitle : micReady ? "Ready to record" : "Start recording"}
+                </p>
+              )}
+              {(isIdle || isRequesting) && !disabled && !canStartRecording && (
+                <span className="inline-flex min-w-0 items-center gap-1 truncate rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                  <WarningCircle size={14} weight="bold" className="shrink-0" aria-hidden />
+                  <span className="truncate">{patientRequiredHint || "Select a patient to begin"}</span>
+                </span>
               )}
               {isProcessing && (
-                <p className="scribe-text-muted break-words text-sm font-medium min-[1920px]:text-lg">
+                <p className="scribe-text-muted min-w-0 truncate text-sm font-medium">
                   {statusMessage || "Processing…"}
                 </p>
               )}
-              {disabled && !isLive && !isProcessing && (statusTitle || sessionHint) && (
-                <div
-                  className={cn(
-                    "w-full break-words rounded-xl border border-dashed px-4 py-3 text-center text-sm font-medium min-[1920px]:text-lg",
-                    sessionContext === RECORD_PANEL_CONTEXT.APPROVED_REVIEW
-                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                      : "border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] scribe-text-muted",
-                  )}
+              {disabled && !isLive && !isProcessing && statusTitle && (
+                <p
+                  className="min-w-0 truncate text-sm font-medium text-[color:var(--scribe-heading)]"
                   data-testid="record-panel-session-hint"
+                  title={sessionHint || undefined}
                 >
-                  <p className="break-words font-medium text-heading">{statusTitle}</p>
-                  {sessionHint && <p className="mt-1 break-words">{sessionHint}</p>}
-                </div>
+                  {statusTitle}
+                </p>
               )}
               {statusMessage && !transcriptLoading && !isProcessing && isLive && (
-                <p className="scribe-text-muted break-words text-sm font-medium">{statusMessage}</p>
+                <p className="scribe-text-muted min-w-0 truncate text-sm font-medium">{statusMessage}</p>
               )}
-            </div>
             </div>
 
             {isLive && pauseSupported && (
-              <div className="mt-2 flex w-full justify-center lg:mt-3 lg:max-w-[280px] min-[1920px]:max-w-sm">
-                <button
-                  type="button"
-                  aria-label={isPaused ? "Resume recording" : "Pause recording"}
-                  onClick={isPaused ? onResume : onPause}
-                  className="inline-flex min-h-11 w-full cursor-pointer items-center justify-center gap-2 rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-4 py-2 text-sm font-semibold text-[color:var(--scribe-heading)] transition-colors hover:bg-[color:var(--scribe-indigo-50)] lg:w-auto min-[1920px]:min-h-12 min-[1920px]:px-6 min-[1920px]:text-lg"
-                >
-                  {isPaused ? (
-                    <Play size={18} weight="bold" className="scribe-icon" />
-                  ) : (
-                    <Pause size={18} weight="bold" className="scribe-icon" />
-                  )}
-                  {isPaused ? "Resume recording" : "Pause recording"}
-                </button>
-              </div>
+              <button
+                type="button"
+                aria-label={isPaused ? "Resume recording" : "Pause recording"}
+                onClick={isPaused ? onResume : onPause}
+                className="inline-flex h-9 min-h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-full border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-3 text-sm font-semibold text-[color:var(--scribe-heading)] transition-colors hover:bg-[color:var(--scribe-indigo-50)]"
+              >
+                {isPaused ? (
+                  <Play size={16} weight="bold" className="scribe-icon" />
+                ) : (
+                  <Pause size={16} weight="bold" className="scribe-icon" />
+                )}
+                {isPaused ? "Resume" : "Pause"}
+              </button>
             )}
 
             {languageToggle && !isLive && !isProcessing && (isIdle || isRequesting) && !disabled && (
-              <div className="mt-3 flex w-full min-w-0 justify-center lg:max-w-[280px] min-[1920px]:max-w-sm">{languageToggle}</div>
+              <div className="min-w-[8rem] flex-1">{languageToggle}</div>
             )}
 
             {canUseManualEntry && (
               <button
                 type="button"
                 onClick={enterManualMode}
-                className="mt-2 inline-flex min-h-11 w-full cursor-pointer items-center justify-center text-sm font-semibold text-[color:var(--scribe-indigo-600)] hover:underline lg:mt-3 lg:w-auto min-[1920px]:min-h-12 min-[1920px]:text-lg"
+                className="inline-flex h-9 min-h-9 shrink-0 cursor-pointer items-center text-sm font-semibold text-[color:var(--scribe-indigo-600)] hover:underline"
               >
-                Enter transcript manually
+                Enter manually
               </button>
             )}
-          </>
+
+            {newSessionButton}
+          </div>
         )}
-        </div>
 
         {isLive && (
-          <div
-            className="break-words border-t border-amber-200 bg-amber-50 px-4 py-2 text-center text-sm font-semibold text-amber-900 min-[1920px]:px-6 min-[1920px]:text-lg"
+          <p
+            className="truncate text-xs font-semibold text-amber-900"
             data-testid="recording-leave-warning"
             role="status"
           >
             Recording in progress — don&apos;t close this tab
-          </div>
+          </p>
         )}
 
-        {(canStartNewSession || footer) && (
-          <div className="space-y-3 border-t border-[color:var(--scribe-card-border)] px-4 py-3 lg:py-4 min-[1920px]:space-y-4 min-[1920px]:px-6">
-            {canStartNewSession && (
-              <Button
-                type="button"
-                className="scribe-mic-button min-h-11 w-full cursor-pointer gap-2 border-0 text-sm font-bold shadow-none hover:opacity-95 min-[1920px]:min-h-12 min-[1920px]:text-lg"
-                onClick={onNewSession}
-              >
-                <Plus size={20} weight="bold" />
-                New Session
-              </Button>
-            )}
+        {manualMode && (newSessionButton || footer) && (
+          <div className="flex items-center justify-end gap-2">
+            {newSessionButton}
             {footer}
           </div>
         )}
+        {!manualMode && footer ? <div className="min-w-0">{footer}</div> : null}
         </div>
-      </div>
-
-      <div className="scribe-card mt-4 flex min-h-[16rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl min-[1920px]:mt-6" data-testid="record-panel-conversation">
-        {statusStrip}
-        <ScribeConversationChat
-          segments={transcriptSegments}
-          highlightedSegmentId={highlightedSegmentId}
-          loading={!transcriptPending && transcriptLoading}
-          loadingMessage={transcriptLoadingMessage ?? statusMessage}
-          isLiveRecording={transcriptPending}
-          animateWaveform={isRecording}
-          hasPatient={canStartRecording}
-          clinicalById={clinicalById}
-          onSelectionChange={onSoapTurnSelectionChange}
-          sessionStatus={sessionStatus}
-        />
       </div>
     </aside>
   );

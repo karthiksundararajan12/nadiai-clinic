@@ -844,15 +844,8 @@ export function ScribeWorkflow() {
       )}
       <div
         className={cn(
-          "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-visible px-4 py-4 lg:overflow-hidden",
-          "md:gap-5 lg:gap-6 lg:px-6 lg:py-6",
-          "min-[1920px]:gap-8 min-[1920px]:px-8 min-[1920px]:py-8",
-          !manualInputMode &&
-            (isRecordingLive
-              ? "max-lg:pb-[calc(15rem+env(safe-area-inset-bottom))]"
-              : activeSessionId
-                ? "max-lg:pb-[calc(13rem+env(safe-area-inset-bottom))]"
-                : "max-lg:pb-[calc(10rem+env(safe-area-inset-bottom))]"),
+          "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3 lg:gap-4 lg:overflow-hidden lg:px-6 lg:py-4",
+          "min-[1920px]:gap-6 min-[1920px]:px-8 min-[1920px]:py-6",
         )}
       >
         <div className="w-full min-w-0 overflow-hidden">
@@ -866,8 +859,8 @@ export function ScribeWorkflow() {
             liveRecording={recordState === "recording" || recordState === "paused"}
           />
         </div>
-        <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col gap-4 overflow-visible md:gap-5 lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-stretch lg:gap-6 lg:overflow-hidden min-[1920px]:gap-8">
-          <div className="flex min-h-0 min-w-0 flex-[1.25] flex-col overflow-visible lg:h-full lg:flex-none lg:overflow-hidden">
+        <div className="flex min-h-0 w-full min-w-0 flex-col gap-3 lg:grid lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)] lg:items-stretch lg:gap-4 lg:overflow-hidden min-[1920px]:gap-6">
+          <div className="flex min-h-[16rem] min-w-0 flex-col lg:h-full lg:min-h-0 lg:overflow-hidden">
             <ScribeRecordPanel
               recordState={recordState}
               durationLabel={recording.formattedDuration}
@@ -905,6 +898,7 @@ export function ScribeWorkflow() {
               onSoapTurnSelectionChange={handleSoapTurnSelectionChange}
             >
               <PatientSelector
+                compact
                 patient={selectedPatient}
                 lockSelection={isRecordingLive}
                 languageToggle={languageToggle}
@@ -920,7 +914,7 @@ export function ScribeWorkflow() {
             </ScribeRecordPanel>
           </div>
 
-          <main className="scribe-card flex min-h-[9rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl lg:h-full lg:min-h-0">
+          <main className="scribe-card flex min-h-[9rem] min-w-0 flex-col overflow-hidden rounded-xl max-lg:h-[calc(100dvh-16rem)] lg:h-full lg:min-h-[9rem]">
             <div className="min-h-0 flex-1 overflow-hidden">{rightPanel}</div>
           </main>
         </div>
@@ -931,13 +925,7 @@ export function ScribeWorkflow() {
         <div
           className={cn(
             "fixed inset-x-0 z-40 mx-auto w-full max-w-md px-4",
-            manualInputMode
-              ? "bottom-[max(1rem,env(safe-area-inset-bottom))]"
-              : isRecordingLive
-                ? "bottom-[calc(15.25rem+env(safe-area-inset-bottom))]"
-                : activeSessionId
-                  ? "bottom-[calc(13.25rem+env(safe-area-inset-bottom))]"
-                  : "bottom-[calc(10.25rem+env(safe-area-inset-bottom))]",
+            "bottom-[max(1rem,env(safe-area-inset-bottom))]",
             "lg:absolute lg:bottom-4 lg:left-1/2 lg:z-30 lg:mx-0 lg:w-full lg:-translate-x-1/2",
           )}
         >

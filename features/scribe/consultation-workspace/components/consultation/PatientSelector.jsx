@@ -108,6 +108,7 @@ export function PatientSelector({
   className,
   lockSelection = false,
   languageToggle = null,
+  compact = false,
 }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -185,7 +186,7 @@ export function PatientSelector({
         ? "Search patient"
         : "No active appointments to consult";
 
-  const languageBlock = languageToggle ? (
+  const languageBlock = languageToggle && !compact ? (
     <div className="mt-4 space-y-2 border-t border-[color:var(--scribe-card-border)] pt-4 min-[1920px]:mt-6 min-[1920px]:pt-6">
       <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
         <p className="flex min-w-0 items-center gap-2 text-sm font-bold text-[color:var(--scribe-heading)] min-[1920px]:text-lg">
@@ -202,6 +203,91 @@ export function PatientSelector({
       <div className="min-w-0 w-full">{languageToggle}</div>
     </div>
   ) : null;
+
+  if (compact) {
+    return (
+      <div
+        className={cn("flex w-full min-w-0 flex-wrap items-center gap-2 bg-[color:var(--scribe-card-bg)] px-3 py-2", className)}
+        data-testid={patient ? "scribe-patient-header" : "scribe-patient-compact"}
+      >
+        {patient ? (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--scribe-indigo-600)] text-xs font-bold text-white">
+              {initials(patient.name)}
+            </div>
+            <p className="min-w-0 truncate text-sm font-bold text-[color:var(--scribe-heading)]">{patient.name}</p>
+            {lockSelection ? (
+              <span className="scribe-text-muted inline-flex shrink-0 items-center gap-1 text-xs font-semibold">
+                <Lock size={14} weight="bold" className="scribe-icon" aria-hidden />
+                Locked
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="inline-flex h-8 shrink-0 cursor-pointer items-center text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:underline"
+                onClick={onClear}
+              >
+                Change
+              </button>
+            )}
+          </div>
+        ) : (
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <MagnifyingGlass
+                size={16}
+                weight="bold"
+                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 scribe-icon"
+                aria-hidden
+              />
+              <select
+                value={selectValue}
+                onChange={handleSelectChange}
+                disabled={selectDisabled}
+                data-testid="scribe-patient-select"
+                aria-label="Select patient to start consultation"
+                aria-busy={loading || undefined}
+                className={cn(
+                  "h-9 min-h-9 w-full min-w-0 appearance-none truncate rounded-lg border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-indigo-50)] pl-8 pr-7 text-sm font-medium text-[color:var(--scribe-heading)] focus:outline-none focus:ring-2 focus:ring-[color:var(--scribe-indigo-100)]",
+                  selectDisabled ? "cursor-not-allowed opacity-70" : "cursor-pointer",
+                )}
+              >
+                <option value="">{placeholder}</option>
+                {options.map((opt) => (
+                  <option key={opt.appointment_id} value={opt.appointment_id}>
+                    {optionLabel(opt)}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 min-h-9 shrink-0 cursor-pointer gap-1 border-transparent bg-[color:var(--scribe-indigo-50)] px-2 text-sm font-bold text-[color:var(--scribe-indigo-600)] hover:bg-[color:var(--scribe-indigo-100)]"
+              data-testid="scribe-create-patient"
+              onClick={() => setShowCreate(true)}
+            >
+              <Plus size={16} weight="bold" />
+              <span className="sr-only">Create new patient</span>
+            </Button>
+          </div>
+        )}
+        {languageToggle ? (
+          <div className="min-w-[9rem] max-w-full flex-1 sm:max-w-[16rem]">{languageToggle}</div>
+        ) : null}
+        {loadError && (
+          <p className="w-full truncate text-xs font-medium text-destructive" data-testid="scribe-patient-select-error">
+            Couldn&apos;t load appointments.{" "}
+            <button type="button" className="underline" onClick={() => void loadEligible()}>
+              Retry
+            </button>
+          </p>
+        )}
+        {createModal}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("w-full min-w-0 bg-[color:var(--scribe-card-bg)] px-4 py-4 md:px-5 min-[1920px]:px-6 min-[1920px]:py-6", className)} data-testid={patient ? "scribe-patient-header" : undefined}>

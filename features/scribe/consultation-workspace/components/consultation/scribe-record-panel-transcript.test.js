@@ -113,13 +113,17 @@ for (const recordState of ["recording", "paused", "requesting"]) {
   });
 }
 
-test("conversation area renders the full transcript below the record button after recording stops", async () => {
+test("conversation area stays above the record controls and keeps the transcript after stop", async () => {
   const view = render(ScribeRecordPanel, {
     recordState: "recording",
     transcriptSegments: SEGMENTS,
   });
   try {
     assert.match(view.host.textContent, /About three days now\./);
+    assert.equal(
+      conversationArea(view.host).querySelector("[data-scroll-pin]")?.getAttribute("data-scroll-pin"),
+      "latest",
+    );
 
     view.rerender({ recordState: "idle", transcriptSegments: SEGMENTS });
 
@@ -129,12 +133,14 @@ test("conversation area renders the full transcript below the record button afte
     assert.equal(area.querySelector("[data-testid='conversation-placeholder']"), null);
     assert.match(workspace.textContent, /How long have you had the fever\?/);
     assert.match(workspace.textContent, /About three days now\./);
+    assert.equal(area.querySelector("[data-scroll-pin]")?.getAttribute("data-scroll-pin"), "start");
 
     const startButton = view.host.querySelector("button[aria-label='Start recording']");
     assert.ok(startButton);
+    assert.ok(area.className.includes("min-h-[16rem]"));
     assert.ok(
-      startButton.compareDocumentPosition(area) & window.Node.DOCUMENT_POSITION_FOLLOWING,
-      "conversation area should follow the Start Recording button",
+      area.compareDocumentPosition(startButton) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      "conversation area should sit above the recording controls",
     );
   } finally {
     await view.unmount();

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   resolveConversationChatView,
+  resolveConversationScrollTarget,
   resolveDisplayTranscriptSegments,
 } from "./conversation-chat-view.js";
 import {
@@ -104,6 +105,11 @@ test("mergeLoadedTranscriptSegments does not replace a saved transcript with an 
   });
   assert.equal(kept, SEGMENTS);
   assert.equal(kept.length, 2);
+});
+
+test("conversation follows the latest turn only while recording", () => {
+  assert.equal(resolveConversationScrollTarget(true), "latest");
+  assert.equal(resolveConversationScrollTarget(false), "start");
 });
 
 test("resolveDisplayTranscriptSegments falls back to live when workspace is empty", () => {

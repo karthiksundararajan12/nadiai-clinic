@@ -265,39 +265,27 @@ export class TranscriptionRepository extends BaseRepository {
   }
 
   /**
-   * Replaces normalized transcript segments for a transcription.
+   * Replaces normalized transcript segments in one database transaction.
+   * Upserts by (transcription_id, segment_index), then deletes leftover indexes.
+   * A concurrent read sees the previous rows or the new rows, never a gap.
    *
    * @param {string} transcriptionId
    * @param {string} sessionId
    * @param {Array<Record<string, unknown>>} segments
    */
   async replaceSegments(transcriptionId, sessionId, segments) {
-    await this._run(
+    const data = await this._run(
       () =>
-        this._db
-          .from("transcription_segments")
-          .delete()
-          .eq("transcription_id", transcriptionId),
-      "deleteExistingTranscriptionSegments",
+        this._db.rpc("replace_transcription_segments", {
+          p_transcription_id: transcriptionId,
+          p_session_id: sessionId,
+          p_segments: (segments ?? []).map(toSegmentPayload),
+        }),
+      "replaceTranscriptionSegments",
     );
 
-    if (!segments.length) return [];
-
-    return this._run(
-      () =>
-        this._db
-          .from("transcription_segments")
-          .insert(
-            segments.map((segment) => ({
-              ...segment,
-              transcription_id: transcriptionId,
-              session_id: sessionId,
-            })),
-          )
-          .select("*")
-          .order("segment_index", { ascending: true }),
-      "insertTranscriptionSegments",
-    );
+    const rows = Array.isArray(data) ? data : [];
+    return rows.slice().sort((a, b) => a.segment_index - b.segment_index);
   }
 
   /** @param {string} sessionId */
@@ -357,4 +345,25 @@ export class TranscriptionRepository extends BaseRepository {
 /** @param {number} attemptCount */
 function retryDelayMs(_attemptCount) {
   return 500;
+}
+
+/**
+ * Columns accepted by replace_transcription_segments.
+ * @param {Record<string, unknown>} segment
+ */
+function toSegmentPayload(segment) {
+  return {
+    segment_index: segment.segment_index,
+    start_seconds: segment.start_seconds,
+    end_seconds: segment.end_seconds,
+    text: segment.text,
+    speaker: segment.speaker ?? "A",
+    speaker_label: segment.speaker_label ?? "Unknown",
+    confidence: segment.confidence ?? null,
+    is_low_confidence: Boolean(segment.is_low_confidence),
+    provider_metadata:
+      segment.provider_metadata && typeof segment.provider_metadata === "object"
+        ? segment.provider_metadata
+        : {},
+  };
 }

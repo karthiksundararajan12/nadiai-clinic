@@ -37,6 +37,7 @@ import {
   runSoapGenerationAttempt,
 } from "../lib/soap-generation-ui.js";
 import { logScribeTiming } from "../lib/scribe-client-log.js";
+import { resolveWorkspaceTranscriptSegments } from "../../lib/workspace-transcript-segments.js";
 
 const PRESCRIPTION_READY_STATUSES = new Set([
   "PRESCRIPTION_DRAFT_READY",
@@ -605,7 +606,15 @@ export function ConsultationWorkspace({
 
   const sessionComplete = soapApproved;
 
-  const hasTranscript = transcript.segments.length > 0;
+  const workspaceSegments = useMemo(
+    () =>
+      resolveWorkspaceTranscriptSegments({
+        segments: transcript.segments,
+        transcription: transcript.transcription,
+      }),
+    [transcript.segments, transcript.transcription],
+  );
+  const hasTranscript = workspaceSegments.length > 0;
   const transcriptWorkspaceAvailable = isTranscriptWorkspaceAvailable(resolvedSessionStatus);
 
   const handleGenerateSOAP = useCallback(async () => {
@@ -620,7 +629,7 @@ export function ConsultationWorkspace({
     });
     const soapStartedAt = Date.now();
     const result = await runSoapGenerationAttempt(async () => {
-      if (resolvedSessionStatus === "REVIEWING" && transcript.segments.length > 0) {
+      if (resolvedSessionStatus === "REVIEWING" && workspaceSegments.length > 0) {
         await transcript.completeReview();
         await transcript.load();
       }
@@ -657,7 +666,7 @@ export function ConsultationWorkspace({
     soapTurnSelection,
     transcript.generateSOAP,
     transcript.load,
-    transcript.segments.length,
+    workspaceSegments.length,
   ]);
 
   useEffect(() => {
@@ -673,7 +682,7 @@ export function ConsultationWorkspace({
     if (autoPipelineAttemptedRef.current || autoPipelineRunning || generatingSOAP) return;
 
     const shouldCompleteAndGenerate =
-      resolvedSessionStatus === "REVIEWING" && transcript.segments.length > 0;
+      resolvedSessionStatus === "REVIEWING" && workspaceSegments.length > 0;
     const shouldGenerateOnly =
       ["REVIEW_COMPLETED", "SOAP_READY", "SOAP_REVIEW_REQUIRED"].includes(resolvedSessionStatus);
 
@@ -718,7 +727,7 @@ export function ConsultationWorkspace({
     waitingForTranscript,
     resolvedSessionStatus,
     transcript.loading,
-    transcript.segments.length,
+    workspaceSegments.length,
     transcript.completeReview,
     transcript.generateSOAP,
     transcript.load,
@@ -741,7 +750,7 @@ export function ConsultationWorkspace({
         : resolvedSessionStatus === "TRANSCRIPTION_QUEUED"
           ? "Starting transcription…"
           : pipelineMessage ?? "Transcribing…"
-      : transcript.loading && !transcript.segments.length
+      : transcript.loading && !workspaceSegments.length
         ? "Loading transcript…"
         : null;
 
@@ -752,10 +761,9 @@ export function ConsultationWorkspace({
   }, [soap.note?.generation_metadata?.clinicalClassifications]);
 
   useEffect(() => {
-    const hasTranscript = transcript.segments.length > 0;
     const hideSegments = waitingForTranscript && !hasTranscript;
     onWorkspaceStateChange?.({
-      segments: hideSegments ? [] : transcript.segments,
+      segments: hideSegments ? [] : workspaceSegments,
       transcriptLoading: !soapApproved && !hasTranscript && (waitingForTranscript || transcript.loading),
       transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
       sessionComplete,
@@ -765,7 +773,8 @@ export function ConsultationWorkspace({
     });
   }, [
     onWorkspaceStateChange,
-    transcript.segments,
+    workspaceSegments,
+    hasTranscript,
     waitingForTranscript,
     transcript.loading,
     transcriptPipelineMessage,
@@ -791,7 +800,7 @@ export function ConsultationWorkspace({
   const canGenerateSOAP = canManualGenerateSOAP({
     readOnly,
     waitingForTranscript,
-    segmentCount: transcript.segments.length,
+    segmentCount: workspaceSegments.length,
     generating: noteGenerating,
     hasSoap,
     transcriptWorkspaceAvailable,

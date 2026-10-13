@@ -34,6 +34,29 @@ test("getWorkspace transitions TRANSCRIBED to REVIEWING", async () => {
   assert.equal(sessions.current.status, SESSION_STATUS.REVIEWING);
 });
 
+test("getWorkspace falls back to scribe_transcriptions JSONB when table rows are empty", async () => {
+  const sessions = mockSessionRepository({
+    id: "sess-1",
+    doctor_id: "doctor-1",
+    status: SESSION_STATUS.SOAP_REVIEWING,
+  });
+  const emptyTable = {
+    transcription: {
+      id: "tx-1",
+      full_text: "Take some medicines. Okay.",
+      segments: [{ id: "0", text: "Take some medicines. Okay.", speaker_label: "Doctor", start: 38.3 }],
+    },
+    segments: [],
+    versions: [],
+  };
+  const svc = new TranscriptReviewService(sessions, mockReviewRepository(emptyTable), mockAuditService());
+  const result = await svc.getWorkspace("sess-1", mockCtx());
+
+  assert.equal(result.readOnly, true);
+  assert.equal(result.segments.length, 1);
+  assert.equal(result.segments[0].text, "Take some medicines. Okay.");
+});
+
 test("getWorkspace returns readOnly for COMPLETED without status change", async () => {
   const sessions = mockSessionRepository({
     id: "sess-1",

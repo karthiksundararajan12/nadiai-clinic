@@ -59,6 +59,7 @@ window.HTMLElement.prototype.scrollIntoView = () => {};
 const { createRoot } = await import("react-dom/client");
 const { act, createElement } = await import("react");
 const { ScribeRecordPanel } = await import("./ScribeRecordPanel.jsx");
+const { ScribeConversationChat } = await import("./ScribeConversationChat.jsx");
 const { LiveTranscriptPanel } = await import("./LiveTranscriptPanel.jsx");
 
 const SEGMENTS = [
@@ -94,7 +95,7 @@ function conversationArea(host) {
 }
 
 for (const recordState of ["recording", "paused", "requesting"]) {
-  test(`conversation area stays empty while ${recordState}, even if segments exist`, async () => {
+  test(`conversation area shows a saved transcript while ${recordState}`, async () => {
     const view = render(ScribeRecordPanel, {
       recordState,
       transcriptSegments: SEGMENTS,
@@ -102,11 +103,10 @@ for (const recordState of ["recording", "paused", "requesting"]) {
     try {
       const area = conversationArea(view.host);
       assert.ok(area);
-      assert.equal(area.querySelector("[data-testid='transcript-review-workspace']"), null);
-      assert.ok(area.querySelector("[data-testid='conversation-placeholder']"));
-      assert.match(area.textContent, /Transcript will appear here/);
-      assert.equal(area.textContent.includes("How long have you had the fever?"), false);
-      assert.equal(view.host.querySelector("[data-testid='live-interim-transcript']"), null);
+      const workspace = area.querySelector("[data-testid='transcript-review-workspace']");
+      assert.ok(workspace);
+      assert.equal(area.querySelector("[data-testid='conversation-placeholder']"), null);
+      assert.match(workspace.textContent, /How long have you had the fever\?/);
     } finally {
       await view.unmount();
     }
@@ -119,7 +119,7 @@ test("conversation area renders the full transcript below the record button afte
     transcriptSegments: SEGMENTS,
   });
   try {
-    assert.equal(view.host.textContent.includes("About three days now."), false);
+    assert.match(view.host.textContent, /About three days now\./);
 
     view.rerender({ recordState: "idle", transcriptSegments: SEGMENTS });
 
@@ -159,6 +159,24 @@ test("processing spinner is suppressed while recording and shown after stop", as
     await view.unmount();
   }
 });
+
+for (const sessionStatus of ["GENERATING_SOAP", "SOAP_GENERATING", "SOAP_REVIEWING"]) {
+  test(`Conversation panel shows saved transcript text in ${sessionStatus}`, async () => {
+    const view = render(ScribeConversationChat, {
+      segments: SEGMENTS,
+      loading: sessionStatus !== "SOAP_REVIEWING",
+      sessionStatus,
+    });
+    try {
+      assert.equal(view.host.querySelector("[data-conversation-branch]")?.getAttribute("data-conversation-branch"), "transcript");
+      assert.match(view.host.textContent, /How long have you had the fever\?/);
+      assert.match(view.host.textContent, /About three days now\./);
+      assert.equal(view.host.querySelector("[data-testid='conversation-placeholder']"), null);
+    } finally {
+      await view.unmount();
+    }
+  });
+}
 
 test("transcript renders during SOAP generating even if loading is still true", async () => {
   const view = render(ScribeRecordPanel, {

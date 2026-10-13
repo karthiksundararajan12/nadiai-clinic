@@ -4,6 +4,10 @@ import {
   resolveConversationChatView,
   resolveDisplayTranscriptSegments,
 } from "./conversation-chat-view.js";
+import {
+  mergeLoadedTranscriptSegments,
+  resolveWorkspaceTranscriptSegments,
+} from "../../lib/workspace-transcript-segments.js";
 
 const SEGMENTS = [
   { id: "s1", speaker_label: "Doctor", text: "How long have you had the fever?" },
@@ -64,6 +68,42 @@ test("resolveDisplayTranscriptSegments prefers more distinct speakers", () => {
     liveSegments: live,
   });
   assert.equal(shown, refined);
+});
+
+test("resolveWorkspaceTranscriptSegments uses table rows, then JSONB, then full_text", () => {
+  const table = resolveWorkspaceTranscriptSegments({
+    segments: SEGMENTS,
+    transcription: { full_text: "ignored", segments: [] },
+  });
+  assert.equal(table.length, 2);
+  assert.equal(table[0].text, "How long have you had the fever?");
+
+  const jsonb = resolveWorkspaceTranscriptSegments({
+    segments: [],
+    transcription: {
+      segments: [{ id: "0", text: "Take some medicines.", speaker_label: "Doctor", start: 38.3 }],
+      full_text: "Take some medicines.",
+    },
+  });
+  assert.equal(jsonb.length, 1);
+  assert.equal(jsonb[0].text, "Take some medicines.");
+  assert.equal(jsonb[0].start_seconds, 38.3);
+
+  const fullText = resolveWorkspaceTranscriptSegments({
+    segments: [],
+    transcription: { full_text: "Take some medicines. Okay.", segments: [] },
+  });
+  assert.equal(fullText.length, 1);
+  assert.match(fullText[0].text, /Take some medicines/);
+});
+
+test("mergeLoadedTranscriptSegments does not replace a saved transcript with an empty review payload", () => {
+  const kept = mergeLoadedTranscriptSegments(SEGMENTS, {
+    segments: [],
+    transcription: { segments: [], full_text: "" },
+  });
+  assert.equal(kept, SEGMENTS);
+  assert.equal(kept.length, 2);
 });
 
 test("resolveDisplayTranscriptSegments falls back to live when workspace is empty", () => {

@@ -292,11 +292,17 @@ export function ScribeWorkflow() {
 
     try {
       const payload = await runTranscriptionPipeline(sessionId, controller.signal);
+      const batchSegments = payload?.segments ?? payload?.result?.segments ?? [];
+      if (Array.isArray(batchSegments) && batchSegments.length) {
+        setOptimisticSegments(batchSegments);
+        setTranscriptRefreshNonce((n) => n + 1);
+      }
       logScribeTiming("batch Deepgram end", {
         sessionId,
         mode: "transcribe",
         durationMs: Date.now() - startedAt,
         status: payload?.session?.status ?? payload?.status,
+        segmentCount: Array.isArray(batchSegments) ? batchSegments.length : 0,
       });
       pipelineTimerRef.current?.mark("transcript saved", {
         sessionId,

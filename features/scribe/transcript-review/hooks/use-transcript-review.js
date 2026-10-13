@@ -11,6 +11,7 @@ import {
   updateTranscriptSegment,
 } from "../services/transcript-review.client.js";
 import { useAutosave } from "./use-autosave.js";
+import { mergeLoadedTranscriptSegments } from "../../lib/workspace-transcript-segments.js";
 
 const initialState = {
   session: null,
@@ -27,7 +28,14 @@ function reducer(state, action) {
     case "RESET":
       return initialState;
     case "LOAD":
-      return { ...state, ...action.payload, dirty: {}, undoStack: [], redoStack: [] };
+      return {
+        ...state,
+        ...action.payload,
+        segments: mergeLoadedTranscriptSegments(state.segments, action.payload),
+        dirty: {},
+        undoStack: [],
+        redoStack: [],
+      };
     case "UPDATE_SEGMENT": {
       const before = state.segments.find((s) => s.id === action.segmentId);
       const segments = state.segments.map((segment) =>
@@ -178,6 +186,7 @@ export function useTranscriptReview(sessionId, { enabled = true } = {}) {
 
   useEffect(() => {
     if (!enabled || !sessionId) {
+      fetchedSessionRef.current = null;
       setLoading(false);
       return;
     }

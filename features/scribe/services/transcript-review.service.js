@@ -9,6 +9,7 @@ import {
   TRANSCRIPT_READONLY_SESSION_STATUSES,
 } from "../constants.js";
 import { resolveTranscriptWorkspaceAccess } from "../lib/transcript-workspace-policy.js";
+import { resolveWorkspaceTranscriptSegments } from "../lib/workspace-transcript-segments.js";
 import {
   InvalidStateTransitionError,
   SessionFinalizedError,
@@ -66,7 +67,12 @@ export class TranscriptReviewService {
 
     const nextSession = await this._sessions.findById(sessionId, ctx.doctorId);
     const workspace = await this._review.getWorkspace(sessionId);
-    return { session: nextSession, ...workspace, readOnly: access.readOnly };
+    return {
+      session: nextSession,
+      ...workspace,
+      segments: resolveWorkspaceTranscriptSegments(workspace),
+      readOnly: access.readOnly,
+    };
   }
 
   /**

@@ -95,7 +95,7 @@ export function ScribeRecordPanel({
   return (
     <aside className="relative flex h-full min-h-0 w-full min-w-0 flex-1 flex-col overflow-visible lg:overflow-hidden">
       <div className="flex min-h-0 w-full min-w-0 shrink flex-col lg:scribe-card lg:shrink-0 lg:overflow-hidden lg:rounded-xl">
-        <div className="min-h-0 max-h-[min(16rem,46%)] overflow-x-hidden overflow-y-auto rounded-xl border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] shadow-[var(--shadow-clinical)] lg:max-h-none lg:overflow-visible lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none">
+        <div className="min-h-0 max-h-[min(16rem,46%)] overflow-x-hidden overflow-y-auto rounded-xl border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] shadow-[var(--shadow-clinical)] lg:max-h-[min(22rem,48%)] lg:shrink lg:overflow-y-auto lg:rounded-none lg:border-0 lg:bg-transparent lg:shadow-none">
         {children}
         </div>
         <div
@@ -336,10 +336,10 @@ export function ScribeRecordPanel({
         </div>
       </div>
 
-      <div className="scribe-card mt-4 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl min-[1920px]:mt-6" data-testid="record-panel-conversation">
+      <div className="scribe-card mt-4 flex min-h-[16rem] min-w-0 flex-1 flex-col overflow-hidden rounded-xl min-[1920px]:mt-6" data-testid="record-panel-conversation">
         {statusStrip}
         <ScribeConversationChat
-          segments={transcriptPending ? [] : transcriptSegments}
+          segments={transcriptSegments}
           highlightedSegmentId={highlightedSegmentId}
           loading={!transcriptPending && transcriptLoading}
           loadingMessage={transcriptLoadingMessage ?? statusMessage}

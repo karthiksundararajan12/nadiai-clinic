@@ -36,6 +36,7 @@ import {
   resolveSoapEmptyPresentation,
   runSoapGenerationAttempt,
 } from "../lib/soap-generation-ui.js";
+import { logScribeTiming } from "../lib/scribe-client-log.js";
 
 const PRESCRIPTION_READY_STATUSES = new Set([
   "PRESCRIPTION_DRAFT_READY",
@@ -63,6 +64,7 @@ export function ConsultationWorkspace({
   onSelectedPatientChange,
   onWorkspaceStateChange,
   getSoapTurnSelection,
+  transcriptRefreshNonce = 0,
 }) {
   const lastKnownStatusRef = useRef("");
 
@@ -78,7 +80,7 @@ export function ConsultationWorkspace({
 
   const statusPoll = useSessionStatus(sessionId, {
     enabled: Boolean(sessionId) && !pauseStatusPoll,
-    intervalMs: 8000,
+    intervalMs: 2_000,
   });
 
   const polledStatus = statusPoll.session?.status ?? "";
@@ -241,6 +243,11 @@ export function ConsultationWorkspace({
     }
     prevPipelineBusyRef.current = pipelineBusy;
   }, [pipelineBusy, sessionId, statusPoll.refresh]);
+
+  useEffect(() => {
+    if (!transcriptRefreshNonce || !sessionId) return;
+    void transcript.load();
+  }, [transcriptRefreshNonce, sessionId, transcript.load]);
 
   useEffect(() => {
     if (!statusPoll.isTranscribed && !statusPoll.isFailed) return;
@@ -605,6 +612,13 @@ export function ConsultationWorkspace({
     setToolbarActionError(null);
     setSoapGenerationError(null);
     setAutoPipelineRunning(true);
+    logScribeTiming("SOAP start", {
+      sessionId,
+      sessionStatus: resolvedSessionStatus,
+      transcriptLength: transcript.segments.length,
+      source: "manual",
+    });
+    const soapStartedAt = Date.now();
     const result = await runSoapGenerationAttempt(async () => {
       if (resolvedSessionStatus === "REVIEWING" && transcript.segments.length > 0) {
         await transcript.completeReview();
@@ -612,6 +626,12 @@ export function ConsultationWorkspace({
       }
       await transcript.generateSOAP(soapTurnSelection());
       await statusPoll.refresh?.();
+    });
+    logScribeTiming(result.ok ? "SOAP first token" : "SOAP failed", {
+      sessionId,
+      durationMs: Date.now() - soapStartedAt,
+      ok: result.ok,
+      source: "manual",
     });
 
     if (!result.ok) {
@@ -629,6 +649,7 @@ export function ConsultationWorkspace({
     setAutoPipelineRunning(false);
     return result;
   }, [
+    sessionId,
     resolvedSessionStatus,
     soap.load,
     statusPoll.refresh,
@@ -662,6 +683,12 @@ export function ConsultationWorkspace({
     setAutoPipelineRunning(true);
 
     void (async () => {
+      logScribeTiming("SOAP start", {
+        sessionId,
+        sessionStatus: resolvedSessionStatus,
+        transcriptLength: transcript.segments.length,
+      });
+      const soapStartedAt = Date.now();
       const result = await runSoapGenerationAttempt(async () => {
         if (shouldCompleteAndGenerate) {
           await transcript.completeReview();
@@ -670,6 +697,11 @@ export function ConsultationWorkspace({
         await transcript.generateSOAP(soapTurnSelection());
         await statusPoll.refresh?.();
         await soap.load();
+      });
+      logScribeTiming(result.ok ? "SOAP first token" : "SOAP failed", {
+        sessionId,
+        durationMs: Date.now() - soapStartedAt,
+        ok: result.ok,
       });
 
       if (!result.ok) {
@@ -720,10 +752,11 @@ export function ConsultationWorkspace({
   }, [soap.note?.generation_metadata?.clinicalClassifications]);
 
   useEffect(() => {
-    const hideSegments = waitingForTranscript && transcript.segments.length === 0;
+    const hasTranscript = transcript.segments.length > 0;
+    const hideSegments = waitingForTranscript && !hasTranscript;
     onWorkspaceStateChange?.({
       segments: hideSegments ? [] : transcript.segments,
-      transcriptLoading: !soapApproved && (waitingForTranscript || (transcript.loading && !transcript.segments.length)),
+      transcriptLoading: !soapApproved && !hasTranscript && (waitingForTranscript || transcript.loading),
       transcriptLoadingMessage: transcriptPipelineMessage ?? pipelineMessage,
       sessionComplete,
       status: resolvedSessionStatus,

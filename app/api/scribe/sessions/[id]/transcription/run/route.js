@@ -22,12 +22,17 @@ export async function POST(_request, { params }) {
     if (!scribe) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     const { ctx, services } = scribe;
 
-    const result = await services.transcriptionService.runForSession(id, ctx);
+    const body = await _request.json().catch(() => ({}));
+    const result = await services.transcriptionService.runForSession(id, ctx, {
+      refineSpeakers: Boolean(body?.refineSpeakers),
+    });
 
     log.info("Session transcription completed", {
       sessionId: id,
       status: result.session?.status,
       jobStatus: result.result?.status,
+      refineSpeakers: Boolean(body?.refineSpeakers),
+      segmentCount: result.segments?.length ?? result.result?.segmentCount,
     });
 
     return NextResponse.json(result, { status: 200 });

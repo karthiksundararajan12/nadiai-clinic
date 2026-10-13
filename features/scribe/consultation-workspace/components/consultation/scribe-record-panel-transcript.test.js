@@ -160,6 +160,69 @@ test("processing spinner is suppressed while recording and shown after stop", as
   }
 });
 
+test("transcript renders during SOAP generating even if loading is still true", async () => {
+  const view = render(ScribeRecordPanel, {
+    recordState: "processing",
+    transcriptLoading: true,
+    transcriptLoadingMessage: "Generating SOAP note…",
+    transcriptSegments: SEGMENTS,
+    sessionStatus: "GENERATING_SOAP",
+    disabled: true,
+  });
+  try {
+    const area = conversationArea(view.host);
+    const workspace = area.querySelector("[data-testid='transcript-review-workspace']");
+    assert.ok(workspace);
+    assert.equal(workspace.getAttribute("data-conversation-branch"), "transcript");
+    assert.equal(area.querySelector("[data-testid='conversation-placeholder']"), null);
+    assert.match(workspace.textContent, /How long have you had the fever\?/);
+    assert.match(workspace.textContent, /About three days now\./);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("transcript renders in SOAP review while Session in progress hint is visible", async () => {
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    disabled: true,
+    canStartNewSession: true,
+    sessionContext: "in-progress",
+    sessionStatus: "SOAP_REVIEWING",
+    transcriptSegments: SEGMENTS,
+  });
+  try {
+    assert.match(view.host.textContent, /Session in progress/);
+    const area = conversationArea(view.host);
+    const workspace = area.querySelector("[data-testid='transcript-review-workspace']");
+    assert.ok(workspace);
+    assert.equal(workspace.getAttribute("data-conversation-branch"), "transcript");
+    assert.equal(area.querySelector("[data-testid='conversation-placeholder']"), null);
+    assert.match(workspace.textContent, /About three days now\./);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("conversation placeholder only when transcript is empty", async () => {
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    disabled: true,
+    sessionContext: "in-progress",
+    sessionStatus: "SOAP_REVIEWING",
+    transcriptSegments: [],
+  });
+  try {
+    const area = conversationArea(view.host);
+    assert.ok(area.querySelector("[data-testid='conversation-placeholder']"));
+    assert.equal(area.querySelector("[data-testid='transcript-review-workspace']"), null);
+    assert.equal(area.getAttribute("data-conversation-branch") ?? area.querySelector("[data-conversation-branch]")?.getAttribute("data-conversation-branch"), "placeholder");
+    assert.equal(area.textContent.includes("How long have you had the fever?"), false);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("unapproved open session still offers New Session instead of a dead end", async () => {
   let clicked = 0;
   const view = render(ScribeRecordPanel, {

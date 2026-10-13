@@ -9,11 +9,15 @@
 
 /**
  * @typedef {Object} TranscriptionInput
- * @property {Blob[]}      audioBlobs      - Ordered audio chunk blobs (all chunks for one session)
+ * @property {string}      [audioUrl]      - Supabase signed URL; Deepgram fetches audio itself
+ * @property {Blob[]}      [audioBlobs]    - Fallback when a signed URL is unavailable
  * @property {string}      mimeType        - MIME type shared by all blobs, e.g. 'audio/webm'
  * @property {string}      language        - SCRIBE_LANGUAGE value ('english'|'hindi'|'hinglish')
  * @property {string}      sessionId       - Session ID — used only for logging / audit
  * @property {number|null} durationSeconds - Known audio duration (used as fallback for cost)
+ * @property {number}      [audioSizeBytes]
+ * @property {number}      [timeoutMs]
+ * @property {AbortSignal} [signal]
  */
 
 /**

@@ -44,6 +44,13 @@ import {
   resolveDeepgramLanguage,
   resolveDeepgramModel,
 } from "./deepgram-config.js";
+import {
+  BATCH_DIARIZATION_TIMEOUT_MS,
+  DEEPGRAM_MAX_RETRIES,
+  DEEPGRAM_RETRY_BACKOFF_MS,
+  isDeepgramTimeoutError,
+  isTransientDeepgramError,
+} from "../../lib/transcription-budget.js";
 
 const log = createLogger({ component: "DeepgramProvider" });
 
@@ -72,58 +79,128 @@ export class DeepgramProvider extends TranscriptionProvider {
    * @returns {Promise<import('./transcription-provider.js').TranscriptionResult>}
    */
   async transcribe(input) {
-    const { audioBlobs, mimeType, language, sessionId, durationSeconds } = input;
+    const {
+      audioUrl,
+      audioBlobs,
+      mimeType,
+      language,
+      sessionId,
+      durationSeconds,
+      audioSizeBytes,
+      timeoutMs,
+      signal,
+    } = input;
 
-    if (!audioBlobs?.length) {
+    if (!audioUrl && !audioBlobs?.length) {
       throw new TranscriptionProviderError(
-        "DeepgramProvider.transcribe: no audio blobs provided",
+        "DeepgramProvider.transcribe: audioUrl or audio blobs required",
       );
     }
 
-    const model       = resolveDeepgramModel(language);
+    const model = resolveDeepgramModel(language);
     const deepgramLang = resolveDeepgramLanguage(language);
+    const audioBlob = audioBlobs?.[0] ?? null;
+    const timeout = timeoutMs ?? BATCH_DIARIZATION_TIMEOUT_MS;
 
-    if (audioBlobs.length > 1) {
+    if (!audioUrl && audioBlobs?.length > 1) {
       log.warn("DeepgramProvider received multiple blobs; only the first is used. Merge chunks upstream.", {
         sessionId,
         chunkCount: audioBlobs.length,
       });
     }
 
-    const audioBlob = audioBlobs[0];
+    let lastError = null;
+    for (let attempt = 0; attempt <= DEEPGRAM_MAX_RETRIES; attempt++) {
+      const startedAt = Date.now();
+      log.info("Deepgram request start", {
+        sessionId,
+        attempt,
+        model,
+        language: deepgramLang,
+        mode: audioUrl ? "signed_url" : "bytes",
+        audioSizeBytes: audioSizeBytes ?? audioBlob?.size ?? null,
+        durationSeconds: durationSeconds ?? null,
+        timeoutMs: timeout,
+      });
 
+      try {
+        const rawResponse = await this._listenOnce({
+          audioUrl,
+          audioBlob,
+          mimeType,
+          language,
+          timeoutMs: timeout,
+          signal,
+        });
+        log.info("Deepgram request end", {
+          sessionId,
+          attempt,
+          durationMs: Date.now() - startedAt,
+        });
+        return this._normalize(rawResponse, { language, durationSeconds, model });
+      } catch (err) {
+        lastError = err instanceof TranscriptionProviderError
+          ? err
+          : wrapDeepgramError(err);
+        log.warn("Deepgram request failed", {
+          sessionId,
+          attempt,
+          durationMs: Date.now() - startedAt,
+          retry: attempt < DEEPGRAM_MAX_RETRIES && isTransientDeepgramError(lastError),
+          error: lastError.message,
+        });
+        if (attempt >= DEEPGRAM_MAX_RETRIES || !isTransientDeepgramError(lastError)) {
+          throw lastError;
+        }
+        await sleep(DEEPGRAM_RETRY_BACKOFF_MS);
+      }
+    }
+
+    throw lastError ?? new TranscriptionProviderError("Deepgram request failed");
+  }
+
+  /**
+   * @param {{
+   *   audioUrl?: string;
+   *   audioBlob?: Blob|null;
+   *   mimeType?: string;
+   *   language: string;
+   *   timeoutMs: number;
+   *   signal?: AbortSignal;
+   * }} args
+   */
+  async _listenOnce({ audioUrl, audioBlob, mimeType, language, timeoutMs, signal }) {
+    const model = resolveDeepgramModel(language);
+    const deepgramLang = resolveDeepgramLanguage(language);
     const params = new URLSearchParams({
       model,
       diarize_model: "latest",
-      max_speakers:  "2",
-      smart_format:  "true",
-      utterances:    "true",
-      punctuate:     "true",
-      paragraphs:    "false",
-      language:      deepgramLang,
+      max_speakers: "2",
+      smart_format: "true",
+      utterances: "true",
+      punctuate: "true",
+      paragraphs: "false",
+      language: deepgramLang,
     });
-
     const endpoint = `${DEEPGRAM_LISTEN_HTTP_URL}?${params}`;
 
-    log.info("Deepgram transcription started", {
-      sessionId,
-      model,
-      language: deepgramLang,
-      chunkCount: audioBlobs.length,
-      totalBytes: audioBlob.size,
-    });
-
-    const startedAt = Date.now();
-    let rawResponse;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const onParentAbort = () => controller.abort();
+    if (signal) {
+      if (signal.aborted) controller.abort();
+      else signal.addEventListener("abort", onParentAbort, { once: true });
+    }
 
     try {
       const httpResponse = await fetch(endpoint, {
         method: "POST",
         headers: {
-          Authorization:  `Token ${this._apiKey}`,
-          "Content-Type": mimeType ?? "audio/webm",
+          Authorization: `Token ${this._apiKey}`,
+          "Content-Type": audioUrl ? "application/json" : (mimeType ?? "audio/webm"),
         },
-        body: audioBlob,
+        body: audioUrl ? JSON.stringify({ url: audioUrl }) : audioBlob,
+        signal: controller.signal,
       });
 
       if (!httpResponse.ok) {
@@ -134,18 +211,22 @@ export class DeepgramProvider extends TranscriptionProvider {
         );
       }
 
-      rawResponse = await httpResponse.json();
+      return await httpResponse.json();
     } catch (err) {
       if (err instanceof TranscriptionProviderError) throw err;
-      throw new TranscriptionProviderError(
-        `Deepgram request failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      if (isDeepgramTimeoutError(err)) {
+        const timeoutErr = new TranscriptionProviderError(
+          `Deepgram request timed out after ${timeoutMs}ms`,
+          { status: 0, timeoutMs },
+        );
+        timeoutErr.code = "DEEPGRAM_TIMEOUT";
+        throw timeoutErr;
+      }
+      throw wrapDeepgramError(err);
+    } finally {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onParentAbort);
     }
-
-    const latencyMs = Date.now() - startedAt;
-    log.info("Deepgram transcription completed", { sessionId, latencyMs });
-
-    return this._normalize(rawResponse, { language, durationSeconds, model });
   }
 
   /**
@@ -295,4 +376,16 @@ function roundSeconds(value) {
 
 function clamp(value) {
   return Math.max(0, Math.min(1, Number(value)));
+}
+
+function wrapDeepgramError(err) {
+  if (err instanceof TranscriptionProviderError) return err;
+  return new TranscriptionProviderError(
+    `Deepgram request failed: ${err instanceof Error ? err.message : String(err)}`,
+  );
+}
+
+/** @param {number} ms */
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

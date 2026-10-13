@@ -12,7 +12,7 @@
 
 import { BaseRepository }      from "./base.repository.js";
 import { DatabaseError, SessionNotFoundError } from "../errors.js";
-import { SESSION_STATUS }       from "../constants.js";
+import { SESSION_STATUS, TRANSCRIPTION_CONFIG }       from "../constants.js";
 
 /** @typedef {import("../models/session.model.js").ScribeSession}       ScribeSession */
 /** @typedef {import("../models/session.model.js").ScribeAudioChunk}    ScribeAudioChunk */
@@ -786,7 +786,7 @@ export class SessionRepository extends BaseRepository {
             metadata:     job.metadata ?? {},
             status:       "pending",
             attempt_count: 0,
-            max_attempts:  3,
+            max_attempts:  TRANSCRIPTION_CONFIG.MAX_ATTEMPTS,
             scheduled_at: new Date().toISOString(),
           })
           .select("*")

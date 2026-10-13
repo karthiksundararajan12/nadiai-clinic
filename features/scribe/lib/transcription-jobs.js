@@ -2,7 +2,7 @@
  * @fileoverview In-memory transcription job helpers (queue fallback).
  */
 
-import { JOB_STATUS, JOB_TYPE } from "../constants.js";
+import { JOB_STATUS, JOB_TYPE, TRANSCRIPTION_CONFIG } from "../constants.js";
 
 /**
  * @param {Record<string, unknown>|null|undefined} job
@@ -28,7 +28,7 @@ export function buildInlineTranscriptionJob(sessionId, priority, ctx) {
     priority:      priority ?? 10,
     status:        JOB_STATUS.PENDING,
     attempt_count: 0,
-    max_attempts:  3,
+    max_attempts:  TRANSCRIPTION_CONFIG.MAX_ATTEMPTS,
     metadata:      { inline: true, clinicId: ctx.clinicId, doctorId: ctx.doctorId },
   };
 }
@@ -40,7 +40,7 @@ export function buildInlineTranscriptionJob(sessionId, priority, ctx) {
  */
 export function failInlineTranscriptionJob(job, message, retryable) {
   const nextAttempt = (job.attempt_count ?? 0) + 1;
-  const willRetry   = retryable && nextAttempt < (job.max_attempts ?? 3);
+  const willRetry   = retryable && nextAttempt < (job.max_attempts ?? TRANSCRIPTION_CONFIG.MAX_ATTEMPTS);
   return {
     ...job,
     status:        willRetry ? JOB_STATUS.PENDING : JOB_STATUS.FAILED,

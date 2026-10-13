@@ -71,9 +71,12 @@ export const AUDIO_CONSTRAINTS = Object.freeze({
   echoCancellation:    true,
   noiseSuppression:    true,
   autoGainControl:     true,
-  sampleRate:          16_000,
-  channelCount:        1,
+  sampleRate:          { ideal: 16_000 },
+  channelCount:        { ideal: 1 },
 });
+
+/** Opus speech bitrate for 16 kHz mono WebM. */
+export const OPUS_AUDIO_BITS_PER_SECOND = 24_000;
 
 // ─────────────────────────────────────────────────────────────
 // ANALYSER

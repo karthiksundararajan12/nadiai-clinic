@@ -49,6 +49,7 @@ export function ScribeRecordPanel({
   children = null,
   clinicalById,
   onSoapTurnSelectionChange,
+  sessionStatus = null,
 }) {
   const [manualText, setManualText] = useState("");
 
@@ -347,6 +348,7 @@ export function ScribeRecordPanel({
           hasPatient={canStartRecording}
           clinicalById={clinicalById}
           onSelectionChange={onSoapTurnSelectionChange}
+          sessionStatus={sessionStatus}
         />
       </div>
     </aside>

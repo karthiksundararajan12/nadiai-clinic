@@ -14,6 +14,7 @@
  */
 
 import { createLogger } from "../logger.js";
+import { BATCH_DIARIZATION_TIMEOUT_MS } from "../lib/transcription-budget.js";
 import {
   AUDIT_ACTION,
   JOB_STATUS,
@@ -277,9 +278,13 @@ export class TranscriptionService {
    * @param {string} sessionId
    * @param {import("../models/session.model.js").RequestContext} ctx
    */
-  async runForSession(sessionId, ctx) {
+  async runForSession(sessionId, ctx, options = {}) {
     let session = await this._sessions.findById(sessionId, ctx.doctorId);
     if (!session) throw new SessionNotFoundError(sessionId);
+
+    if (options.refineSpeakers && canRefineSpeakers(session.status)) {
+      return this.refineSpeakersFromBatch(sessionId, ctx);
+    }
 
     if (session.status === SESSION_STATUS.TRANSCRIBED) {
       return {
@@ -323,6 +328,70 @@ export class TranscriptionService {
     const result = await this._processJob(job, workerId);
     const updatedSession = await this._sessions.findById(sessionId, ctx.doctorId);
     return { session: updatedSession, result };
+  }
+
+  /**
+   * Re-runs batch Deepgram diarization and relabels speakers without
+   * changing session status. Safe after live-complete and during SOAP.
+   *
+   * @param {string} sessionId
+   * @param {import("../models/session.model.js").RequestContext} ctx
+   */
+  async refineSpeakersFromBatch(sessionId, ctx) {
+    const session = await this._sessions.findById(sessionId, ctx.doctorId);
+    if (!session) throw new SessionNotFoundError(sessionId);
+    if (!canRefineSpeakers(session.status)) {
+      throw new TranscriptionNotReadyError(
+        `Session status '${session.status}' cannot refine speaker labels`,
+      );
+    }
+
+    const startedAt = Date.now();
+    this._log.info("batch Deepgram start", {
+      sessionId,
+      mode: "refine",
+      sessionStatus: session.status,
+    });
+
+    let result;
+    try {
+      result = await this._transcribeSessionAudio(session, {
+        timeoutMs: BATCH_DIARIZATION_TIMEOUT_MS,
+      });
+    } catch (err) {
+      this._log.warn("batch Deepgram end", {
+        sessionId,
+        mode: "refine",
+        durationMs: Date.now() - startedAt,
+        error: err instanceof Error ? err.message : String(err),
+        keptLiveTranscript: true,
+      });
+      return {
+        session,
+        segments: [],
+        result: {
+          sessionId,
+          status: "refine_skipped",
+          error: err instanceof Error ? err.message : String(err),
+        },
+      };
+    }
+    await this._persistSpeakerRefinement(session, ctx, result);
+
+    const updatedSession = await this._sessions.findById(sessionId, ctx.doctorId);
+    this._log.info("batch Deepgram end", {
+      sessionId,
+      mode: "refine",
+      durationMs: Date.now() - startedAt,
+      segmentCount: result.segments?.length ?? 0,
+      sessionStatus: updatedSession?.status,
+    });
+
+    return {
+      session: updatedSession,
+      segments: result.segments,
+      result: { sessionId, status: "speakers_refined" },
+    };
   }
 
   /**
@@ -376,6 +445,12 @@ export class TranscriptionService {
     await this._persistSuccessfulTranscription(session, job, ctx, result, startedAt);
     const updatedSession = await this._sessions.findById(sessionId, ctx.doctorId);
     const transcription = await this._transcriptions.findBySession(sessionId);
+    this._log.info("live-transcript saved", {
+      sessionId,
+      durationMs: Date.now() - startedAt,
+      segmentCount: result.segments.length,
+      sessionStatus: updatedSession?.status,
+    });
     return { session: updatedSession, transcription, alreadyComplete: false };
   }
 
@@ -507,12 +582,14 @@ export class TranscriptionService {
   }
 
   /**
-   * Downloads audio chunks from storage, then calls the provider.
+   * Sends Deepgram a signed read URL so audio bytes never proxy through this API.
+   * Multi-chunk sessions fall back to a merged blob.
    *
    * @param {Record<string,unknown>} session
+   * @param {{ timeoutMs?: number; signal?: AbortSignal }} [options]
    * @returns {Promise<import('./transcription-providers/transcription-provider.js').TranscriptionResult & { chunkCount: number }>}
    */
-  async _transcribeSessionAudio(session) {
+  async _transcribeSessionAudio(session, options = {}) {
     const chunks = await this._sessions.getConfirmedChunks(session.id);
     if (!chunks.length) {
       throw new TranscriptionNotReadyError(
@@ -526,35 +603,124 @@ export class TranscriptionService {
       );
     }
 
-    this._log.info("Downloading audio chunks for transcription", {
-      sessionId:  session.id,
-      chunkCount: chunks.length,
-    });
-
     const mimeType = resolveChunkMimeType(chunks);
-
-    const audioBlobs = await Promise.all(
-      chunks.map((chunk) => this._downloadChunk(chunk.storage_path)),
-    );
-
-    const mergedAudio = mergeAudioChunkBlobs(audioBlobs, mimeType);
-
-    this._log.info("Transcribing merged session audio", {
-      sessionId: session.id,
-      chunkCount: chunks.length,
-      mergedBytes: mergedAudio.size,
-      mimeType,
-    });
-
-    const result = await this._provider.transcribe({
-      audioBlobs: [mergedAudio],
+    const timeoutMs = options.timeoutMs ?? BATCH_DIARIZATION_TIMEOUT_MS;
+    const input = {
       mimeType,
       language: session.language,
       sessionId: session.id,
       durationSeconds: session.audio_duration_seconds ?? null,
+      audioSizeBytes: session.audio_size_bytes ?? null,
+      timeoutMs,
+      signal: options.signal,
+    };
+
+    if (chunks.length === 1 && chunks[0].storage_path) {
+      input.audioUrl = await this._createSignedAudioUrl(chunks[0].storage_path);
+    } else {
+      this._log.info("Downloading audio chunks for transcription", {
+        sessionId: session.id,
+        chunkCount: chunks.length,
+      });
+      const audioBlobs = await Promise.all(
+        chunks.map((chunk) => this._downloadChunk(chunk.storage_path)),
+      );
+      input.audioBlobs = [mergeAudioChunkBlobs(audioBlobs, mimeType)];
+    }
+
+    this._log.info("batch Deepgram start", {
+      sessionId: session.id,
+      chunkCount: chunks.length,
+      mode: input.audioUrl ? "signed_url" : "bytes",
+      audioSizeBytes: session.audio_size_bytes ?? null,
+      durationSeconds: session.audio_duration_seconds ?? null,
+      mimeType,
+    });
+
+    const batchStartedAt = Date.now();
+    const result = await this._provider.transcribe(input);
+    this._log.info("batch Deepgram end", {
+      sessionId: session.id,
+      durationMs: Date.now() - batchStartedAt,
+      segmentCount: result.segments?.length ?? 0,
     });
 
     return { ...result, chunkCount: chunks.length };
+  }
+
+  /**
+   * @param {string} storagePath
+   * @returns {Promise<string>}
+   */
+  async _createSignedAudioUrl(storagePath) {
+    const { data, error } = await this._db.storage
+      .from(SCRIBE_STORAGE.BUCKET)
+      .createSignedUrl(storagePath, SCRIBE_STORAGE.SIGNED_TRANSCRIBE_TTL_SECONDS);
+    if (error || !data?.signedUrl) {
+      throw new StorageError("create signed transcribe URL", error);
+    }
+    return data.signedUrl;
+  }
+
+  /**
+   * @param {Record<string, unknown>} session
+   * @param {Record<string, unknown>} ctx
+   * @param {import('./transcription-providers/transcription-provider.js').TranscriptionResult & { chunkCount?: number }} result
+   */
+  async _persistSpeakerRefinement(session, ctx, result) {
+    const existing = await this._transcriptions.findBySession(session.id);
+    const transcription = await this._transcriptions.upsertTranscription({
+      session_id: session.id,
+      clinic_id: session.clinic_id,
+      doctor_id: session.doctor_id,
+      provider: this._provider.name,
+      model: result.model,
+      language: result.language ?? session.language,
+      full_text: result.text,
+      text: result.text,
+      segments: result.segments,
+      speaker_map: result.speakerMap,
+      low_confidence_segments: result.lowConfidenceSegments,
+      low_confidence_count: result.lowConfidenceSegments?.length ?? 0,
+      average_confidence: result.averageConfidence,
+      confidence_summary: result.confidenceSummary,
+      provider_response: { ...(result.providerResponse ?? {}), source: "batch_refine" },
+      transcription_model: result.model,
+      chunk_count: result.chunkCount ?? 0,
+      cost_cents: result.costCents,
+      status: existing?.status ?? TRANSCRIPTION_STATUS.COMPLETED,
+      attempt_count: existing?.attempt_count ?? 0,
+      completed_at: existing?.completed_at ?? new Date().toISOString(),
+      error: null,
+    });
+
+    await this._transcriptions.replaceSegments(
+      transcription.id,
+      session.id,
+      result.segments.map((seg) => ({
+        segment_index: seg.index,
+        start_seconds: seg.start,
+        end_seconds: seg.end,
+        text: seg.text,
+        speaker: seg.speaker,
+        speaker_label: seg.speaker_label,
+        confidence: seg.confidence,
+        is_low_confidence: seg.is_low_confidence,
+        provider_metadata: { ...(seg.provider_metadata ?? {}), source: "batch_refine" },
+      })),
+    );
+
+    await this._audit.log({
+      action: AUDIT_ACTION.TRANSCRIPTION_COMPLETED,
+      sessionId: session.id,
+      ctx,
+      metadata: {
+        provider: this._provider.name,
+        model: result.model,
+        segmentCount: result.segments.length,
+        source: "batch_refine",
+      },
+    });
   }
 
   /**
@@ -837,6 +1003,24 @@ function liveInputToTranscriptionResult(input, provider) {
     costCents: input.costCents ?? 0,
     chunkCount: 0,
   };
+}
+
+const REFINE_SPEAKER_STATUSES = new Set([
+  SESSION_STATUS.UPLOADED,
+  SESSION_STATUS.TRANSCRIPTION_QUEUED,
+  SESSION_STATUS.TRANSCRIBING,
+  SESSION_STATUS.TRANSCRIBED,
+  SESSION_STATUS.REVIEWING,
+  SESSION_STATUS.REVIEW_COMPLETED,
+  SESSION_STATUS.READY_FOR_SOAP,
+  SESSION_STATUS.GENERATING_SOAP,
+  SESSION_STATUS.SOAP_READY,
+  SESSION_STATUS.SOAP_REVIEW_REQUIRED,
+  SESSION_STATUS.SOAP_REVIEWING,
+]);
+
+function canRefineSpeakers(status) {
+  return REFINE_SPEAKER_STATUSES.has(status ?? "");
 }
 
 function isRetryable(err) {

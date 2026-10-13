@@ -4,7 +4,7 @@
  */
 
 import { BaseRepository } from "./base.repository.js";
-import { JOB_STATUS, JOB_TYPE, TRANSCRIPTION_STATUS } from "../constants.js";
+import { JOB_STATUS, JOB_TYPE, TRANSCRIPTION_CONFIG, TRANSCRIPTION_STATUS } from "../constants.js";
 import { DatabaseError } from "../errors.js";
 
 export class TranscriptionRepository extends BaseRepository {
@@ -32,7 +32,7 @@ export class TranscriptionRepository extends BaseRepository {
         priority: input.priority ?? 5,
         status: JOB_STATUS.PENDING,
         attempt_count: 0,
-        max_attempts: 3,
+        max_attempts: TRANSCRIPTION_CONFIG.MAX_ATTEMPTS,
         metadata: input.metadata ?? {},
         scheduled_at: new Date().toISOString(),
       })
@@ -355,7 +355,6 @@ export class TranscriptionRepository extends BaseRepository {
 }
 
 /** @param {number} attemptCount */
-function retryDelayMs(attemptCount) {
-  const minutes = [1, 5, 30][Math.max(0, Math.min(2, attemptCount - 1))];
-  return minutes * 60_000;
+function retryDelayMs(_attemptCount) {
+  return 500;
 }

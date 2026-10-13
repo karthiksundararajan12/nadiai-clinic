@@ -253,7 +253,8 @@ export const TRANSCRIPTION_CONFIG = Object.freeze({
   DEFAULT_MODEL: "nova-2-medical",
   /** Confidence score below which a segment is flagged as low-confidence. */
   LOW_CONFIDENCE_THRESHOLD: 0.75,
-  MAX_ATTEMPTS: 3,
+  /** Initial attempt + one short retry. Minute-scale loops blow the 60s budget. */
+  MAX_ATTEMPTS: 2,
   WORKER_BATCH_SIZE: 1,
   STALE_JOB_MINUTES: 15,
   /**
@@ -497,6 +498,8 @@ export const SCRIBE_STORAGE = Object.freeze({
   BUCKET: "scribe-audio",
   /** Signed upload URLs are short lived to reduce token replay risk. */
   SIGNED_UPLOAD_TTL_SECONDS: 60 * 15,
+  /** Deepgram fetches the object once; keep the read URL short-lived. */
+  SIGNED_TRANSCRIBE_TTL_SECONDS: 5 * 60,
   /** Build the storage prefix for a session's audio files. */
   buildPrefix: (clinicId, doctorId, sessionId) =>
     `${clinicId}/${doctorId}/${sessionId}`,

@@ -15,6 +15,7 @@ import {
   MIME_TYPE_PRIORITY,
   AUDIO_CONSTRAINTS,
   ANALYSER_CONFIG,
+  OPUS_AUDIO_BITS_PER_SECOND,
 } from "./constants.js";
 import { wrapMediaError, PauseNotSupportedError } from "./errors.js";
 
@@ -167,7 +168,9 @@ export class RecordingService {
     }
 
     const mimeType = RecordingService.getSupportedMimeType();
-    const options  = mimeType ? { mimeType } : {};
+    const options  = mimeType
+      ? { mimeType, audioBitsPerSecond: OPUS_AUDIO_BITS_PER_SECOND }
+      : { audioBitsPerSecond: OPUS_AUDIO_BITS_PER_SECOND };
 
     try {
       this.#mediaRecorder = new MediaRecorder(this.#stream, options);

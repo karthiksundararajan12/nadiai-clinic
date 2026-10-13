@@ -139,6 +139,11 @@ export class SOAPGenerationService {
     await this._transitionToGenerating(context.session, ctx);
 
     const startedAt = Date.now();
+    this._log.info("SOAP start", {
+      sessionId,
+      transcriptVersionId: transcriptVersion.id,
+      force: Boolean(input.force),
+    });
     if (input.force) {
       await this._audit.log({
         action: AUDIT_ACTION.SOAP_REGENERATED,
@@ -161,6 +166,13 @@ export class SOAPGenerationService {
     try {
       const prompt = buildSOAPPrompt(generationContext);
       const generated = await this._generateWithRetry(prompt);
+      this._log.info("SOAP first token", {
+        sessionId,
+        durationMs: Date.now() - startedAt,
+        provider: generated.provider,
+        model: generated.model,
+        attempts: generated.attempts,
+      });
       const noteObject = parseAndValidateSOAP(generated.text);
       const evidenceMappings = buildStatementEvidenceMappings(noteObject, context.segments ?? []);
       const generatedAt = new Date().toISOString();

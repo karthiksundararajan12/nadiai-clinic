@@ -49,7 +49,7 @@ export async function uploadCompletedRecording(options) {
     patientId,
     appointmentId,
     language = "english",
-    maxRetries = 2,
+    maxRetries = 1,
     onProgress,
   } = options;
 
@@ -121,7 +121,7 @@ export async function uploadCompletedRecording(options) {
       });
       uploadMap = new Map(retry.uploads.map((nextUpload) => [nextUpload.chunk_index, nextUpload]));
       upload = uploadMap.get(index);
-      await sleep(500 * attempts);
+      await sleep(500);
     }
 
     onProgress?.(progressEvent("confirming", index, uploadedChunks, uploadChunks.length, sessionId));

@@ -4,6 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { CircleNotch, Waveform } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { formatTimestamp } from "../../../transcript-review/components/Timestamp.jsx";
+import { resolveConversationChatView } from "../../lib/conversation-chat-view.js";
+import { logScribeTiming } from "../../lib/scribe-client-log.js";
 
 const WAVE_BARS = [10, 18, 28, 14, 36, 22, 12, 32, 20, 16, 30, 12, 24, 18, 10, 26];
 
@@ -79,6 +81,7 @@ export function ScribeConversationChat({
   hasPatient = false,
   clinicalById = {},
   onSelectionChange,
+  sessionStatus = null,
 }) {
   const bottomRef = useRef(null);
   const segmentKey = segments.map((segment) => segment.id).join("|");
@@ -114,6 +117,21 @@ export function ScribeConversationChat({
     }
   }, [segments]);
 
+  const view = resolveConversationChatView({
+    segments,
+    loading,
+    sessionStatus,
+  });
+
+  useEffect(() => {
+    logScribeTiming("conversation-render", {
+      sessionStatus: view.sessionStatus,
+      transcriptLength: view.transcriptLength,
+      branch: view.branch,
+      loading: Boolean(loading),
+    });
+  }, [view.branch, view.sessionStatus, view.transcriptLength, loading]);
+
   function isIncluded(segment) {
     if (Object.prototype.hasOwnProperty.call(inclusionOverrides, segment.id)) {
       return inclusionOverrides[segment.id] === true;
@@ -121,9 +139,12 @@ export function ScribeConversationChat({
     return clinicalById[segment.id] !== false;
   }
 
-  if (loading) {
+  if (view.branch === "loading") {
     return (
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[color:var(--scribe-card-bg)] px-4 py-4 text-left min-[1920px]:gap-4 min-[1920px]:px-6 min-[1920px]:py-6">
+      <div
+        className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[color:var(--scribe-card-bg)] px-4 py-4 text-left min-[1920px]:gap-4 min-[1920px]:px-6 min-[1920px]:py-6"
+        data-conversation-branch="loading"
+      >
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
         <WaveformBars />
         <div className="flex min-w-0 items-center justify-center gap-2 py-4 text-center">
@@ -134,11 +155,12 @@ export function ScribeConversationChat({
     );
   }
 
-  if (!segments.length) {
+  if (view.branch === "placeholder") {
     return (
       <div
         className="flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-x-hidden overflow-y-auto bg-[color:var(--scribe-card-bg)] px-4 py-4 min-[1920px]:gap-4 min-[1920px]:px-6 min-[1920px]:py-6"
         data-testid="conversation-placeholder"
+        data-conversation-branch="placeholder"
       >
         <ConversationHeading isLiveRecording={isLiveRecording} hasPatient={hasPatient} />
         <WaveformBars animated={animateWaveform} live={isLiveRecording} />
@@ -152,7 +174,11 @@ export function ScribeConversationChat({
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--scribe-card-bg)]" data-testid="transcript-review-workspace">
+    <div
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[color:var(--scribe-card-bg)]"
+      data-testid="transcript-review-workspace"
+      data-conversation-branch="transcript"
+    >
       <div className="shrink-0 border-b border-[color:var(--scribe-card-border)] px-4 py-3 min-[1920px]:px-6 min-[1920px]:py-4">
         <ConversationHeading isLiveRecording={false} hasPatient={hasPatient} />
       </div>

@@ -14,6 +14,7 @@ test("buildInlineTranscriptionJob uses inline id prefix", () => {
   assert.equal(job.id, "inline:sess-1");
   assert.equal(job.session_id, "sess-1");
   assert.equal(job.status, JOB_STATUS.PENDING);
+  assert.equal(job.max_attempts, 2);
   assert.equal(job.metadata.inline, true);
   assert.ok(isInlineTranscriptionJob(job));
 });

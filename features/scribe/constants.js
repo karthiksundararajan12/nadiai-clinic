@@ -384,7 +384,13 @@ export const PRESCRIPTION_GENERATION_CONFIG = Object.freeze({
   PROMPT_VERSION: "prescription_indian_gp_v2",
   MAX_ATTEMPTS:   3,
   TEMPERATURE:    0.05,
-  MAX_OUTPUT_TOKENS: 2048,
+  /**
+   * Gemini 2.5 counts thinking tokens inside maxOutputTokens. At 2048 the
+   * prescription JSON was cut off mid-string. Thinking is disabled for this
+   * call so the cap applies to the JSON body only.
+   */
+  MAX_OUTPUT_TOKENS: 8192,
+  THINKING_BUDGET: 0,
   /**
    * Minimum confidence score below which a medication is flagged in warnings.
    * Range 0.0 – 1.0.

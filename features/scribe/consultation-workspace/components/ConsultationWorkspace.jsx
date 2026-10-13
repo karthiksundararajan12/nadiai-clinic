@@ -368,12 +368,14 @@ export function ConsultationWorkspace({
 
   const handlePrescriptionRetry = useCallback(async () => {
     try {
+      await statusPoll.refresh?.();
+      await soap.load?.();
       await prescription.generate({ force: true });
       await statusPoll.refresh?.();
     } catch {
       // Error state shown in prescription panel
     }
-  }, [prescription, statusPoll]);
+  }, [prescription, soap, statusPoll]);
 
   const handlePrescriptionEnterManual = useCallback(async () => {
     try {

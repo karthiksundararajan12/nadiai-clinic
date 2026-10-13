@@ -16,6 +16,7 @@
  *   };
  *   temperature?: number;
  *   maxOutputTokens?: number;
+ *   thinkingBudget?: number;
  * }} GenerateStructuredJSONParams
  */
 

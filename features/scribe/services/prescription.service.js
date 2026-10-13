@@ -174,9 +174,11 @@ export class PrescriptionService {
       sessionId,
       ctx,
       metadata:  {
-        promptVersion: PRESCRIPTION_GENERATION_CONFIG.PROMPT_VERSION,
-        soapNoteId:    soapNote.id,
-        force:         input.force,
+        promptVersion:   PRESCRIPTION_GENERATION_CONFIG.PROMPT_VERSION,
+        soapNoteId:      soapNote.id,
+        force:           input.force,
+        maxOutputTokens: PRESCRIPTION_GENERATION_CONFIG.MAX_OUTPUT_TOKENS,
+        thinkingBudget:  PRESCRIPTION_GENERATION_CONFIG.THINKING_BUDGET,
       },
     });
 
@@ -385,6 +387,7 @@ export class PrescriptionService {
           jsonSchema:      PRESCRIPTION_JSON_SCHEMA,
           temperature:     PRESCRIPTION_GENERATION_CONFIG.TEMPERATURE,
           maxOutputTokens: PRESCRIPTION_GENERATION_CONFIG.MAX_OUTPUT_TOKENS,
+          thinkingBudget:  PRESCRIPTION_GENERATION_CONFIG.THINKING_BUDGET,
         });
         return { ...result, attempts: attempt };
       } catch (err) {

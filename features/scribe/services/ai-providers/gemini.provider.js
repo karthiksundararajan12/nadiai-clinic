@@ -44,14 +44,19 @@ export class GeminiProvider extends AIProvider {
 
     const url = `${this.baseUrl}/models/${encodeURIComponent(this.model)}:generateContent`;
 
+    const generationConfig = {
+      temperature: params.temperature,
+      maxOutputTokens: params.maxOutputTokens,
+      responseMimeType: "application/json",
+      responseJsonSchema: jsonSchema,
+    };
+    if (Number.isInteger(params.thinkingBudget)) {
+      generationConfig.thinkingConfig = { thinkingBudget: params.thinkingBudget };
+    }
+
     const body = {
       contents,
-      generationConfig: {
-        temperature: params.temperature,
-        maxOutputTokens: params.maxOutputTokens,
-        responseMimeType: "application/json",
-        responseJsonSchema: jsonSchema,
-      },
+      generationConfig,
     };
 
     if (systemInstruction) {

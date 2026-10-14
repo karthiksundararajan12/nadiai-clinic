@@ -1,4 +1,5 @@
 import { SOAP_GENERATION_CONFIG } from "../constants.js";
+import { formatVisitVitalsPrompt } from "../consultation-workspace/lib/vitals-utterance.js";
 
 export const SOAP_JSON_SCHEMA = {
   name: "nadi_ai_soap_note",
@@ -16,7 +17,10 @@ export const SOAP_JSON_SCHEMA = {
     ],
     properties: {
       subjective: { type: "string" },
-      objective: { type: "string" },
+      objective: {
+        type: "string",
+        description: "Required. Vitals, examination findings, and measurements from the transcript, or exactly 'No objective findings documented in this consultation.' Never omit this field, never null, never an empty string. Do not put this content in subjective.",
+      },
       assessment: { type: "string" },
       plan: { type: "string" },
       chiefComplaint: { type: "string" },
@@ -55,7 +59,7 @@ export function buildSOAPPrompt(context) {
         "Do not fabricate diagnoses, medications, vitals, test results, allergies, examination findings, or follow-up plans.",
         "If information is not available, use these exact fallbacks:",
         "- Subjective: 'Not documented in transcript.'",
-        "- Objective: 'Not documented in transcript.'",
+        "- Objective: 'No objective findings documented in this consultation.'",
         "- Assessment: 'Assessment not documented in transcript.'",
         "- Plan: 'Plan not documented in transcript.'",
         "Never invent symptoms, diagnoses, examination findings, medications, dosages, or treatment plans.",
@@ -69,7 +73,12 @@ export function buildSOAPPrompt(context) {
         "",
         "SOAP STRUCTURE CONVENTIONS",
         "Subjective: Chief complaint first as a short clinical phrase, then the History of Present Illness (HPI) as tight clinical prose covering duration, onset, character/location, associated symptoms, and aggravating/relieving factors — but ONLY the elements actually mentioned; silently omit anything not discussed rather than noting it as absent. Target 2-4 sentences. Never format this as a flat bullet list of quoted complaints.",
-        "Objective: If vitals were mentioned, lead with a single structured vitals line using ONLY values explicitly spoken in the transcript, in the form 'BP <sys>/<dia> mmHg, HR <n> bpm, Temp <n>°F, SpO2 <n>%.' (omit any vital not stated). Follow with examination findings in standard clinical shorthand only if explicitly mentioned (e.g. 'P/A: soft, non-tender.'). If nothing objective was discussed, use the fallback alone — do NOT invent plausible vitals and do NOT emit a vitals line together with the not-documented fallback.",
+        "Objective is required. Always include the objective string. Never omit it, never return null, and never return an empty string.",
+        "Objective holds vitals, examination findings, and measurements only. Never merge that content into subjective, assessment, or plan.",
+        "When the transcript mentions vitals, exam findings, or measurements, set objective to a Vitals line plus any exam and investigations, using ONLY values explicitly spoken. Canonical form:",
+        "Vitals: BP: <sys>/<dia> mmHg | HR: <n> bpm | Temp: <n> °F | SpO2: <n>% | Weight: <n> kg",
+        "Omit any vital that was not stated. On the following lines add examination shorthand only if it was stated (e.g. 'P/A: soft, non-tender.') and investigations only if ordered or reported, prefixed 'Investigations: '.",
+        "If nothing objective was discussed, set objective to exactly 'No objective findings documented in this consultation.' Do NOT invent vitals and do NOT combine a vitals line with that fallback.",
         "Assessment: State the working clinical impression the way a doctor would chart it, e.g. 'Likely GERD; rule out gastritis' rather than just restating the complaint as a diagnosis label. Target 1-2 sentences. Only add a 'rule out X' differential if the doctor raised it or it is a direct, obvious implication of a diagnosis they stated — never introduce a condition that wasn't discussed.",
         "Plan: Write as a short itemized clinical plan, one line per item prefixed with '- ', grouped in this order where applicable: medications, investigations, dietary/lifestyle advice, follow-up, return/red-flag precautions. Only include items explicitly discussed. Never write the plan as a run-on paragraph.",
         "",
@@ -95,13 +104,16 @@ export function buildSOAPPrompt(context) {
         "CONSULTATION CONTEXT:",
         safeJson(context.consultation ?? {}),
         "",
+        ...(formatVisitVitalsPrompt(context.visitVitals)
+          ? [formatVisitVitalsPrompt(context.visitVitals), ""]
+          : []),
         "REVIEWED TRANSCRIPT:",
         context.transcriptText || "Not documented in transcript.",
         "",
         "TASK:",
         "Write this consultation as a professional SOAP note in a real doctor's clinical voice: translate colloquial language into clinical terminology and follow the structure conventions above, using ONLY clinically relevant content from the transcript and context.",
         "For Subjective: chief complaint + HPI in clinical prose (see conventions). If nothing was reported, use 'Not documented in transcript.'",
-        "For Objective: vitals line (if given) + exam findings (if given), in clinical shorthand. If nothing objective was discussed, use 'Not documented in transcript.'",
+        "For Objective: required string. Extract every vital, exam finding, and measurement spoken in the transcript into the canonical Vitals / exam / Investigations form. If nothing objective was discussed, use exactly 'No objective findings documented in this consultation.' Never leave objective empty or null, and never put objective findings in subjective.",
         "For Assessment: concise clinical impression only if supported by the transcript; otherwise 'Assessment not documented in transcript.'",
         "For Plan: itemized clinical plan (see conventions) covering only what was explicitly discussed; otherwise 'Plan not documented in transcript.'",
         "Hallucinated or inferred clinical content is strictly prohibited — clinical polish must never come at the cost of accuracy.",

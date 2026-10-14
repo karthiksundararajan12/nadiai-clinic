@@ -762,8 +762,19 @@ export function ConsultationWorkspace({
     return Object.fromEntries(rows.map((row) => [row.id, Boolean(row.clinical)]));
   }, [soap.note?.generation_metadata?.clinicalClassifications]);
 
+  const prescriptionErrorMessage = prescription.error
+    ? (prescription.error instanceof Error && prescription.error.message
+        ? prescription.error.message
+        : "Prescription generation failed.")
+    : null;
+
   useEffect(() => {
     const hideSegments = waitingForTranscript && !hasTranscript;
+    const alertMessages = [];
+    if (statusPoll.isFailed) {
+      alertMessages.push("Transcription failed. Tap Sessions → Transcribe to retry.");
+    }
+    if (prescriptionErrorMessage) alertMessages.push(prescriptionErrorMessage);
     onWorkspaceStateChange?.({
       segments: hideSegments ? [] : workspaceSegments,
       transcriptLoading: !soapApproved && !hasTranscript && (waitingForTranscript || transcript.loading),
@@ -774,6 +785,7 @@ export function ConsultationWorkspace({
       clinicalById,
       prescriptionApproved:
         prescription.approved || resolvedSessionStatus === "PRESCRIPTION_APPROVED",
+      alertMessages,
     });
   }, [
     onWorkspaceStateChange,
@@ -789,6 +801,8 @@ export function ConsultationWorkspace({
     activeSegmentId,
     clinicalById,
     prescription.approved,
+    prescriptionErrorMessage,
+    statusPoll.isFailed,
   ]);
 
   const noteGenerating =

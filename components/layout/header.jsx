@@ -1,8 +1,7 @@
 "use client";
 
 import { List, Moon, Sun } from "@phosphor-icons/react";
-import { SearchInput } from "@/components/shared/search-input";
-import { Tooltip } from "@/components/ui/tooltip";
+import { HeaderSearch } from "@/components/layout/header-search";
 import { NotificationBell } from "@/components/layout/notification-bell";
 import { useDashboardMenu } from "@/components/layout/mobile-nav";
 import { useTheme } from "@/hooks/use-theme";
@@ -69,20 +68,10 @@ export function Header({
         ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1 sm:gap-2">
+      <div className="flex min-w-0 items-center justify-end gap-1 sm:gap-2">
         {actions}
         {showSearch && (
-          <div className="hidden md:block">
-            <Tooltip content="Coming soon" side="bottom">
-              <SearchInput
-                value=""
-                placeholder="Search patients, appointments..."
-                className="w-64"
-                disabled
-                title="Coming soon"
-              />
-            </Tooltip>
-          </div>
+          <HeaderSearch className="hidden w-36 min-w-0 md:block lg:w-80" />
         )}
         <button
           type="button"

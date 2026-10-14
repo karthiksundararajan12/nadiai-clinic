@@ -41,6 +41,8 @@ export function ScribeRecordPanel({
   manualSubmitting = false,
   canStartRecording = true,
   patientRequiredHint,
+  notices = [],
+  vitalsSlot = null,
   languageToggle,
   footer,
   statusStrip = null,
@@ -51,10 +53,15 @@ export function ScribeRecordPanel({
   sessionStatus = null,
 }) {
   const [manualText, setManualText] = useState("");
+  const [patientPrompt, setPatientPrompt] = useState(false);
 
   useEffect(() => {
     if (!manualMode) setManualText("");
   }, [manualMode]);
+
+  useEffect(() => {
+    if (canStartRecording) setPatientPrompt(false);
+  }, [canStartRecording]);
 
   const isIdle = recordState === "idle";
   const isRequesting = recordState === "requesting";
@@ -79,8 +86,26 @@ export function ScribeRecordPanel({
   const canUseManualEntry = (isIdle || isRequesting) && !disabled && !manualSubmitting;
   const micReady = canStartRecording && isIdle && !disabled && !isRequesting;
 
-  const enterManualMode = () => onManualModeChange?.(true);
+  const requirePatient = () => {
+    setPatientPrompt(true);
+  };
+
+  const enterManualMode = () => {
+    if (!canStartRecording) {
+      requirePatient();
+      return;
+    }
+    onManualModeChange?.(true);
+  };
   const exitManualMode = () => onManualModeChange?.(false);
+
+  const handleStartClick = () => {
+    if (!canStartRecording) {
+      requirePatient();
+      return;
+    }
+    onStart?.();
+  };
 
   const handleManualGenerate = () => {
     const text = manualText.trim();
@@ -110,6 +135,28 @@ export function ScribeRecordPanel({
           {children}
         </div>
       ) : null}
+      {patientPrompt || notices.length > 0 ? (
+        <div className="flex shrink-0 flex-col gap-2" data-testid="scribe-alert-slot">
+          {patientPrompt ? (
+            <ScribeInlineAlert
+              message={patientRequiredHint || "Select a patient to begin"}
+              testId="record-patient-required"
+              onDismiss={() => setPatientPrompt(false)}
+            />
+          ) : null}
+          {notices.map((notice) => (
+            <ScribeInlineAlert
+              key={notice.id}
+              message={notice.message}
+              testId="scribe-inline-alert"
+              actionLabel={notice.actionLabel}
+              onAction={notice.onAction}
+              onDismiss={notice.onDismiss}
+            />
+          ))}
+        </div>
+      ) : null}
+      {vitalsSlot}
       <div
         className="scribe-card flex h-[calc(100dvh-20rem)] max-h-[calc(100dvh-20rem)] min-h-[16rem] w-full min-w-0 flex-none flex-col overflow-hidden rounded-xl lg:h-auto lg:max-h-none lg:min-h-[16rem] lg:flex-1"
         data-testid="record-panel-conversation"
@@ -180,14 +227,6 @@ export function ScribeRecordPanel({
           </div>
         ) : (
           <div className="flex flex-col gap-2">
-            {(isIdle || isRequesting) && !disabled && !canStartRecording && (
-              <p
-                className="text-sm font-semibold text-amber-900"
-                data-testid="record-patient-required"
-              >
-                {patientRequiredHint || "Select a patient to begin"}
-              </p>
-            )}
           <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <div className="relative flex h-10 w-10 shrink-0 items-center justify-center">
               {micReady && (
@@ -200,8 +239,8 @@ export function ScribeRecordPanel({
                 <button
                   type="button"
                   aria-label="Start recording"
-                  disabled={disabled || isProcessing || isRequesting || !canStartRecording}
-                  onClick={onStart}
+                  disabled={disabled || isProcessing || isRequesting}
+                  onClick={handleStartClick}
                   className={cn(
                     "scribe-mic-button cursor-pointer",
                     micControlClass,
@@ -326,5 +365,34 @@ export function ScribeRecordPanel({
         </div>
       </div>
     </aside>
+  );
+}
+
+function ScribeInlineAlert({ message, onDismiss, testId, actionLabel, onAction }) {
+  return (
+    <div
+      role="alert"
+      data-testid={testId}
+      className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+    >
+      <p className="min-w-0 flex-1 break-words">{message}</p>
+      {actionLabel && onAction ? (
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer underline"
+          onClick={onAction}
+        >
+          {actionLabel}
+        </button>
+      ) : null}
+      <button
+        type="button"
+        className="shrink-0 cursor-pointer rounded px-1 text-base leading-none text-amber-900 hover:bg-amber-100"
+        aria-label="Dismiss"
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
   );
 }

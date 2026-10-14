@@ -21,9 +21,9 @@ import { ScribeWorkflowStepper } from "@/features/scribe/consultation-workspace/
 import { LiveTranscriptPanel } from "@/features/scribe/consultation-workspace/components/consultation/LiveTranscriptPanel.jsx";
 import { ScribeSoapPlaceholder } from "@/features/scribe/consultation-workspace/components/consultation/ScribeSoapPlaceholder.jsx";
 import { PatientSelector } from "@/features/scribe/consultation-workspace/components/consultation/PatientSelector.jsx";
+import { SayVitalsBar } from "@/features/scribe/consultation-workspace/components/consultation/SayVitalsBar.jsx";
 import { appointmentToPatientPrefill } from "@/features/appointments/appointment-prefill.js";
 import { fetchAppointmentById } from "@/features/appointments/appointments.client.js";
-import { Button } from "@/components/ui/button";
 import { ACTIVE_CONSULTATION_STATUSES } from "@/features/scribe/client";
 import { logSessionEvent } from "@/features/scribe/consultation-workspace/services/scribe-export.client.js";
 import { useDoctorProfileSettings } from "@/hooks/use-doctor-profile-settings";
@@ -99,6 +99,8 @@ export function ScribeWorkflow() {
   const [pipelineBusy, setPipelineBusy] = useState(false);
   const [pipelineMessage, setPipelineMessage] = useState(null);
   const [uploadError, setUploadError] = useState(null);
+  const [panelNotice, setPanelNotice] = useState(null);
+  const [dismissedAlerts, setDismissedAlerts] = useState(() => new Set());
   const [toastMessage, setToastMessage] = useState(null);
   const [manualInputMode, setManualInputMode] = useState(false);
   const [manualSubmitting, setManualSubmitting] = useState(false);
@@ -488,8 +490,7 @@ export function ScribeWorkflow() {
         avgLevel < RECORDING_LIMITS.MIN_AVG_AUDIO_LEVEL;
 
       if (tooShort && unclear) {
-        setToastVariant("warning");
-        setToastMessage(
+        setPanelNotice(
           "Recording is too short and audio is not clear. Speak louder and record for at least 10 seconds.",
         );
         await recording.stopRecording();
@@ -498,16 +499,14 @@ export function ScribeWorkflow() {
         return;
       }
       if (tooShort) {
-        setToastVariant("warning");
-        setToastMessage("Recording is too short. Please record for at least 10 seconds.");
+        setPanelNotice("Recording is too short. Please record for at least 10 seconds.");
         await recording.stopRecording();
         recording.resetRecording();
         live.reset();
         return;
       }
       if (unclear) {
-        setToastVariant("warning");
-        setToastMessage("Audio is not clear. Please speak louder and try again.");
+        setPanelNotice("Audio is not clear. Please speak louder and try again.");
         await recording.stopRecording();
         recording.resetRecording();
         live.reset();
@@ -594,6 +593,8 @@ export function ScribeWorkflow() {
     setActiveSessionId(null);
     setViewFromHistory(false);
     setUploadError(null);
+    setPanelNotice(null);
+    setDismissedAlerts(new Set());
     setManualInputMode(false);
     setManualSubmitting(false);
     setSessionsOpen(false);
@@ -729,6 +730,52 @@ export function ScribeWorkflow() {
     setPipelineBusy(false);
     setPipelineMessage(null);
   }, []);
+
+  const releaseStuckSession = useCallback(async () => {
+    try {
+      await fetch("/api/scribe/sessions/release-blocking", { method: "POST" });
+      setUploadError(null);
+    } catch (err) {
+      setUploadError(err instanceof Error ? err : new Error(String(err)));
+    }
+  }, []);
+
+  const scribeNotices = useMemo(() => {
+    const items = [];
+    if (uploadError?.message) {
+      const blocked = uploadError.code === "SESSION_ALREADY_ACTIVE" ||
+        /already active/i.test(uploadError.message);
+      items.push({
+        id: "upload-error",
+        message: uploadError.message,
+        onDismiss: () => setUploadError(null),
+        actionLabel: blocked ? "Clear stuck session" : null,
+        onAction: blocked ? releaseStuckSession : null,
+      });
+    }
+    if (panelNotice) {
+      items.push({
+        id: "recording-notice",
+        message: panelNotice,
+        onDismiss: () => setPanelNotice(null),
+      });
+    }
+    for (const message of workspaceState.alertMessages ?? []) {
+      if (!message || dismissedAlerts.has(message)) continue;
+      items.push({
+        id: `workspace:${message}`,
+        message,
+        onDismiss: () => {
+          setDismissedAlerts((prev) => {
+            const next = new Set(prev);
+            next.add(message);
+            return next;
+          });
+        },
+      });
+    }
+    return items;
+  }, [dismissedAlerts, panelNotice, releaseStuckSession, uploadError, workspaceState.alertMessages]);
 
   const languageToggle = (
     <LanguageToggle
@@ -893,6 +940,21 @@ export function ScribeWorkflow() {
               manualSubmitting={manualSubmitting}
               canStartRecording={Boolean(selectedPatient)}
               patientRequiredHint="Select a patient to begin"
+              notices={scribeNotices}
+              vitalsSlot={
+                <SayVitalsBar
+                  language={language}
+                  patientId={selectedPatient?.id ?? null}
+                  appointmentId={appointmentId}
+                  sessionId={activeSessionId}
+                  recordingLive={recordState === "recording" || recordState === "paused" || recordState === "requesting"}
+                  transcriptText={
+                    recordState === "idle" && !pipelineBusy
+                      ? displayTranscriptSegments.map((segment) => segment?.text).filter(Boolean).join("\n")
+                      : ""
+                  }
+                />
+              }
               sessionContext={recordPanelSessionContext}
               statusStrip={recorderStatus}
               clinicalById={workspaceState.clinicalById}
@@ -921,29 +983,6 @@ export function ScribeWorkflow() {
       </div>
       </div>
 
-      {uploadError && (
-        <div
-          className={cn(
-            "fixed inset-x-0 z-40 mx-auto w-full max-w-md px-4",
-            "bottom-[max(1rem,env(safe-area-inset-bottom))]",
-            "lg:absolute lg:bottom-4 lg:left-1/2 lg:z-30 lg:mx-0 lg:w-full lg:-translate-x-1/2",
-          )}
-        >
-          <UploadErrorBanner
-            error={uploadError}
-            onDismiss={() => setUploadError(null)}
-            onRelease={async () => {
-              try {
-                await fetch("/api/scribe/sessions/release-blocking", { method: "POST" });
-                setUploadError(null);
-              } catch (e) {
-                setUploadError(e instanceof Error ? e : new Error(String(e)));
-              }
-            }}
-          />
-        </div>
-      )}
-
       {toastMessage && (
         <div className="pointer-events-none fixed inset-x-0 top-4 z-50 flex justify-center px-4">
           <Toast
@@ -955,27 +994,6 @@ export function ScribeWorkflow() {
       )}
 
       {sessionsDrawer}
-    </div>
-  );
-}
-
-function UploadErrorBanner({ error, onDismiss, onRelease }) {
-  const isBlocked = error?.code === "SESSION_ALREADY_ACTIVE" ||
-    /already active/i.test(error?.message ?? "");
-
-  return (
-    <div className="space-y-2 rounded-lg border border-gray-200 bg-white px-4 py-3 text-center shadow-lg">
-      <p className="break-words text-base text-red-600 sm:text-sm">{error.message}</p>
-      <div className="flex flex-col items-stretch justify-center gap-2 sm:flex-row sm:items-center">
-        {isBlocked && (
-          <Button type="button" variant="outline" size="sm" className="min-h-11 w-full cursor-pointer sm:w-auto min-[1920px]:min-h-12 min-[1920px]:text-lg" onClick={onRelease}>
-            Clear stuck session
-          </Button>
-        )}
-        <Button type="button" variant="ghost" size="sm" className="min-h-11 w-full cursor-pointer sm:w-auto min-[1920px]:min-h-12 min-[1920px]:text-lg" onClick={onDismiss}>
-          Dismiss
-        </Button>
-      </div>
     </div>
   );
 }

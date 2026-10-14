@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
 import { useAutosave } from "../../transcript-review/hooks/use-autosave.js";
+import { logScribeTiming } from "../../consultation-workspace/lib/scribe-client-log.js";
 import {
   approveSOAPNote,
   compareSOAPVersions,
@@ -149,6 +150,16 @@ export function useSOAPReview(sessionId, { enabled = true } = {}) {
     try {
       const data = await fetchSOAPReviewWorkspace(sessionId);
       if (requestId !== loadRequestRef.current) return;
+      const noteBody = data?.note?.note ?? {};
+      const objective = Object.prototype.hasOwnProperty.call(noteBody, "objective")
+        ? noteBody.objective
+        : undefined;
+      logScribeTiming("soap.raw", {
+        keys: Object.keys(noteBody),
+        objective: objective === undefined ? null : objective,
+        objectiveType: objective === undefined ? "missing" : objective === null ? "null" : typeof objective,
+        objectiveColumn: data?.note?.objective ?? null,
+      });
       dispatch({ type: "LOAD", payload: data });
     } catch (err) {
       if (requestId !== loadRequestRef.current) return;

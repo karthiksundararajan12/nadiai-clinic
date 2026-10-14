@@ -347,10 +347,16 @@ export const SOAP_GENERATION_CONFIG = Object.freeze({
   DEFAULT_CLAUDE_MODEL: "claude-3-5-sonnet-latest",
   DEFAULT_OPENAI_MODEL: "gpt-4.1-mini",
   DEFAULT_GEMINI_MODEL: "gemini-2.5-flash",
-  PROMPT_VERSION: "soap_indian_gp_v3",
+  PROMPT_VERSION: "soap_indian_gp_v4",
   MAX_ATTEMPTS: 3,
   TEMPERATURE: 0.1,
-  MAX_OUTPUT_TOKENS: 1800,
+  /**
+   * Gemini 2.5 counts thinking tokens inside maxOutputTokens. The previous
+   * 1800 cap could finish the response before Objective was written. Thinking
+   * is disabled for this call so the cap applies to the JSON body only.
+   */
+  MAX_OUTPUT_TOKENS: 8192,
+  THINKING_BUDGET: 0,
 });
 
 /** Fast Gemini classifier that flags clinically relevant transcript turns. */

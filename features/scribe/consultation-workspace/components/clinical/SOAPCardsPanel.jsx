@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 import { CORE_SOAP_SECTIONS } from "../../lib/clinical-safety.js";
+import { normalizeObjective, OBJECTIVE_EMPTY_PLACEHOLDER } from "../../lib/vitals-objective.js";
 import { SOAPQualityIndicator } from "./SOAPQualityIndicator.jsx";
 
 function EvidenceList({ items, onJump }) {
@@ -28,6 +29,27 @@ function EvidenceList({ items, onJump }) {
           </li>
         ))}
       </ul>
+    </div>
+  );
+}
+
+function ObjectiveReadout({ value }) {
+  const objective = normalizeObjective(value);
+  if (objective.isEmpty) {
+    return (
+      <p className="mt-2 text-sm italic text-slate-400" data-testid="objective-empty">
+        {OBJECTIVE_EMPTY_PLACEHOLDER}
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-1.5" data-testid="objective-lines">
+      {objective.lines.map((line) => (
+        <p key={line.label} className="text-sm leading-relaxed text-slate-700">
+          <span className="font-semibold text-slate-500">{line.label}. </span>
+          {line.text}
+        </p>
+      ))}
     </div>
   );
 }
@@ -132,13 +154,13 @@ export function SOAPCardsPanel({
                   className="mt-3 min-h-0 resize-y text-sm"
                   placeholder={`Enter ${label.toLowerCase()}…`}
                 />
+              ) : key === "objective" ? (
+                <ObjectiveReadout value={value} />
               ) : (
                 <p className="mt-2 text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">
                   {value || (
                     <span className="text-slate-400 italic">
-                      {key === "objective"
-                        ? "No objective findings documented."
-                        : `No ${label.toLowerCase()} documented.`}
+                      {`No ${label.toLowerCase()} documented.`}
                     </span>
                   )}
                 </p>

@@ -147,31 +147,99 @@ test("conversation area stays above the record controls and keeps the transcript
   }
 });
 
-test("patient row sits above the conversation and the hint is a full line above the mic", async () => {
+test("patient prompt appears under the patient row after Start or Enter manually, then clears", async () => {
+  const manualModes = [];
   const view = render(ScribeRecordPanel, {
     recordState: "idle",
     canStartRecording: false,
     patientRequiredHint: "Select a patient to begin",
+    onManualModeChange(next) {
+      manualModes.push(next);
+    },
     children: createElement("p", { "data-testid": "patient-slot" }, "Search a patient"),
   });
   try {
     const patient = view.host.querySelector("[data-testid='record-panel-patient']");
     const area = conversationArea(view.host);
-    const hint = view.host.querySelector("[data-testid='record-patient-required']");
     const mic = view.host.querySelector("button[aria-label='Start recording']");
-    assert.ok(patient && area && hint && mic);
-    assert.equal(patient.textContent.includes("Search a patient"), true);
+    assert.ok(patient && area && mic);
+    assert.equal(mic.disabled, false);
+    assert.equal(view.host.querySelector("[data-testid='record-patient-required']"), null);
+
+    await act(async () => {
+      mic.click();
+    });
+
+    const hint = view.host.querySelector("[data-testid='record-patient-required']");
+    const slot = view.host.querySelector("[data-testid='scribe-alert-slot']");
+    assert.ok(hint && slot);
+    assert.equal(hint.getAttribute("role"), "alert");
+    assert.equal(hint.textContent.includes("Select a patient to begin"), true);
     assert.ok(
-      patient.compareDocumentPosition(area) & window.Node.DOCUMENT_POSITION_FOLLOWING,
-      "patient row should sit above the conversation",
+      patient.compareDocumentPosition(slot) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      "alert sits under the patient row",
     );
-    assert.equal(hint.textContent, "Select a patient to begin");
-    assert.equal(hint.className.includes("truncate"), false);
     assert.ok(
-      hint.compareDocumentPosition(mic) & window.Node.DOCUMENT_POSITION_FOLLOWING,
-      "patient hint should sit above the mic button",
+      slot.compareDocumentPosition(area) & window.Node.DOCUMENT_POSITION_FOLLOWING,
+      "alert sits above the conversation card",
     );
-    assert.equal(view.host.textContent.includes("Start recording"), true);
+
+    await act(async () => {
+      hint.querySelector("button[aria-label='Dismiss']").click();
+    });
+    assert.equal(view.host.querySelector("[data-testid='record-patient-required']"), null);
+
+    const manual = [...view.host.querySelectorAll("button")].find((button) =>
+      button.textContent.includes("Enter manually"),
+    );
+    await act(async () => {
+      manual.click();
+    });
+    assert.equal(manualModes.length, 0);
+    assert.equal(
+      view.host.querySelector("[data-testid='record-patient-required']")?.textContent.includes("Select a patient to begin"),
+      true,
+    );
+
+    view.rerender({
+      recordState: "idle",
+      canStartRecording: true,
+      patientRequiredHint: "Select a patient to begin",
+      children: createElement("p", { "data-testid": "patient-slot" }, "Search a patient"),
+    });
+    assert.equal(view.host.querySelector("[data-testid='record-patient-required']"), null);
+  } finally {
+    await view.unmount();
+  }
+});
+
+test("recording, transcription, and prescription errors share the top alert slot", async () => {
+  const dismissed = [];
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    canStartRecording: true,
+    notices: [
+      { id: "upload", message: "Recording failed", onDismiss: () => dismissed.push("upload") },
+      { id: "tx", message: "Transcription failed", onDismiss: () => dismissed.push("tx") },
+      { id: "rx", message: "Prescription generation failed", onDismiss: () => dismissed.push("rx") },
+    ],
+    children: createElement("p", null, "Search a patient"),
+  });
+  try {
+    const slot = view.host.querySelector("[data-testid='scribe-alert-slot']");
+    const area = conversationArea(view.host);
+    const alerts = [...slot.querySelectorAll("[data-testid='scribe-inline-alert']")];
+    assert.equal(alerts.length, 3);
+    assert.equal(alerts.every((alert) => alert.getAttribute("role") === "alert"), true);
+    assert.match(slot.textContent, /Recording failed/);
+    assert.match(slot.textContent, /Transcription failed/);
+    assert.match(slot.textContent, /Prescription generation failed/);
+    assert.ok(slot.compareDocumentPosition(area) & window.Node.DOCUMENT_POSITION_FOLLOWING);
+
+    await act(async () => {
+      alerts[0].querySelector("button[aria-label='Dismiss']").click();
+    });
+    assert.deepEqual(dismissed, ["upload"]);
   } finally {
     await view.unmount();
   }

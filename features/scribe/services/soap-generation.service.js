@@ -37,6 +37,9 @@ import {
   withSoapWorkflowMetadata,
 } from "../lib/soap-db-compat.js";
 import { buildStatementEvidenceMappings } from "../consultation-workspace/lib/soap-statement-evidence.js";
+import { prepareSoapNotePayload } from "../consultation-workspace/lib/vitals-objective.js";
+import { mergeVisitVitalsIntoObjective } from "../consultation-workspace/lib/vitals-utterance.js";
+import { VisitVitalsRepository } from "../../vitals/visit-vitals.repository.js";
 
 export class SOAPGenerationService {
   /**
@@ -108,6 +111,8 @@ export class SOAPGenerationService {
         })
       : null;
     const generationContext = buildGenerationContext(context, transcriptVersion, soapTurns);
+    const visitVitals = await loadVisitVitals(context.session);
+    if (visitVitals) generationContext.visitVitals = visitVitals;
     const inputHash = hashInput(generationContext);
 
     if (!input.force) {
@@ -174,6 +179,9 @@ export class SOAPGenerationService {
         attempts: generated.attempts,
       });
       const noteObject = parseAndValidateSOAP(generated.text);
+      if (visitVitals) {
+        noteObject.objective = mergeVisitVitalsIntoObjective(noteObject.objective, visitVitals);
+      }
       const evidenceMappings = buildStatementEvidenceMappings(noteObject, context.segments ?? []);
       const generatedAt = new Date().toISOString();
 
@@ -326,6 +334,7 @@ export class SOAPGenerationService {
           jsonSchema: SOAP_JSON_SCHEMA,
           temperature: SOAP_GENERATION_CONFIG.TEMPERATURE,
           maxOutputTokens: SOAP_GENERATION_CONFIG.MAX_OUTPUT_TOKENS,
+          thinkingBudget: SOAP_GENERATION_CONFIG.THINKING_BUDGET,
         });
         return { ...generated, attempts: attempt };
       } catch (err) {
@@ -416,6 +425,39 @@ export class SOAPGenerationService {
   }
 }
 
+async function loadVisitVitals(session) {
+  if (!session?.clinic_id) return null;
+  try {
+    const { getSupabaseAdminClient } = await import("@/lib/supabase/admin");
+    const repo = new VisitVitalsRepository(getSupabaseAdminClient());
+    const row = await repo.findForVisit({
+      clinicId: session.clinic_id,
+      patientId: session.patient_id,
+      appointmentId: session.appointment_id,
+      sessionId: session.id,
+    });
+    if (!row) return null;
+    return {
+      bp_systolic: row.bp_systolic,
+      bp_diastolic: row.bp_diastolic,
+      pulse: row.pulse,
+      temp: row.temp == null ? null : Number(row.temp),
+      temp_unit: row.temp_unit,
+      spo2: row.spo2,
+      weight: row.weight_kg == null ? null : Number(row.weight_kg),
+      height: row.height_cm == null ? null : Number(row.height_cm),
+      sugar: row.sugar == null ? null : Number(row.sugar),
+      sugar_unit: row.sugar_unit,
+      sugar_type: row.sugar_type,
+    };
+  } catch (err) {
+    createLogger({ component: "SOAPGenerationService" }).warn("Visit vitals unavailable", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 function buildGenerationContext(context, transcriptVersion, soapTurns = null) {
   // Prefer live segments — transcript_versions.full_text can lag after edits/restores.
   // SOAP input uses the clinical subset when provided; the stored transcript is unchanged.
@@ -450,17 +492,43 @@ function buildGenerationContext(context, transcriptVersion, soapTurns = null) {
 }
 
 function parseAndValidateSOAP(text) {
+  const log = createLogger({ component: "SOAPGenerationService" });
+  log.info("SOAP raw response", { raw: text });
+
   let parsed;
   try {
     parsed = JSON.parse(text);
   } catch (err) {
+    log.warn("SOAP JSON parse failed", { raw: text, message: err.message });
     throw new SOAPValidationError({ reason: "invalid_json", message: err.message });
   }
 
-  const result = SOAPNoteSchema.safeParse(parsed);
+  const keys = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+    ? Object.keys(parsed)
+    : [];
+  const objective = parsed && typeof parsed === "object" ? parsed.objective : undefined;
+  log.info("SOAP parsed objective", {
+    keys,
+    objective: objective === undefined ? null : objective,
+    objectiveType: objective === null ? "null" : typeof objective,
+    Objective: parsed?.Objective ?? null,
+    objective_findings: parsed?.objective_findings ?? null,
+    exam: parsed?.exam ?? null,
+    vitals: parsed?.vitals ?? null,
+  });
+
+  const coerced = prepareSoapNotePayload(parsed);
+  const result = SOAPNoteSchema.safeParse(coerced);
   if (!result.success) {
+    log.warn("SOAP schema validation failed", {
+      keys,
+      objective: coerced?.objective ?? null,
+      issues: result.error.flatten(),
+    });
     throw new SOAPValidationError(result.error.flatten());
   }
+
+  log.info("SOAP objective normalized", { objective: result.data.objective });
   return result.data;
 }
 

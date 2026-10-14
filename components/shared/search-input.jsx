@@ -10,6 +10,7 @@ export function SearchInput({
   className,
   disabled = false,
   title,
+  ...inputProps
 }) {
   return (
     <div className={cn("relative", className)} title={title}>
@@ -27,6 +28,7 @@ export function SearchInput({
         disabled={disabled}
         title={title}
         aria-disabled={disabled || undefined}
+        {...inputProps}
         className={cn(
           "h-10 w-full rounded-[var(--radius)] border border-input bg-card pl-10 pr-10 text-body font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring focus-visible:border-primary",
           disabled && "cursor-not-allowed opacity-60",

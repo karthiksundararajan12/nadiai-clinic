@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 import { VitalsInput } from "./VitalsInput.jsx";
 import {
   buildObjectiveWithVitals,
+  normalizeObjective,
+  OBJECTIVE_EMPTY_PLACEHOLDER,
   parseVitalsFromObjective,
-  stripVitalsFromObjective,
 } from "../../lib/vitals-objective.js";
 import { SoapStatementList } from "./SoapStatementList.jsx";
 
@@ -78,6 +79,13 @@ export function SOAPSection({
   showStatementEvidence = true,
 }) {
   const style = SECTION_STYLES[sectionKey] ?? SECTION_STYLES.subjective;
+  const objective = showVitals ? normalizeObjective(value) : null;
+  const objectiveNarrative = objective
+    ? [objective.exam, objective.investigations ? `Investigations: ${objective.investigations}` : ""]
+      .filter(Boolean)
+      .join("\n\n")
+    : "";
+  const evidenceText = showVitals ? objectiveNarrative : value;
   const [expanded, setExpanded] = useState(true);
   const [copied, setCopied] = useState(false);
   const textareaRef = useRef(null);
@@ -164,18 +172,35 @@ export function SOAPSection({
           </div>
         )}
 
+        {showVitals && objective.isEmpty && (
+          <p className="text-sm italic text-gray-400" data-testid="objective-empty">
+            {OBJECTIVE_EMPTY_PLACEHOLDER}
+          </p>
+        )}
+
+        {showVitals && readOnly && !objective.isEmpty && (
+          <div className="space-y-2" data-testid="objective-lines">
+            {objective.lines.map((line) => (
+              <p key={line.label} className="text-sm leading-relaxed text-gray-800">
+                <span className="font-semibold text-gray-500">{line.label}. </span>
+                {line.text}
+              </p>
+            ))}
+          </div>
+        )}
+
         {showVitals && !readOnly && (
-          <div>
-            <FieldLabel icon={Pencil} hint="editable">Draft</FieldLabel>
+          <div className={objective.isEmpty ? "" : "mt-4"}>
+            <FieldLabel icon={Pencil} hint="editable">Exam notes</FieldLabel>
             <textarea
-              value={stripVitalsFromObjective(value)}
+              value={objectiveNarrative}
               onChange={(e) => {
                 const vitals = parseVitalsFromObjective(value);
                 onChange?.(sectionKey, buildObjectiveWithVitals(vitals, e.target.value));
               }}
               onFocus={() => onFocus?.(sectionKey)}
               rows={3}
-              placeholder="Additional objective findings (e.g. BP discussion, exam notes)…"
+              placeholder="Additional objective findings (e.g. exam notes, investigations)…"
               className={cn(
                 "w-full resize-y rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm leading-relaxed shadow-sm transition-all duration-200 focus:outline-none focus:ring-4",
                 style.ring,
@@ -206,26 +231,22 @@ export function SOAPSection({
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
             {displayValue || (
               <span className="italic text-gray-400">
-                {sectionKey === "objective" ? "No objective findings documented." : `No ${label.toLowerCase()} documented.`}
+                {`No ${label.toLowerCase()} documented.`}
               </span>
             )}
           </p>
         ) : !showVitals && showStatementEvidence && !String(value).trim() ? (
           <p className="text-sm italic text-gray-400">
-            {sectionKey === "objective" ? "No objective findings documented." : `No ${label.toLowerCase()} documented.`}
-          </p>
-        ) : stripVitalsFromObjective(value) && !showStatementEvidence ? (
-          <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-gray-800">
-            {stripVitalsFromObjective(value)}
+            {`No ${label.toLowerCase()} documented.`}
           </p>
         ) : null}
 
-        {showStatementEvidence && String(value).trim() && (
+        {showStatementEvidence && String(evidenceText).trim() && (
           <div className={cn("rounded-lg border border-gray-100 bg-gray-50/70 p-3", !readOnly && "mt-4")}>
             <FieldLabel icon={Quote} hint="from transcript">Source evidence</FieldLabel>
             <SoapStatementList
               sectionKey={sectionKey}
-              sectionText={showVitals ? stripVitalsFromObjective(value) : value}
+              sectionText={evidenceText}
               evidenceMappings={statementEvidence}
               activeStatementId={activeStatementId}
               onStatementClick={onStatementClick}

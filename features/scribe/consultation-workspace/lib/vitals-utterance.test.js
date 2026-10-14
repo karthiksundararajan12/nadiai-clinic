@@ -240,6 +240,16 @@ test("unclear sugar speech stays null and does not invent a reading", async () =
   assert.equal(guarded.bp_systolic, null);
 });
 
+test("sugar without a type stays unlabeled on the Objective line", () => {
+  const text = mergeVisitVitalsIntoObjective("P/A: soft.", {
+    sugar: 140,
+    sugar_unit: "mg/dL",
+    sugar_type: null,
+  });
+  assert.match(text, /Sugar: 140 mg\/dL/);
+  assert.doesNotMatch(text, /\b(?:RBS|FBS|PP):/);
+});
+
 test("sugar outside 30-600 mg/dL is flagged and still kept", () => {
   assert.equal(vitalRangeFlags({ sugar: 140, sugar_unit: "mg/dL" }).sugar, undefined);
   assert.equal(vitalRangeFlags({ sugar: 20, sugar_unit: "mg/dL" }).sugar, true);

@@ -1,5 +1,5 @@
 /**
- * One visit_vitals row per scribe visit. Blur saves update that row.
+ * One visit_vitals row per scribe visit. Saving the vitals dialog updates that row.
  * Out-of-range readings are stored; the amber check flag is a UI concern.
  */
 
@@ -111,7 +111,7 @@ function toDbPatch(fields, ids) {
     height_cm: fields.height,
     sugar: fields.sugar,
     sugar_unit: fields.sugar == null ? null : (fields.sugar_unit ?? "mg/dL"),
-    sugar_type: fields.sugar == null ? null : (fields.sugar_type ?? "random"),
+    sugar_type: fields.sugar == null ? null : (fields.sugar_type || null),
     heard_text: fields.heard_text,
     updated_at: new Date().toISOString(),
   };

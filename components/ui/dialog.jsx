@@ -36,7 +36,7 @@ function Dialog({ open, onOpenChange, children }) {
   );
 }
 
-function DialogContent({ className, children, onClose, ...props }) {
+function DialogContent({ className, children, onClose, closeLabel = "Close", ...props }) {
   return (
     <div
       className={cn(
@@ -47,6 +47,8 @@ function DialogContent({ className, children, onClose, ...props }) {
     >
       {onClose && (
         <button
+          type="button"
+          aria-label={closeLabel}
           onClick={onClose}
           className="absolute right-4 top-4 rounded-lg p-1 opacity-70 ring-offset-background transition-opacity hover:bg-primary-soft hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
         >

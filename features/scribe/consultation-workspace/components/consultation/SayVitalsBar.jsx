@@ -1,8 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Microphone } from "@phosphor-icons/react";
+import { Heartbeat, Microphone, PencilSimple, Stop } from "@phosphor-icons/react";
+import { useLocale, useTranslations } from "next-intl";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Toast } from "@/components/ui/toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   applyVitalsAutofill,
   extractVitalsFromUtterance,
@@ -20,21 +30,74 @@ const EMPTY_FIELDS = {
   height: "",
   sugar: "",
   sugar_unit: "mg/dL",
-  sugar_type: "random",
+  sugar_type: "",
 };
 
 const FIELD_DEFAULTS = {
   temp_unit: "F",
   sugar_unit: "mg/dL",
-  sugar_type: "random",
+  sugar_type: "",
 };
 
 const SILENCE_MS = 2000;
 const SPEECH_RMS = 0.02;
 const HIGHLIGHT_MS = 1600;
+const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 function fieldText(value) {
   return value == null ? "" : String(value);
+}
+
+function cloneFields(fields) {
+  return { ...EMPTY_FIELDS, ...fields };
+}
+
+function sugarKind(type) {
+  if (type === "fasting") return "FBS";
+  if (type === "pp") return "PP";
+  if (type === "random") return "RBS";
+  return "Sugar";
+}
+
+export function formatVitalsSummary(fields, t, formatNumber) {
+  const parts = [];
+  if (fieldText(fields.bp_systolic).trim() || fieldText(fields.bp_diastolic).trim()) {
+    const systolic = fieldText(fields.bp_systolic).trim();
+    const diastolic = fieldText(fields.bp_diastolic).trim();
+    parts.push(`${t("bp")} ${systolic ? formatNumber(systolic) : "—"}/${diastolic ? formatNumber(diastolic) : "—"}`);
+  }
+  if (fieldText(fields.pulse).trim()) parts.push(`${t("pulse")} ${formatNumber(fields.pulse)}`);
+  if (fieldText(fields.temp).trim()) {
+    const unit = fields.temp_unit === "C" ? "C" : "F";
+    parts.push(`${t("temp")} ${formatNumber(fields.temp)}°${unit}`);
+  }
+  if (fieldText(fields.spo2).trim()) parts.push(`${t("spo2")} ${formatNumber(fields.spo2)}%`);
+  if (fieldText(fields.weight).trim()) parts.push(`${t("weight")} ${formatNumber(fields.weight)} kg`);
+  if (fieldText(fields.height).trim()) parts.push(`${t("height")} ${formatNumber(fields.height)} cm`);
+  if (fieldText(fields.sugar).trim()) {
+    const unit = fields.sugar_unit === "mmol/L" ? "mmol/L" : "mg/dL";
+    const kind = fields.sugar_type ? sugarKind(fields.sugar_type) : t("sugarShort");
+    parts.push(`${kind} ${formatNumber(fields.sugar)} ${unit}`);
+  }
+  return parts.join(" · ");
+}
+
+function formatDisplayNumber(value, locale) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return fieldText(value);
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(numeric);
+}
+
+function fieldsEqual(left, right) {
+  return Object.keys(EMPTY_FIELDS).every((key) => fieldText(left[key]) === fieldText(right[key]));
+}
+
+function micErrorMessage(err, t) {
+  const name = err?.name || "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return t("micDenied");
+  }
+  return t("micUnavailable");
 }
 
 export function SayVitalsBar({
@@ -45,35 +108,80 @@ export function SayVitalsBar({
   recordingLive = false,
   transcriptText = "",
 }) {
-  const [fields, setFields] = useState(EMPTY_FIELDS);
+  const t = useTranslations("scribe.vitals");
+  const locale = useLocale();
+  const formatNumber = (value) => formatDisplayNumber(value, locale);
+  const [saved, setSaved] = useState(EMPTY_FIELDS);
+  const [draft, setDraft] = useState(EMPTY_FIELDS);
+  const [savedHeard, setSavedHeard] = useState("");
+  const [heard, setHeard] = useState("");
+  const [open, setOpen] = useState(false);
   const [typedFields, setTypedFields] = useState(() => new Set());
   const [listening, setListening] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [heard, setHeard] = useState("");
+  const [saving, setSaving] = useState(false);
   const [highlighted, setHighlighted] = useState(() => new Set());
   const [pending, setPending] = useState(null);
   const [error, setError] = useState("");
-  const [saveError, setSaveError] = useState("");
-  const fieldsRef = useRef(fields);
-  const typedRef = useRef(typedFields);
+  const [toast, setToast] = useState(null);
+
+  const savedRef = useRef(saved);
+  const draftRef = useRef(draft);
   const heardRef = useRef("");
+  const savedHeardRef = useRef("");
+  const typedRef = useRef(typedFields);
+  const typedAtOpenRef = useRef(new Set());
+  const openRef = useRef(false);
   const recorderRef = useRef(null);
   const streamRef = useRef(null);
   const audioRef = useRef(null);
   const rafRef = useRef(0);
   const silenceRef = useRef(null);
   const heardSpeechRef = useRef(false);
+  const loopRef = useRef(false);
   const appliedTranscriptRef = useRef("");
+  const acceptClipRef = useRef(false);
+  const mountedRef = useRef(true);
   const persistRef = useRef(async () => {});
+  const triggerRef = useRef(null);
+  const micRef = useRef(null);
+
+  useEffect(() => { savedRef.current = saved; }, [saved]);
+  useEffect(() => { draftRef.current = draft; }, [draft]);
+  useEffect(() => { typedRef.current = typedFields; }, [typedFields]);
+  useEffect(() => { openRef.current = open; }, [open]);
+
+  useEffect(() => () => {
+    mountedRef.current = false;
+    stopTracks();
+  }, []);
 
   useEffect(() => {
-    fieldsRef.current = fields;
-  }, [fields]);
-  useEffect(() => {
-    typedRef.current = typedFields;
-  }, [typedFields]);
-
-  useEffect(() => () => stopTracks(), []);
+    if (!open) return undefined;
+    const timer = window.setTimeout(() => micRef.current?.focus(), 0);
+    function onKeyDown(event) {
+      if (event.key !== "Tab") return;
+      const root = document.querySelector("[data-testid='vitals-modal']");
+      if (!root) return;
+      const focusable = [...root.querySelectorAll(FOCUSABLE)];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener("keydown", onKeyDown);
+      triggerRef.current?.focus();
+    };
+  }, [open]);
 
   useEffect(() => {
     if (!patientId) return undefined;
@@ -87,22 +195,14 @@ export function SayVitalsBar({
       .then((payload) => {
         const vitals = payload?.vitals;
         if (!vitals) return;
-        setFields((current) => {
-          const next = { ...current };
-          for (const key of Object.keys(EMPTY_FIELDS)) {
-            if (vitals[key] == null || vitals[key] === "") continue;
-            const currentValue = String(current[key] ?? "").trim();
-            const untouchedDefault = FIELD_DEFAULTS[key] && currentValue === FIELD_DEFAULTS[key];
-            if (currentValue && !untouchedDefault) continue;
-            next[key] = fieldText(vitals[key]);
-          }
-          if (!String(current.temp_unit || "").trim() && vitals.temp_unit) {
-            next.temp_unit = vitals.temp_unit;
-          }
+        setSaved((current) => {
+          const next = applyLoadedVitals(current, vitals);
+          savedRef.current = next;
           return next;
         });
         if (vitals.heard_text) {
-          setHeard((current) => current || vitals.heard_text);
+          setSavedHeard((current) => current || vitals.heard_text);
+          savedHeardRef.current = savedHeardRef.current || vitals.heard_text;
         }
       })
       .catch(() => {});
@@ -113,16 +213,23 @@ export function SayVitalsBar({
     const text = String(transcriptText ?? "").trim();
     if (!text || text === appliedTranscriptRef.current) return;
     appliedTranscriptRef.current = text;
+    const current = openRef.current ? draftRef.current : savedRef.current;
     const applied = applyVitalsAutofill({
-      current: fieldsRef.current,
+      current,
       extracted: extractVitalsFromUtterance(text),
+      typedFields: typedRef.current,
       mode: "transcript",
     });
     if (!applied.filled.length) return;
-    fieldsRef.current = applied.next;
-    setFields(applied.next);
-    flash(applied.filled);
-    void persistRef.current(applied.next, heardRef.current);
+    if (openRef.current) {
+      draftRef.current = applied.next;
+      setDraft(applied.next);
+      flash(applied.filled);
+      return;
+    }
+    savedRef.current = applied.next;
+    setSaved(applied.next);
+    void persistRef.current(applied.next, heardRef.current || savedHeardRef.current);
   }, [transcriptText]);
 
   useEffect(() => {
@@ -131,12 +238,17 @@ export function SayVitalsBar({
 
   function flash(keys) {
     setHighlighted(new Set(keys));
-    window.setTimeout(() => setHighlighted(new Set()), HIGHLIGHT_MS);
+    window.setTimeout(() => {
+      if (mountedRef.current) setHighlighted(new Set());
+    }, HIGHLIGHT_MS);
   }
 
   function stopTracks() {
+    loopRef.current = false;
     if (silenceRef.current) clearTimeout(silenceRef.current);
+    silenceRef.current = null;
     if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    rafRef.current = 0;
     streamRef.current?.getTracks?.().forEach((track) => track.stop());
     streamRef.current = null;
     audioRef.current?.close?.().catch(() => {});
@@ -153,6 +265,7 @@ export function SayVitalsBar({
   async function startListening() {
     setError("");
     setPending(null);
+    acceptClipRef.current = true;
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     streamRef.current = stream;
     const chunks = [];
@@ -180,7 +293,9 @@ export function SayVitalsBar({
     analyser.fftSize = 1024;
     source.connect(analyser);
     const samples = new Uint8Array(analyser.fftSize);
+    loopRef.current = true;
     const tick = () => {
+      if (!loopRef.current) return;
       analyser.getByteTimeDomainData(samples);
       let sum = 0;
       for (const sample of samples) {
@@ -211,7 +326,7 @@ export function SayVitalsBar({
     try {
       await startListening();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Microphone unavailable");
+      setError(micErrorMessage(err, t));
       stopTracks();
       setListening(false);
     }
@@ -219,24 +334,20 @@ export function SayVitalsBar({
 
   function applyExtracted(extracted, { confirmTyped = false } = {}) {
     const applied = applyVitalsAutofill({
-      current: fieldsRef.current,
+      current: draftRef.current,
       extracted,
       typedFields: typedRef.current,
       mode: "voice",
       confirmTyped,
     });
-    setFields(applied.next);
-    fieldsRef.current = applied.next;
+    draftRef.current = applied.next;
+    setDraft(applied.next);
     if (applied.filled.length) flash(applied.filled);
-    if (applied.skipped.length && !confirmTyped) {
-      setPending(extracted);
-    } else {
-      setPending(null);
-    }
-    void persist(applied.next, heardRef.current);
+    setPending(applied.skipped.length && !confirmTyped ? extracted : null);
   }
 
   async function transcribeClip(blob) {
+    if (!acceptClipRef.current) return;
     setBusy(true);
     setError("");
     try {
@@ -245,13 +356,14 @@ export function SayVitalsBar({
       form.append("language", language);
       const res = await fetch("/api/scribe/vitals/hear", { method: "POST", body: form });
       const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Could not transcribe vitals");
+      if (!res.ok) throw new Error(t("transcribeFailed"));
+      if (!acceptClipRef.current) return;
       const transcript = String(payload.transcript ?? "").trim();
       setHeard(transcript);
       heardRef.current = transcript;
       applyExtracted(payload.vitals ?? {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not transcribe vitals");
+      setError(t("transcribeFailed"));
     } finally {
       setBusy(false);
     }
@@ -264,224 +376,397 @@ export function SayVitalsBar({
       typedRef.current = next;
       return next;
     });
-    setFields((current) => {
+    setDraft((current) => {
       const next = { ...current, [key]: value };
-      fieldsRef.current = next;
+      draftRef.current = next;
       return next;
     });
   }
 
-  async function persist(snapshot = fieldsRef.current, heardText = heardRef.current) {
+  async function persist(snapshot = draftRef.current, heardText = heardRef.current) {
     if (!patientId) return;
-    setSaveError("");
-    try {
-      const res = await fetch("/api/scribe/visit-vitals", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          patientId,
-          appointmentId,
-          sessionId,
-          ...snapshot,
-          heard_text: heardText || null,
-        }),
-      });
-      const payload = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(payload.error || "Could not save vitals");
-    } catch (err) {
-      setSaveError(err instanceof Error ? err.message : "Could not save vitals");
-    }
+    const res = await fetch("/api/scribe/visit-vitals", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId,
+        appointmentId,
+        sessionId,
+        ...snapshot,
+        heard_text: heardText || null,
+      }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(t("saveFailed"));
+    return payload;
   }
   persistRef.current = persist;
 
-  const flags = vitalRangeFlags(fields);
+  function openModal() {
+    if (!patientId) return;
+    const next = cloneFields(savedRef.current);
+    draftRef.current = next;
+    setDraft(next);
+    const heardText = savedHeardRef.current;
+    setHeard(heardText);
+    heardRef.current = heardText;
+    typedAtOpenRef.current = new Set(typedRef.current);
+    setPending(null);
+    setError("");
+    setOpen(true);
+  }
+
+  function dirty() {
+    return !fieldsEqual(draftRef.current, savedRef.current)
+      || (heardRef.current || "") !== (savedHeardRef.current || "");
+  }
+
+  function discardDraft() {
+    const nextTyped = new Set(typedAtOpenRef.current);
+    typedRef.current = nextTyped;
+    setTypedFields(nextTyped);
+    const next = cloneFields(savedRef.current);
+    draftRef.current = next;
+    setDraft(next);
+    heardRef.current = savedHeardRef.current;
+    setHeard(savedHeardRef.current);
+    setPending(null);
+    setError("");
+  }
+
+  function requestClose() {
+    if (dirty() && !window.confirm(t("discard"))) return;
+    if (dirty()) discardDraft();
+    acceptClipRef.current = false;
+    stopListening();
+    setOpen(false);
+  }
+
+  async function saveAndClose() {
+    setSaving(true);
+    try {
+      await persist(draftRef.current, heardRef.current);
+      const next = cloneFields(draftRef.current);
+      savedRef.current = next;
+      setSaved(next);
+      savedHeardRef.current = heardRef.current;
+      setSavedHeard(heardRef.current);
+      setPending(null);
+      setOpen(false);
+      setToast({ message: t("saveSuccess"), variant: "default" });
+    } catch {
+      setToast({ message: t("saveFailed"), variant: "error" });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const summary = formatVitalsSummary(saved, t, formatNumber);
+  const flags = vitalRangeFlags(draft);
   const inputClass = (key) => cn(
     "w-full min-w-0 rounded-md border bg-white px-2 py-1.5 text-sm tabular-nums text-gray-900",
     flags[key] ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200",
     highlighted.has(key) && "bg-primary/10 ring-2 ring-primary/30",
   );
 
+  const buttonTextClass = "h-auto min-h-10 whitespace-normal px-4 py-2 leading-6";
+
   return (
-    <section
-      className="rounded-xl border border-[color:var(--scribe-card-border)] bg-[color:var(--scribe-card-bg)] px-3 py-3"
-      data-testid="say-vitals"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) void persist();
-      }}
-    >
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Vitals</p>
-        <button
-          type="button"
-          aria-label="Say vitals"
-          aria-pressed={listening}
-          disabled={busy || recordingLive}
-          onClick={() => { void toggleListening(); }}
-          className={cn(
-            "inline-flex min-h-8 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold",
-            listening
-              ? "border-red-200 bg-red-50 text-red-700"
-              : "border-gray-200 bg-white text-gray-800 hover:bg-gray-50",
-            (busy || recordingLive) && "cursor-not-allowed opacity-60",
-          )}
+    <div data-testid="say-vitals">
+      <button
+        ref={triggerRef}
+        type="button"
+        data-testid="vitals-summary"
+        disabled={!patientId}
+        aria-label={summary ? t("chipEdit", { summary }) : t("chipAdd")}
+        onClick={openModal}
+        className={cn(
+          "flex w-full max-w-full items-start gap-2 rounded-2xl border px-3 py-2 text-left text-sm font-semibold leading-6",
+          summary
+            ? "border-[color:var(--scribe-card-border)] bg-white text-gray-800 hover:bg-gray-50"
+            : "border-dashed border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
+          !patientId && "cursor-not-allowed opacity-50",
+        )}
+      >
+        <Heartbeat size={16} weight="fill" aria-hidden className="mt-1 shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 whitespace-normal break-words">{summary || t("chipEmpty")}</span>
+        {summary ? <PencilSimple size={14} aria-hidden className="mt-1 shrink-0 text-gray-500" /> : null}
+      </button>
+
+      <Dialog open={open} onOpenChange={(next) => { if (!next) requestClose(); }}>
+        <DialogContent
+          onClose={requestClose}
+          closeLabel={t("close")}
+          data-testid="vitals-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="vitals-dialog-title"
+          className="flex h-[100dvh] max-h-[100dvh] w-full max-w-none flex-col gap-0 overflow-hidden rounded-none p-0 sm:h-auto sm:max-h-[min(90dvh,40rem)] sm:max-w-lg sm:rounded-lg"
         >
-          <Microphone size={14} weight="fill" aria-hidden />
-          {listening ? "Listening" : "Say vitals"}
-        </button>
-      </div>
+          <div className="flex min-h-0 flex-1 flex-col">
+            <DialogHeader className="shrink-0 px-4 pt-4 pr-12 text-left">
+              <DialogTitle id="vitals-dialog-title" className="break-words leading-snug">{t("title")}</DialogTitle>
+            </DialogHeader>
 
-      {listening && (
-        <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-red-700" role="status">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-red-500" aria-hidden />
-          Listening…
-        </p>
-      )}
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+              {error ? (
+                <InlineAlert message={error} dismissLabel={t("dismiss")} onDismiss={() => setError("")} />
+              ) : null}
 
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-        <Field label="BP" flag={flags.bp_systolic || flags.bp_diastolic}>
-          <div className="flex items-center gap-1">
-            <input
-              aria-label="BP systolic"
-              inputMode="numeric"
-              className={inputClass("bp_systolic")}
-              value={fieldText(fields.bp_systolic)}
-              onChange={(event) => updateField("bp_systolic", event.target.value.replace(/[^\d]/g, ""))}
-            />
-            <span className="text-gray-300">/</span>
-            <input
-              aria-label="BP diastolic"
-              inputMode="numeric"
-              className={inputClass("bp_diastolic")}
-              value={fieldText(fields.bp_diastolic)}
-              onChange={(event) => updateField("bp_diastolic", event.target.value.replace(/[^\d]/g, ""))}
-            />
-          </div>
-        </Field>
-        <Field label="Pulse" flag={flags.pulse}>
-          <input
-            aria-label="Pulse"
-            inputMode="numeric"
-            className={inputClass("pulse")}
-            value={fieldText(fields.pulse)}
-            onChange={(event) => updateField("pulse", event.target.value.replace(/[^\d]/g, ""))}
-          />
-        </Field>
-        <Field label="Temp" flag={flags.temp}>
-          <div className="flex items-center gap-1">
-            <input
-              aria-label="Temperature"
-              inputMode="decimal"
-              className={inputClass("temp")}
-              value={fieldText(fields.temp)}
-              onChange={(event) => updateField("temp", event.target.value.replace(/[^\d.]/g, ""))}
-            />
-            <button
-              type="button"
-              className="shrink-0 rounded-md border border-gray-200 px-1.5 py-1 text-[10px] font-semibold text-gray-600"
-              onClick={() => updateField("temp_unit", fields.temp_unit === "C" ? "F" : "C")}
-            >
-              °{fields.temp_unit === "C" ? "C" : "F"}
-            </button>
-          </div>
-        </Field>
-        <Field label="SpO2" flag={flags.spo2}>
-          <input
-            aria-label="SpO2"
-            inputMode="numeric"
-            className={inputClass("spo2")}
-            value={fieldText(fields.spo2)}
-            onChange={(event) => updateField("spo2", event.target.value.replace(/[^\d]/g, ""))}
-          />
-        </Field>
-        <Field label="Weight" flag={flags.weight}>
-          <input
-            aria-label="Weight"
-            inputMode="decimal"
-            className={inputClass("weight")}
-            value={fieldText(fields.weight)}
-            onChange={(event) => updateField("weight", event.target.value.replace(/[^\d.]/g, ""))}
-          />
-        </Field>
-        <Field label="Height" hint="optional">
-          <input
-            aria-label="Height"
-            inputMode="decimal"
-            className={inputClass("height")}
-            value={fieldText(fields.height)}
-            onChange={(event) => updateField("height", event.target.value.replace(/[^\d.]/g, ""))}
-          />
-        </Field>
-        <Field label="Sugar (RBS/FBS)" hint="optional" flag={flags.sugar} className="col-span-2">
-          <div className="flex items-center gap-1">
-            <input
-              aria-label="Sugar"
-              inputMode="decimal"
-              className={inputClass("sugar")}
-              value={fieldText(fields.sugar)}
-              onChange={(event) => updateField("sugar", event.target.value.replace(/[^\d.]/g, ""))}
-            />
-            <button
-              type="button"
-              aria-label="Sugar unit"
-              className="shrink-0 rounded-md border border-gray-200 px-1.5 py-1 text-[10px] font-semibold text-gray-600"
-              onClick={() => updateField("sugar_unit", fields.sugar_unit === "mmol/L" ? "mg/dL" : "mmol/L")}
-            >
-              {fields.sugar_unit === "mmol/L" ? "mmol/L" : "mg/dL"}
-            </button>
-            <select
-              aria-label="Sugar type"
-              className="shrink-0 rounded-md border border-gray-200 bg-white px-1 py-1 text-[10px] font-semibold text-gray-700"
-              value={fields.sugar_type === "fasting" || fields.sugar_type === "pp" ? fields.sugar_type : "random"}
-              onChange={(event) => updateField("sugar_type", event.target.value)}
-            >
-              <option value="random">Random</option>
-              <option value="fasting">Fasting</option>
-              <option value="pp">PP</option>
-            </select>
-          </div>
-        </Field>
-      </div>
+              <div className="flex flex-col items-center gap-2 py-4">
+                <div className="relative flex h-24 w-24 items-center justify-center">
+                  {listening ? (
+                    <>
+                      <span className="absolute inset-0 animate-ping rounded-full bg-red-200" aria-hidden />
+                      <span className="absolute inset-2 flex items-end justify-center gap-1" aria-hidden>
+                        {[10, 18, 26, 16, 12].map((height, index) => (
+                          <span
+                            key={index}
+                            className="w-1 animate-pulse rounded-full bg-red-500"
+                            style={{ height, animationDelay: `${index * 120}ms` }}
+                          />
+                        ))}
+                      </span>
+                    </>
+                  ) : null}
+                  <button
+                    ref={micRef}
+                    type="button"
+                    data-testid="vitals-mic"
+                    aria-label={listening ? t("stopSaying") : t("tapToSay")}
+                    aria-pressed={listening}
+                    disabled={busy || recordingLive}
+                    onClick={() => { void toggleListening(); }}
+                    className={cn(
+                      "relative z-10 flex h-16 w-16 items-center justify-center rounded-full text-white shadow-md",
+                      listening ? "bg-red-600" : "bg-primary",
+                      (busy || recordingLive) && "cursor-not-allowed opacity-60",
+                    )}
+                  >
+                    <Microphone size={28} weight="fill" aria-hidden />
+                  </button>
+                </div>
+                <p className="max-w-full break-words px-2 text-center text-sm font-semibold leading-6 text-gray-800">
+                  {listening ? t("listening") : t("tapToSay")}
+                </p>
+                {listening ? (
+                  <button
+                    type="button"
+                    data-testid="vitals-stop"
+                    className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-50 px-3 py-1 text-sm font-semibold leading-6 text-red-700"
+                    onClick={stopListening}
+                  >
+                    <Stop size={12} weight="fill" aria-hidden />
+                    {t("stop")}
+                  </button>
+                ) : null}
+                {busy ? <p className="text-center text-sm leading-6 text-gray-500">{t("transcribing")}</p> : null}
+                <p
+                  className="min-h-6 max-w-full break-words text-center text-sm leading-6 text-gray-500"
+                  data-testid="vitals-heard"
+                  aria-live="polite"
+                >
+                  {heard ? t("heard", { text: heard }) : ""}
+                </p>
+              </div>
 
-      {heard ? (
-        <p className="mt-2 text-xs text-gray-500" data-testid="vitals-heard">
-          Heard: {heard}
-        </p>
-      ) : null}
-      {pending ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-gray-700" role="status">
-          <span>Replace the values you already typed?</span>
-          <button
-            type="button"
-            className="rounded-md bg-primary px-2 py-1 font-semibold text-white"
-            onClick={() => applyExtracted(pending, { confirmTyped: true })}
-          >
-            Replace
-          </button>
-          <button
-            type="button"
-            className="rounded-md border border-gray-200 px-2 py-1"
-            onClick={() => setPending(null)}
-          >
-            Keep mine
-          </button>
+              {pending ? (
+                <div className="mb-3 flex flex-wrap items-center gap-2 text-sm leading-6 text-gray-700" role="status">
+                  <span className="min-w-0 break-words">{t("replacePrompt")}</span>
+                  <button
+                    type="button"
+                    className="rounded-md bg-primary px-2 py-1 font-semibold leading-6 text-white"
+                    onClick={() => applyExtracted(pending, { confirmTyped: true })}
+                  >
+                    {t("replace")}
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded-md border border-gray-200 px-2 py-1 leading-6"
+                    onClick={() => setPending(null)}
+                  >
+                    {t("keepMine")}
+                  </button>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={t("bp")} flag={flags.bp_systolic || flags.bp_diastolic} flagLabel={t("checkValue")}>
+                  <div className="flex items-center gap-1">
+                    <input
+                      aria-label={t("bpSystolic")}
+                      inputMode="numeric"
+                      className={inputClass("bp_systolic")}
+                      value={fieldText(draft.bp_systolic)}
+                      onChange={(event) => updateField("bp_systolic", event.target.value.replace(/[^\d]/g, ""))}
+                    />
+                    <span className="text-gray-300">/</span>
+                    <input
+                      aria-label={t("bpDiastolic")}
+                      inputMode="numeric"
+                      className={inputClass("bp_diastolic")}
+                      value={fieldText(draft.bp_diastolic)}
+                      onChange={(event) => updateField("bp_diastolic", event.target.value.replace(/[^\d]/g, ""))}
+                    />
+                  </div>
+                </Field>
+                <Field label={t("pulse")} flag={flags.pulse} flagLabel={t("checkValue")}>
+                  <input
+                    aria-label={t("pulse")}
+                    inputMode="numeric"
+                    className={inputClass("pulse")}
+                    value={fieldText(draft.pulse)}
+                    onChange={(event) => updateField("pulse", event.target.value.replace(/[^\d]/g, ""))}
+                  />
+                </Field>
+                <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")}>
+                  <div className="flex items-center gap-1">
+                    <input
+                      aria-label={t("temperature")}
+                      inputMode="decimal"
+                      className={inputClass("temp")}
+                      value={fieldText(draft.temp)}
+                      onChange={(event) => updateField("temp", event.target.value.replace(/[^\d.]/g, ""))}
+                    />
+                    <button
+                      type="button"
+                      aria-label={t("tempUnit")}
+                      className="shrink-0 rounded-md border border-gray-200 px-2 py-1.5 text-sm font-semibold leading-6 text-gray-600"
+                      onClick={() => updateField("temp_unit", draft.temp_unit === "C" ? "F" : "C")}
+                    >
+                      °{draft.temp_unit === "C" ? "C" : "F"}
+                    </button>
+                  </div>
+                </Field>
+                <Field label={t("spo2")} flag={flags.spo2} flagLabel={t("checkValue")}>
+                  <input
+                    aria-label={t("spo2")}
+                    inputMode="numeric"
+                    className={inputClass("spo2")}
+                    value={fieldText(draft.spo2)}
+                    onChange={(event) => updateField("spo2", event.target.value.replace(/[^\d]/g, ""))}
+                  />
+                </Field>
+                <Field label={t("weight")} flag={flags.weight} flagLabel={t("checkValue")}>
+                  <input
+                    aria-label={t("weight")}
+                    inputMode="decimal"
+                    className={inputClass("weight")}
+                    value={fieldText(draft.weight)}
+                    onChange={(event) => updateField("weight", event.target.value.replace(/[^\d.]/g, ""))}
+                  />
+                </Field>
+                <Field label={t("height")} hint={t("optional")}>
+                  <input
+                    aria-label={t("height")}
+                    inputMode="decimal"
+                    className={inputClass("height")}
+                    value={fieldText(draft.height)}
+                    onChange={(event) => updateField("height", event.target.value.replace(/[^\d.]/g, ""))}
+                  />
+                </Field>
+                <Field label={t("sugar")} hint={t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} className="col-span-2">
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        aria-label={t("sugarValue")}
+                        inputMode="decimal"
+                        className={cn(inputClass("sugar"), "min-w-0 flex-1")}
+                        value={fieldText(draft.sugar)}
+                        onChange={(event) => updateField("sugar", event.target.value.replace(/[^\d.]/g, ""))}
+                      />
+                      <button
+                        type="button"
+                        aria-label={t("sugarUnit")}
+                        className="shrink-0 rounded-md border border-gray-200 px-2 py-1.5 text-sm font-semibold leading-6 text-gray-600"
+                        onClick={() => updateField("sugar_unit", draft.sugar_unit === "mmol/L" ? "mg/dL" : "mmol/L")}
+                      >
+                        {draft.sugar_unit === "mmol/L" ? "mmol/L" : "mg/dL"}
+                      </button>
+                    </div>
+                    <select
+                      aria-label={t("sugarType")}
+                      className="w-full min-h-10 rounded-md border border-gray-200 bg-white px-2 py-1.5 text-sm leading-6 text-gray-700"
+                      value={draft.sugar_type === "fasting" || draft.sugar_type === "pp" || draft.sugar_type === "random" ? draft.sugar_type : ""}
+                      onChange={(event) => updateField("sugar_type", event.target.value)}
+                    >
+                      <option value="">{t("selectType")}</option>
+                      <option value="random">{t("random")}</option>
+                      <option value="fasting">{t("fasting")}</option>
+                      <option value="pp">{t("pp")}</option>
+                    </select>
+                  </div>
+                </Field>
+              </div>
+            </div>
+
+            <DialogFooter className="shrink-0 flex-wrap gap-2 border-t px-4 py-3">
+              <Button type="button" variant="outline" data-testid="vitals-cancel" className={buttonTextClass} onClick={requestClose}>
+                {t("cancel")}
+              </Button>
+              <Button type="button" data-testid="vitals-save" className={buttonTextClass} disabled={saving} onClick={() => { void saveAndClose(); }}>
+                {saving ? t("saving") : t("save")}
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {toast ? (
+        <div className="pointer-events-none fixed inset-x-0 top-4 z-[80] flex justify-center px-4">
+          <Toast
+            message={toast.message}
+            variant={toast.variant}
+            dismissLabel={t("dismiss")}
+            onDismiss={() => setToast(null)}
+          />
         </div>
       ) : null}
-      {error ? <p className="mt-2 text-xs text-red-600">{error}</p> : null}
-      {saveError ? <p className="mt-2 text-xs text-red-600">{saveError}</p> : null}
-      {busy ? <p className="mt-2 text-xs text-gray-500">Transcribing vitals…</p> : null}
-    </section>
+    </div>
   );
 }
 
-function Field({ label, hint, flag, className, children }) {
+function applyLoadedVitals(current, vitals) {
+  const next = { ...current };
+  for (const key of Object.keys(EMPTY_FIELDS)) {
+    if (vitals[key] == null || vitals[key] === "") continue;
+    const currentValue = String(current[key] ?? "").trim();
+    const untouchedDefault = Object.prototype.hasOwnProperty.call(FIELD_DEFAULTS, key)
+      && currentValue === FIELD_DEFAULTS[key];
+    if (currentValue && !untouchedDefault) continue;
+    next[key] = fieldText(vitals[key]);
+  }
+  return next;
+}
+
+function Field({ label, hint, flag, flagLabel, className, children }) {
   return (
     <label className={cn("min-w-0", className)}>
-      <span className="mb-1 flex items-baseline gap-1 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+      <span className="mb-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5 break-words text-sm font-semibold leading-6 text-gray-500">
         {label}
-        {hint ? <span className="font-normal normal-case text-gray-400">{hint}</span> : null}
+        {hint ? <span className="font-normal text-gray-400">{hint}</span> : null}
       </span>
       {children}
-      {flag ? <span className="mt-1 block text-[10px] font-medium text-amber-700">Check this value</span> : null}
+      {flag ? <span className="mt-1 block break-words text-sm font-medium leading-6 text-amber-700">{flagLabel}</span> : null}
     </label>
+  );
+}
+
+function InlineAlert({ message, onDismiss, dismissLabel }) {
+  return (
+    <div
+      role="alert"
+      data-testid="vitals-error"
+      className="mb-3 flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-900"
+    >
+      <p className="min-w-0 flex-1 break-words leading-6">{message}</p>
+      <button
+        type="button"
+        className="shrink-0 cursor-pointer rounded px-1 text-base leading-none text-amber-900 hover:bg-amber-100"
+        aria-label={dismissLabel}
+        onClick={onDismiss}
+      >
+        ×
+      </button>
+    </div>
   );
 }

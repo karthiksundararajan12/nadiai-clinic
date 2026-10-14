@@ -130,9 +130,14 @@ export function ScribeRecordPanel({
 
   return (
     <aside className="relative flex h-full min-h-[16rem] w-full min-w-0 flex-1 flex-col gap-2 overflow-hidden lg:min-h-0">
-      {children ? (
+      {children || vitalsSlot ? (
         <div className="scribe-card shrink-0 overflow-visible rounded-xl" data-testid="record-panel-patient">
           {children}
+          {vitalsSlot ? (
+            <div className="border-t border-[color:var(--scribe-card-border)] px-3 py-2">
+              {vitalsSlot}
+            </div>
+          ) : null}
         </div>
       ) : null}
       {patientPrompt || notices.length > 0 ? (
@@ -156,7 +161,6 @@ export function ScribeRecordPanel({
           ))}
         </div>
       ) : null}
-      {vitalsSlot}
       <div
         className="scribe-card flex h-[calc(100dvh-20rem)] max-h-[calc(100dvh-20rem)] min-h-[16rem] w-full min-w-0 flex-none flex-col overflow-hidden rounded-xl lg:h-auto lg:max-h-none lg:min-h-[16rem] lg:flex-1"
         data-testid="record-panel-conversation"

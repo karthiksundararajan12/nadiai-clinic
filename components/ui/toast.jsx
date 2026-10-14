@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
  *   variant?: "default" | "warning" | "error";
  *   onDismiss: () => void;
  *   durationMs?: number;
+ *   dismissLabel?: string;
  * }} props
  */
 export function Toast({
@@ -17,6 +18,7 @@ export function Toast({
   variant = "warning",
   onDismiss,
   durationMs = 5000,
+  dismissLabel = "Dismiss",
 }) {
   useEffect(() => {
     const timer = setTimeout(onDismiss, durationMs);
@@ -39,7 +41,7 @@ export function Toast({
         type="button"
         onClick={onDismiss}
         className="shrink-0 rounded-md p-0.5 opacity-60 transition-opacity hover:opacity-100"
-        aria-label="Dismiss"
+        aria-label={dismissLabel}
       >
         <X className="h-4 w-4" />
       </button>

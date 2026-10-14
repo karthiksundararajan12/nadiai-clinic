@@ -242,8 +242,8 @@
   --radius-md: var(--radius);
   --radius-lg: var(--radius);
   --radius-xl: var(--radius);
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-display: var(--font-plus-jakarta), var(--font-inter), ui-sans-serif, sans-serif;
+  --font-sans: var(--font-inter), var(--font-tamil), var(--font-telugu), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-plus-jakarta), var(--font-inter), var(--font-tamil), var(--font-telugu), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-jetbrains-mono), ui-monospace, monospace;
   --shadow-clinical: var(--shadow-clinical);
   --shadow-sm: var(--shadow-clinical);
@@ -315,7 +315,7 @@
   --scribe-mic-gradient: linear-gradient(135deg, var(--primary), var(--accent));
 
   background-color: var(--scribe-page-bg);
-  font-family: var(--font-plus-jakarta), var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-family: var(--font-plus-jakarta), var(--font-inter), var(--font-tamil), var(--font-telugu), ui-sans-serif, system-ui, sans-serif;
   font-weight: 500;
   font-size: 0.875rem;
   color: var(--scribe-heading);

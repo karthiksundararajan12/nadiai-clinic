@@ -34,6 +34,7 @@ export const VITAL_CHECK_RANGES = Object.freeze({
   pulse: { min: 30, max: 220 },
   spo2: { min: 50, max: 100 },
   weight: { min: 1, max: 300 },
+  height: { min: 100, max: 220 },
   rr: { min: 6, max: 60 },
 });
 
@@ -125,13 +126,53 @@ const COMPOUNDS = {
 const FILLER = new Set(["is", "was", "of", "the", "a", "an", "hai", "tha", "around", "about", "at", "reading", "and"]);
 const HUNDRED = new Set(["hundred", "sau", "सौ", "நூறு", "nooru", "వంద", "vanda", "vandha"]);
 const BP_SEPARATOR = new Set(["over", "by", "upon", "slash", "/"]);
+const WEIGHT_UNITS = new Set(["kg", "kgs", "kilo", "kilos", "kilogram", "kilograms", "gauges", "gaze"]);
+const HEIGHT_UNITS = new Set(["cm", "centimeter", "centimeters", "centimetre", "centimetres"]);
+const CLAUSE_LABELS = new Set([
+  "bp", "pulse", "hr", "temp", "temperature", "spo2", "weight", "wt", "height", "ht",
+  "rr", "sugar", "glucose", "rbs", "fbs", "oxygen", "saturation", "heart", "blood",
+  "respiratory", "breathing", "respiration",
+]);
+const LABEL_FIELDS = {
+  bp: "bp",
+  pulse: "pulse",
+  hr: "pulse",
+  temp: "temp",
+  temperature: "temp",
+  spo2: "spo2",
+  oxygen: "spo2",
+  saturation: "spo2",
+  weight: "weight",
+  wt: "weight",
+  height: "height",
+  ht: "height",
+  rr: "rr",
+  respiration: "rr",
+  sugar: "sugar",
+  glucose: "sugar",
+  rbs: "sugar",
+  fbs: "sugar",
+};
+const SPLIT_RANGES = {
+  bp_systolic: [60, 260],
+  bp_diastolic: [30, 160],
+  pulse: [30, 220],
+  temp: [32, 108],
+  spo2: [50, 100],
+  weight: [1, 300],
+  height: [100, 220],
+  rr: [6, 60],
+  sugar: [30, 600],
+};
 
 /**
  * Spoken vitals often arrive as "Pulse, 98." The period is not a decimal,
  * and leaving it on the token makes the number unreadable.
+ * Thin spaces from speech-to-text are ordinary spaces before any merge.
  */
 export function normalizeVitalsTranscript(text) {
   return String(text ?? "")
+    .replace(/[\u00A0\u2009\u202F\u2007]/g, " ")
     .replace(/\bslash\b/gi, " / ")
     .replace(/(\d)\.(?!\d)/g, "$1 ")
     .replace(/(?<!\d)\.(?!\d)/g, " ")
@@ -140,17 +181,120 @@ export function normalizeVitalsTranscript(text) {
     .trim();
 }
 
-function tokenize(text) {
-  return normalizeVitalsTranscript(text)
+function isSingleDigit(token) {
+  return /^[0-9]$/.test(token ?? "");
+}
+
+function isTwoDigit(token) {
+  return /^[0-9]{2}$/.test(token ?? "");
+}
+
+function isClauseBoundary(token) {
+  if (!token) return true;
+  return BP_SEPARATOR.has(token) || WEIGHT_UNITS.has(token) || HEIGHT_UNITS.has(token) || CLAUSE_LABELS.has(token)
+    || token === "f" || token === "c" || token === "fahrenheit" || token === "celsius" || token === "percent";
+}
+
+function splitFieldAt(tokens, index) {
+  let separator = false;
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    const token = tokens[cursor];
+    if (BP_SEPARATOR.has(token)) {
+      separator = true;
+      continue;
+    }
+    if (token === "heart" && tokens[cursor + 1] === "rate") return { field: "pulse", separator };
+    if (token === "blood" && tokens[cursor + 1] === "pressure") return { field: "bp", separator };
+    if (LABEL_FIELDS[token]) return { field: LABEL_FIELDS[token], separator };
+    if (isSingleDigit(token) || isTwoDigit(token) || FILLER.has(token)) continue;
+    return { field: null, separator };
+  }
+  return { field: null, separator };
+}
+
+function splitValuePlausible(value, field) {
+  const range = SPLIT_RANGES[field];
+  if (!range) return false;
+  return value >= range[0] && value <= range[1];
+}
+
+function correctionField(tokens, index, next) {
+  if (BP_SEPARATOR.has(next)) return "bp_systolic";
+  if (HEIGHT_UNITS.has(next)) return "height";
+  if (WEIGHT_UNITS.has(next)) return "weight";
+  const found = splitFieldAt(tokens, index);
+  if (found.field === "bp") return found.separator ? "bp_diastolic" : "bp_systolic";
+  return found.field;
+}
+
+/**
+ * Deepgram often emits hundreds as two tokens: "1 80", "1 68", "9 8".
+ * Join those before labels and numbers are read.
+ */
+export function mergeSplitDigitTokens(text) {
+  const tokens = String(text ?? "").split(/\s+/).filter(Boolean);
+  const corrections = [];
+  const out = [];
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
+    const next = tokens[index + 1];
+    const after = tokens[index + 2];
+    if (isSingleDigit(token) && isTwoDigit(next) && isClauseBoundary(after)) {
+      const value = Number(`${token}${next}`);
+      const field = correctionField(tokens, index, after);
+      const hundreds = token === "1" && value >= 100 && value <= 299;
+      if (hundreds || splitValuePlausible(value, field)) {
+        out.push(String(value));
+        if (field) corrections.push({ field, from: `${token} ${next}`, to: value });
+        index += 1;
+        continue;
+      }
+    }
+    if (isSingleDigit(token) && isSingleDigit(next) && isClauseBoundary(after)) {
+      const value = Number(`${token}${next}`);
+      const found = splitFieldAt(tokens, index);
+      const field = found.field === "bp" || (found.field == null && found.separator)
+        ? (found.separator ? "bp_diastolic" : "bp_systolic")
+        : found.field;
+      if (field && splitValuePlausible(value, field)) {
+        out.push(String(value));
+        corrections.push({ field, from: `${token} ${next}`, to: value });
+        index += 1;
+        continue;
+      }
+    }
+    out.push(token);
+  }
+  return { text: out.join(" "), corrections };
+}
+
+function rewriteForParse(text) {
+  const normalized = normalizeVitalsTranscript(text)
     .toLowerCase()
     .replace(/°/g, " ")
     .replace(/\bb\.?\s*p\.?\b/g, " bp ")
+    .replace(/\bbee\s+pee\b/g, " bp ")
+    .replace(/\bb\s+p\b/g, " bp ")
+    .replace(/\bv\s*p\b/g, " bp ")
+    .replace(/\bspo\s*2\b/g, " spo2 ")
     .replace(/\bs\s*p\s*o\s*2\b/g, " spo2 ")
+    .replace(/\bk\s+g\b/g, " kg ")
     .replace(/%/g, " percent ")
     .replace(/\//g, " / ")
     .replace(/[^\p{L}\p{M}\p{N}.\s/]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return mergeSplitDigitTokens(normalized);
+}
+
+function tokenizePrepared(text) {
+  return String(text ?? "")
     .split(/\s+/)
     .filter((token) => token && token !== ".");
+}
+
+function tokenize(text) {
+  return tokenizePrepared(rewriteForParse(text).text);
 }
 
 function readAtom(token) {
@@ -334,7 +478,7 @@ function labelAt(tokens, index) {
   if ((token === "o2" || token === "oxygen") && (next === "sat" || next === "saturation")) {
     return { field: "spo2", index: index + 2 };
   }
-  if (token === "bp" || token === "రక్తపోటు" || token === "रक्तचाप") return { field: "bp", index: index + 1 };
+  if (token === "bp" || token === "vp" || token === "రక్తపోటు" || token === "रक्तचाप") return { field: "bp", index: index + 1 };
   if (
     token === "pulse" || token === "hr" || token === "nabz" || token === "nadi" || token === "naadi"
     || token === "நாடி" || token === "నాడి" || token === "नाड़ी" || token === "नब्ज"
@@ -434,14 +578,24 @@ function numberWasSpoken(text, value) {
   return collectSpokenNumbers(text).some((spoken) => Math.abs(spoken - Number(value)) < 0.051);
 }
 
+function noteLabelWithoutValue(seen, field) {
+  const key = field === "bp" ? "bp" : field;
+  if (key && key !== "ignore") seen.add(key);
+}
+
+function consumeWeightUnit(tokens, index, used) {
+  if (!WEIGHT_UNITS.has(tokens[index])) return index;
+  markUsed(used, index, index + 1);
+  return index + 1;
+}
+
 /**
- * @param {string} text
- * @returns {typeof EMPTY_VITALS}
+ * @param {string[]} tokens
  */
-export function extractVitalsFromUtterance(text) {
-  const tokens = tokenize(text);
+function parseVitalsTokens(tokens) {
   const result = { ...EMPTY_VITALS };
   const used = new Set();
+  const labelOnly = new Set();
 
   for (let index = 0; index < tokens.length; index += 1) {
     if (used.has(index)) continue;
@@ -459,12 +613,17 @@ export function extractVitalsFromUtterance(text) {
         result.height = height.value;
         markUsed(used, index, height.index);
         index = height.index - 1;
+      } else {
+        noteLabelWithoutValue(labelOnly, "height");
       }
       continue;
     }
     const cursor = skipFiller(tokens, label.index);
     const spoken = consumeSpokenNumber(tokens, cursor);
-    if (!spoken) continue;
+    if (!spoken) {
+      noteLabelWithoutValue(labelOnly, label.field);
+      continue;
+    }
     markUsed(used, index, spoken.index);
 
     if (label.field === "bp") {
@@ -487,7 +646,10 @@ export function extractVitalsFromUtterance(text) {
     if (label.field === "pulse") result.pulse = spoken.value;
     if (label.field === "rr") result.rr = spoken.value;
     if (label.field === "spo2") result.spo2 = spoken.value;
-    if (label.field === "weight") result.weight = spoken.value;
+    if (label.field === "weight") {
+      result.weight = spoken.value;
+      consumeWeightUnit(tokens, spoken.index, used);
+    }
     if (label.field === "temp") {
       result.temp = spoken.value;
       const unit = readUnit(tokens, spoken.index);
@@ -535,7 +697,50 @@ export function extractVitalsFromUtterance(text) {
     }
   }
 
-  return roundVitals(result);
+  const vitals = roundVitals(result);
+  const labelsWithoutValue = [...labelOnly].filter((field) => {
+    if (field === "bp") return vitals.bp_systolic == null && vitals.bp_diastolic == null;
+    return vitals[field] == null;
+  });
+  return { vitals, labelsWithoutValue };
+}
+
+/**
+ * @param {string} text
+ * @returns {typeof EMPTY_VITALS}
+ */
+export function extractVitalsFromUtterance(text) {
+  return describeVitalsUtterance(text).vitals;
+}
+
+/**
+ * Parsed vitals plus the notes the doctor should see: split-digit
+ * corrections, and labels that were spoken without a number.
+ *
+ * @param {string} text
+ */
+export function describeVitalsUtterance(text) {
+  const prepared = rewriteForParse(text);
+  const parsed = parseVitalsTokens(tokenizePrepared(prepared.text));
+  return {
+    vitals: parsed.vitals,
+    corrections: prepared.corrections,
+    labelsWithoutValue: parsed.labelsWithoutValue,
+  };
+}
+
+/**
+ * Systolic must be higher than diastolic by at least 10 mmHg.
+ * The numbers are still returned; the visit UI blocks save.
+ *
+ * @param {Partial<typeof EMPTY_VITALS>} vitals
+ */
+export function bpRelationshipError(vitals = {}) {
+  const systolic = Number(vitals.bp_systolic);
+  const diastolic = Number(vitals.bp_diastolic);
+  if (!Number.isFinite(systolic) || !Number.isFinite(diastolic)) return false;
+  if (String(vitals.bp_systolic).trim() === "" || String(vitals.bp_diastolic).trim() === "") return false;
+  return !(systolic > diastolic && systolic - diastolic >= 10);
 }
 
 function roundVitals(vitals) {

@@ -111,13 +111,14 @@ export class DeepgramProvider extends TranscriptionProvider {
     }
 
     let lastError = null;
+    let boostDropped = false;
     for (let attempt = 0; attempt <= DEEPGRAM_MAX_RETRIES; attempt++) {
       const startedAt = Date.now();
       log.info("Deepgram request start", {
         sessionId,
         attempt,
-        model,
-        language: deepgramLang,
+        model: listen?.model || model,
+        language: listen?.languageCode || deepgramLang,
         mode: audioUrl ? "signed_url" : "bytes",
         audioSizeBytes: audioSizeBytes ?? audioBlob?.size ?? null,
         durationSeconds: durationSeconds ?? null,
@@ -133,6 +134,7 @@ export class DeepgramProvider extends TranscriptionProvider {
           languageCode: listen?.languageCode,
           numerals: listen?.numerals,
           model: listen?.model,
+          keywords: boostDropped ? undefined : listen?.keywords,
           timeoutMs: timeout,
           signal,
         });
@@ -153,6 +155,14 @@ export class DeepgramProvider extends TranscriptionProvider {
           retry: attempt < DEEPGRAM_MAX_RETRIES && isTransientDeepgramError(lastError),
           error: lastError.message,
         });
+        const rejectedBoost = !boostDropped
+          && listen?.keywords?.length
+          && Number(lastError?.details?.status) === 400;
+        if (rejectedBoost) {
+          boostDropped = true;
+          log.warn("Deepgram rejected vitals keyword boost, retrying without it", { sessionId });
+          continue;
+        }
         if (attempt >= DEEPGRAM_MAX_RETRIES || !isTransientDeepgramError(lastError)) {
           throw lastError;
         }
@@ -173,7 +183,7 @@ export class DeepgramProvider extends TranscriptionProvider {
    *   signal?: AbortSignal;
    * }} args
    */
-  async _listenOnce({ audioUrl, audioBlob, mimeType, language, languageCode, numerals, model: modelOverride, timeoutMs, signal }) {
+  async _listenOnce({ audioUrl, audioBlob, mimeType, language, languageCode, numerals, model: modelOverride, keywords, timeoutMs, signal }) {
     const model = modelOverride || resolveDeepgramModel(language);
     const deepgramLang = languageCode || resolveDeepgramLanguage(language);
     const params = new URLSearchParams({
@@ -187,6 +197,16 @@ export class DeepgramProvider extends TranscriptionProvider {
       language: deepgramLang,
     });
     if (numerals) params.set("numerals", "true");
+    if (Array.isArray(keywords)) {
+      const nova3 = String(model).includes("nova-3");
+      for (const entry of keywords) {
+        const term = Array.isArray(entry) ? entry[0] : entry;
+        const boost = Array.isArray(entry) ? entry[1] : "2";
+        if (!term) continue;
+        if (nova3) params.append("keyterm", String(term));
+        else params.append("keywords", `${term}:${boost}`);
+      }
+    }
     const endpoint = `${DEEPGRAM_LISTEN_HTTP_URL}?${params}`;
 
     const controller = new AbortController();

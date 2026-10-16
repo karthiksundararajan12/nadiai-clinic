@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dialog";
 import {
   applyVitalsAutofill,
+  bpRelationshipError,
+  describeVitalsUtterance,
   extractVitalsFromUtterance,
   vitalRangeFlags,
 } from "../../lib/vitals-utterance.js";
@@ -150,6 +152,8 @@ export function SayVitalsBar({
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
   const [vitalsLoadId, setVitalsLoadId] = useState(0);
+  const [bpConfirmed, setBpConfirmed] = useState(false);
+  const [dismissedNotes, setDismissedNotes] = useState(() => new Set());
 
   const savedRef = useRef(saved);
   const draftRef = useRef(draft);
@@ -403,6 +407,8 @@ export function SayVitalsBar({
       });
     }
     setPending(applied.skipped.length && !confirmTyped ? extracted : null);
+    setBpConfirmed(false);
+    setDismissedNotes(new Set());
   }
 
   async function transcribeClip(blob) {
@@ -429,6 +435,12 @@ export function SayVitalsBar({
   }
 
   function updateField(key, value) {
+    if (key === "bp_systolic" || key === "bp_diastolic") setBpConfirmed(false);
+    setDismissedNotes((current) => {
+      const next = new Set(current);
+      next.add(key);
+      return next;
+    });
     setTypedFields((current) => {
       const next = new Set(current);
       next.add(key);
@@ -522,11 +534,30 @@ export function SayVitalsBar({
 
   const summary = formatVitalsSummary(open ? draft : saved, t, formatNumber);
   const flags = vitalRangeFlags(draft);
+  const bpBad = bpRelationshipError(draft);
+  const notes = heard ? describeVitalsUtterance(heard) : { corrections: [], labelsWithoutValue: [] };
   const inputClass = (key) => cn(
     "w-full min-w-0 rounded-md border bg-white px-2 py-1.5 text-sm tabular-nums text-gray-900",
-    flags[key] ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200",
+    bpBad && (key === "bp_systolic" || key === "bp_diastolic")
+      ? "border-red-500 ring-2 ring-red-200"
+      : flags[key] ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200",
     highlighted.has(key) && "bg-primary/10 ring-2 ring-primary/30",
   );
+  const correctionHint = (...fields) => {
+    const parts = [];
+    for (const field of fields) {
+      if (dismissedNotes.has(field)) continue;
+      const hit = notes.corrections.find((item) => item.field === field);
+      if (hit) parts.push(t("autoCorrected", { from: hit.from }));
+    }
+    return parts.length ? parts.join(" ") : null;
+  };
+  const missingHint = (key) => {
+    const empty = key === "bp" ? missed("bp_systolic") || missed("bp_diastolic") : missed(key);
+    if (!empty) return null;
+    if (notes.labelsWithoutValue.includes(key)) return t("heardNoValue", { label: key });
+    return notHeard;
+  };
 
   const buttonTextClass = "h-auto min-h-10 whitespace-normal px-4 py-2 leading-6";
   const heardAttempt = Boolean(String(heard || "").trim());
@@ -653,7 +684,16 @@ export function SayVitalsBar({
               ) : null}
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label={t("bp")} flag={flags.bp_systolic || flags.bp_diastolic} flagLabel={t("checkValue")} missing={missed("bp_systolic") || missed("bp_diastolic") ? notHeard : null}>
+                <Field
+                  label={t("bp")}
+                  flag={!bpBad && (flags.bp_systolic || flags.bp_diastolic)}
+                  flagLabel={t("checkValue")}
+                  missing={missingHint("bp")}
+                  note={correctionHint("bp_systolic", "bp_diastolic")}
+                  error={bpBad ? t("bpInverted") : null}
+                  confirmLabel={bpBad && !bpConfirmed ? t("confirmBp") : null}
+                  onConfirm={() => setBpConfirmed(true)}
+                >
                   <div className="flex items-center gap-1">
                     <input
                       aria-label={t("bpSystolic")}
@@ -672,7 +712,7 @@ export function SayVitalsBar({
                     />
                   </div>
                 </Field>
-                <Field label={t("pulse")} flag={flags.pulse} flagLabel={t("checkValue")} missing={missed("pulse") ? notHeard : null}>
+                <Field label={t("pulse")} flag={flags.pulse} flagLabel={t("checkValue")} missing={missingHint("pulse")} note={correctionHint("pulse")}>
                   <input
                     aria-label={t("pulse")}
                     inputMode="numeric"
@@ -681,7 +721,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("pulse", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("rr")} flag={flags.rr} flagLabel={t("checkValue")} missing={missed("rr") ? notHeard : null}>
+                <Field label={t("rr")} flag={flags.rr} flagLabel={t("checkValue")} missing={missingHint("rr")} note={correctionHint("rr")}>
                   <input
                     aria-label={t("rr")}
                     inputMode="numeric"
@@ -690,7 +730,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("rr", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")} missing={missed("temp") ? notHeard : null}>
+                <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")} missing={missingHint("temp")} note={correctionHint("temp")}>
                   <div className="flex items-center gap-1">
                     <input
                       aria-label={t("temperature")}
@@ -709,7 +749,7 @@ export function SayVitalsBar({
                     </button>
                   </div>
                 </Field>
-                <Field label={t("spo2")} flag={flags.spo2} flagLabel={t("checkValue")} missing={missed("spo2") ? notHeard : null}>
+                <Field label={t("spo2")} flag={flags.spo2} flagLabel={t("checkValue")} missing={missingHint("spo2")} note={correctionHint("spo2")}>
                   <input
                     aria-label={t("spo2")}
                     inputMode="numeric"
@@ -718,7 +758,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("spo2", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("weight")} flag={flags.weight} flagLabel={t("checkValue")} missing={missed("weight") ? notHeard : null}>
+                <Field label={t("weight")} flag={flags.weight} flagLabel={t("checkValue")} missing={missingHint("weight")} note={correctionHint("weight")}>
                   <input
                     aria-label={t("weight")}
                     inputMode="decimal"
@@ -727,7 +767,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("weight", event.target.value.replace(/[^\d.]/g, ""))}
                   />
                 </Field>
-                <Field label={t("height")} hint={missed("height") ? null : t("optional")} missing={missed("height") ? notHeard : null}>
+                <Field label={t("height")} hint={missed("height") ? null : t("optional")} flag={flags.height} flagLabel={t("checkValue")} missing={missingHint("height")} note={correctionHint("height")}>
                   <input
                     aria-label={t("height")}
                     inputMode="decimal"
@@ -736,7 +776,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("height", event.target.value.replace(/[^\d.]/g, ""))}
                   />
                 </Field>
-                <Field label={t("sugar")} hint={missed("sugar") ? null : t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} missing={missed("sugar") ? notHeard : null} className="col-span-2">
+                <Field label={t("sugar")} hint={missed("sugar") ? null : t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} missing={missingHint("sugar")} note={correctionHint("sugar")} className="col-span-2">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <input
@@ -775,7 +815,7 @@ export function SayVitalsBar({
               <Button type="button" variant="outline" data-testid="vitals-cancel" className={buttonTextClass} onClick={requestClose}>
                 {t("cancel")}
               </Button>
-              <Button type="button" data-testid="vitals-save" className={buttonTextClass} disabled={saving} onClick={() => { void saveAndClose(); }}>
+              <Button type="button" data-testid="vitals-save" className={buttonTextClass} disabled={saving || (bpBad && !bpConfirmed)} onClick={() => { void saveAndClose(); }}>
                 {saving ? t("saving") : t("save")}
               </Button>
             </DialogFooter>
@@ -809,7 +849,7 @@ function applyLoadedVitals(current, vitals) {
   return next;
 }
 
-function Field({ label, hint, flag, flagLabel, missing, className, children }) {
+function Field({ label, hint, flag, flagLabel, missing, note, error, confirmLabel, onConfirm, className, children }) {
   return (
     <label className={cn("min-w-0", className)}>
       <span className="mb-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5 break-words text-sm font-semibold leading-6 text-gray-500">
@@ -817,7 +857,26 @@ function Field({ label, hint, flag, flagLabel, missing, className, children }) {
         {hint ? <span className="font-normal text-gray-400">{hint}</span> : null}
       </span>
       {children}
+      {error ? (
+        <span className="mt-1 block break-words text-sm font-medium leading-6 text-red-700" role="alert" data-testid="vitals-bp-error">
+          {error}
+          {confirmLabel ? (
+            <button
+              type="button"
+              data-testid="vitals-bp-confirm"
+              className="ml-2 underline"
+              onClick={(event) => {
+                event.preventDefault();
+                onConfirm?.();
+              }}
+            >
+              {confirmLabel}
+            </button>
+          ) : null}
+        </span>
+      ) : null}
       {flag ? <span className="mt-1 block break-words text-sm font-medium leading-6 text-amber-700">{flagLabel}</span> : null}
+      {note ? <span className="mt-1 block break-words text-xs leading-5 text-gray-500" data-testid="vitals-corrected">{note}</span> : null}
       {missing ? <span className="mt-1 block break-words text-sm font-medium leading-6 text-gray-700" data-testid="vitals-not-heard">{missing}</span> : null}
     </label>
   );

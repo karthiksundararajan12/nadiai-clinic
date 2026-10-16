@@ -153,14 +153,14 @@ async function flush() {
   });
 }
 
-function installFetch({ vitals = null, onSave } = {}) {
+function installFetch({ vitals = null, onSave, hear = null } = {}) {
   globalThis.fetch = async (url, init) => {
     const href = String(url);
     if (href.includes("/api/scribe/vitals/hear")) {
       return {
         ok: true,
         async json() {
-          return {
+          return hear ?? {
             transcript: "BP 120 by 80, pulse seventy eight, SpO2 ninety eight",
             vitals: {
               bp_systolic: 120,
@@ -455,5 +455,97 @@ test("spoken consultation vitals fill the chip, keep a manual edit, and survive 
   } finally {
     globalThis.fetch = originalFetch;
     if (view.host.isConnected) await view.unmount();
+  }
+});
+
+test("a split-digit transcript shows the correction and a weight label with no value", async () => {
+  const originalFetch = globalThis.fetch;
+  const transcript = "VP, 1 80 by 90. Pulse, 68. Temperature, 98. SPO 2, 99. Weight, state gauges. Height, 1 68 centimeter.";
+  installFetch({
+    hear: {
+      transcript,
+      vitals: {
+        bp_systolic: 180,
+        bp_diastolic: 90,
+        pulse: 68,
+        temp: 98,
+        spo2: 99,
+        weight: null,
+        height: 168,
+      },
+    },
+  });
+  navigator.mediaDevices = {
+    async getUserMedia() {
+      return { getTracks() { return [{ stop() {} }]; } };
+    },
+  };
+  const view = renderBar({ patientId: "patient-1" });
+  try {
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-summary']").click();
+    });
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-mic']").click();
+    });
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-stop']").click();
+    });
+    await flush();
+
+    assert.equal(document.querySelector("[aria-label='BP systolic']").value, "180");
+    assert.equal(document.querySelector("[aria-label='BP diastolic']").value, "90");
+    assert.equal(document.querySelector("[aria-label='Height']").value, "168");
+    assert.equal(document.querySelector("[aria-label='Weight']").value, "");
+    assert.match(document.body.textContent, /auto-corrected from '1 80'/);
+    assert.match(document.body.textContent, /auto-corrected from '1 68'/);
+    assert.match(document.body.textContent, /Heard 'weight' but no value, please enter/);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await view.unmount();
+  }
+});
+
+test("systolic lower than diastolic shows a red error and disables Save", async () => {
+  const originalFetch = globalThis.fetch;
+  installFetch();
+  const view = renderBar({ patientId: "patient-1" });
+  try {
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-summary']").click();
+    });
+    await flush();
+
+    await act(async () => {
+      setInput(document.querySelector("[aria-label='BP systolic']"), "80");
+      setInput(document.querySelector("[aria-label='BP diastolic']"), "90");
+    });
+
+    const save = document.querySelector("[data-testid='vitals-save']");
+    assert.match(document.querySelector("[data-testid='vitals-bp-error']").textContent, /Check BP: diastolic is higher than systolic/);
+    assert.equal(save.disabled, true);
+
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-bp-confirm']").click();
+    });
+    assert.equal(save.disabled, false);
+
+    await act(async () => {
+      setInput(document.querySelector("[aria-label='BP systolic']"), "70");
+    });
+    assert.equal(save.disabled, true);
+
+    await act(async () => {
+      setInput(document.querySelector("[aria-label='BP systolic']"), "180");
+    });
+    assert.equal(document.querySelector("[data-testid='vitals-bp-error']"), null);
+    assert.equal(save.disabled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await view.unmount();
   }
 });

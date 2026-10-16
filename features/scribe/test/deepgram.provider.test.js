@@ -77,6 +77,60 @@ test("Deepgram retries once with ≤500ms backoff then succeeds", async () => {
   }
 });
 
+test("vitals keyword boost uses keywords on nova-2 and retries without them after a 400", async () => {
+  const requests = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (url) => {
+    requests.push(String(url));
+    if (requests.length === 1) return jsonResponse({ err_msg: "bad keywords" }, 400);
+    return jsonResponse(DG_RESULT);
+  };
+  try {
+    const provider = new DeepgramProvider("test-deepgram-key");
+    const result = await provider.transcribe({
+      audioUrl: "https://signed.example/a.webm",
+      language: "english",
+      sessionId: "sess-keywords",
+      listen: {
+        model: "nova-2",
+        keywords: [["BP", "2"], ["kg", "2"]],
+      },
+    });
+    assert.match(result.text, /Hello/);
+    assert.equal(requests.length, 2);
+    assert.match(requests[0], /keywords=BP%3A2/);
+    assert.match(requests[0], /keywords=kg%3A2/);
+    assert.doesNotMatch(requests[1], /keywords=/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("nova-3 vitals boost uses keyterm", async () => {
+  let url = "";
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (requestUrl) => {
+    url = String(requestUrl);
+    return jsonResponse(DG_RESULT);
+  };
+  try {
+    const provider = new DeepgramProvider("test-deepgram-key");
+    await provider.transcribe({
+      audioUrl: "https://signed.example/a.webm",
+      language: "english",
+      sessionId: "sess-keyterm",
+      listen: {
+        model: "nova-3",
+        keywords: [["SpO2", "2"]],
+      },
+    });
+    assert.match(url, /keyterm=SpO2/);
+    assert.doesNotMatch(url, /keywords=/);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("Deepgram timeout does not retry", async () => {
   let calls = 0;
   const originalFetch = globalThis.fetch;

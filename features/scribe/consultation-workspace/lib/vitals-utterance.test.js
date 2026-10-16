@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   applyVitalsAutofill,
+  bpRelationshipError,
+  describeVitalsUtterance,
   extractVitals,
   extractVitalsFromUtterance,
   mergeVisitVitalsIntoObjective,
@@ -383,4 +385,73 @@ test("visit vitals are copied into the Objective vitals line", () => {
   assert.match(text, /Height: 170 cm/);
   assert.match(text, /RBS: 140 mg\/dL/);
   assert.match(text, /P\/A: soft, non-tender/);
+});
+
+test("Deepgram split digits and a mangled VP label still read 180/90 and 168 cm", () => {
+  const text = "VP, 1 80 by 90. Pulse, 68. Temperature, 98. SPO 2, 99. Weight, state gauges. Height, 1 68 centimeter.";
+  const described = describeVitalsUtterance(text);
+  assert.equal(described.vitals.bp_systolic, 180);
+  assert.equal(described.vitals.bp_diastolic, 90);
+  assert.equal(described.vitals.pulse, 68);
+  assert.equal(described.vitals.temp, 98);
+  assert.equal(described.vitals.spo2, 99);
+  assert.equal(described.vitals.height, 168);
+  assert.equal(described.vitals.weight, null);
+  assert.deepEqual(described.labelsWithoutValue, ["weight"]);
+  assert.deepEqual(described.corrections.map((item) => item.from), ["1 80", "1 68"]);
+  assert.equal(bpRelationshipError(described.vitals), false);
+});
+
+test("spoken hundreds still fill every labeled vital", () => {
+  const vitals = extractVitalsFromUtterance(
+    "80, one eighty by 90. Pulse, 98. Temperature, 98. SpO2, 99. Weight, 68 kG. Height, one sixty eight centimeter.",
+  );
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(vitals.pulse, 98);
+  assert.equal(vitals.temp, 98);
+  assert.equal(vitals.spo2, 99);
+  assert.equal(vitals.weight, 68);
+  assert.equal(vitals.height, 168);
+});
+
+test("split digits across BP, pulse, and SpO2", () => {
+  const described = describeVitalsUtterance("BP 1 20 over 80 pulse 7 2 temp 98.6 SpO2 9 8");
+  assert.equal(described.vitals.bp_systolic, 120);
+  assert.equal(described.vitals.bp_diastolic, 80);
+  assert.equal(described.vitals.pulse, 72);
+  assert.equal(described.vitals.temp, 98.6);
+  assert.equal(described.vitals.spo2, 98);
+  assert.deepEqual(described.corrections.map((item) => [item.field, item.from]), [
+    ["bp_systolic", "1 20"],
+    ["pulse", "7 2"],
+    ["spo2", "9 8"],
+  ]);
+});
+
+test("a thin space between digits is merged the same way as a normal space", () => {
+  const vitals = extractVitalsFromUtterance("VP 1\u00A080 by 9\u202F0");
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+});
+
+test("systolic lower than diastolic is kept and flagged for the doctor", () => {
+  const vitals = extractVitalsFromUtterance("BP 80 by 90");
+  assert.equal(vitals.bp_systolic, 80);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(bpRelationshipError(vitals), true);
+  assert.equal(bpRelationshipError({ bp_systolic: 120, bp_diastolic: 80 }), false);
+});
+
+test("height outside 100-220 cm is kept and flagged", () => {
+  const vitals = extractVitalsFromUtterance("height 50 centimeter");
+  assert.equal(vitals.height, 50);
+  assert.equal(vitalRangeFlags(vitals).height, true);
+  assert.equal(vitalRangeFlags({ height: 168 }).height, undefined);
+});
+
+test("weight units include gauges and a spaced k g", () => {
+  assert.equal(extractVitalsFromUtterance("weight 68 gauges").weight, 68);
+  assert.equal(extractVitalsFromUtterance("weight 72 k g").weight, 72);
+  assert.equal(extractVitalsFromUtterance("weight 70 kilograms").weight, 70);
 });

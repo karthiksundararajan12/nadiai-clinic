@@ -90,7 +90,19 @@ export async function POST(request) {
       // nova-2-medical only accepts en / en-US, so English vitals clips use nova-2
       // with en-IN and numerals. Consultation diarization is unchanged.
       listen: englishClip
-        ? { languageCode: "en-IN", numerals: true, model: "nova-2" }
+        ? {
+            languageCode: "en-IN",
+            numerals: true,
+            model: "nova-2",
+            keywords: [
+              ["kilograms", "2"],
+              ["kg", "2"],
+              ["SpO2", "2"],
+              ["BP", "2"],
+              ["pulse", "2"],
+              ["centimeter", "2"],
+            ],
+          }
         : undefined,
     });
     const transcript = String(result?.text ?? "").trim();

@@ -41,7 +41,6 @@ export function ScribeRecordPanel({
   manualSubmitting = false,
   canStartRecording = true,
   patientAttached = canStartRecording,
-  onAddPatient,
   patientRequiredHint,
   notices = [],
   vitalsSlot = null,
@@ -169,20 +168,12 @@ export function ScribeRecordPanel({
       >
         {statusStrip}
         {!patientAttached ? (
-          <div
-            className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950"
+          <p
+            className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950"
             data-testid="unassigned-patient-banner"
           >
-            <p className="min-w-0 flex-1">No patient selected. Name and age will be picked up from the conversation, or add manually.</p>
-            <button
-              type="button"
-              className="inline-flex min-h-9 shrink-0 cursor-pointer items-center gap-1 rounded-md bg-white px-2 py-1 font-semibold text-[color:var(--scribe-indigo-600)]"
-              onClick={onAddPatient}
-            >
-              <Plus size={16} weight="bold" aria-hidden />
-              New patient
-            </button>
-          </div>
+            No patient selected. Name and age will be picked up from the conversation, or use Add patient.
+          </p>
         ) : null}
         <ScribeConversationChat
           segments={transcriptSegments}

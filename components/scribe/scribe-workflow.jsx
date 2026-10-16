@@ -1004,7 +1004,6 @@ export function ScribeWorkflow() {
               manualSubmitting={manualSubmitting}
               canStartRecording
               patientAttached={Boolean(selectedPatient) || Boolean(workspaceState.patientId)}
-              onAddPatient={() => setCreateOpenToken((token) => token + 1)}
               patientRequiredHint="Select a patient to begin"
               notices={scribeNotices}
               vitalsSlot={

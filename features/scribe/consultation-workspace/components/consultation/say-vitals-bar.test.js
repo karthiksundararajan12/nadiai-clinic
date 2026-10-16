@@ -243,7 +243,7 @@ test("Add vitals stays disabled until a patient is selected", async () => {
   }
 });
 
-test("voice autofill inside the modal keeps a typed value until Replace", async () => {
+test("a new vitals recording replaces a typed value and marks fields that were not heard", async () => {
   const originalFetch = globalThis.fetch;
   installFetch();
   navigator.mediaDevices = {
@@ -275,16 +275,11 @@ test("voice autofill inside the modal keeps a typed value until Replace", async 
 
     assert.equal(document.querySelector("[aria-label='BP systolic']").value, "120");
     assert.equal(document.querySelector("[aria-label='BP diastolic']").value, "80");
-    assert.equal(document.querySelector("[aria-label='Pulse']").value, "90");
+    assert.equal(document.querySelector("[aria-label='Pulse']").value, "78");
     assert.equal(document.querySelector("[aria-label='SpO2']").value, "98");
     assert.match(document.querySelector("[data-testid='vitals-heard']").textContent, /Heard: BP 120 by 80/);
-    assert.equal(document.body.textContent.includes("Replace"), true);
-
-    const replace = [...document.querySelectorAll("button")].find((button) => button.textContent === "Replace");
-    await act(async () => {
-      replace.click();
-    });
-    assert.equal(document.querySelector("[aria-label='Pulse']").value, "78");
+    assert.equal(document.body.textContent.includes("Not heard, please enter"), true);
+    assert.equal(document.body.textContent.includes("Replace"), false);
   } finally {
     globalThis.fetch = originalFetch;
     await view.unmount();

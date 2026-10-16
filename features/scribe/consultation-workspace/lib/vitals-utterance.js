@@ -29,12 +29,12 @@ const VITAL_KEYS = Object.keys(EMPTY_VITALS).filter(
 
 /** Amber "Check this value" bounds. Out-of-range readings are still kept. */
 export const VITAL_CHECK_RANGES = Object.freeze({
-  bp_systolic: { min: 50, max: 260 },
-  bp_diastolic: { min: 30, max: 150 },
+  bp_systolic: { min: 60, max: 260 },
+  bp_diastolic: { min: 30, max: 160 },
   pulse: { min: 30, max: 220 },
   spo2: { min: 50, max: 100 },
   weight: { min: 1, max: 300 },
-  rr: { min: 8, max: 40 },
+  rr: { min: 6, max: 60 },
 });
 
 const ONES = {
@@ -124,14 +124,28 @@ const COMPOUNDS = {
 
 const FILLER = new Set(["is", "was", "of", "the", "a", "an", "hai", "tha", "around", "about", "at", "reading", "and"]);
 const HUNDRED = new Set(["hundred", "sau", "सौ", "நூறு", "nooru", "వంద", "vanda", "vandha"]);
-const BP_SEPARATOR = new Set(["over", "by", "upon", "/"]);
+const BP_SEPARATOR = new Set(["over", "by", "upon", "slash", "/"]);
+
+/**
+ * Spoken vitals often arrive as "Pulse, 98." The period is not a decimal,
+ * and leaving it on the token makes the number unreadable.
+ */
+export function normalizeVitalsTranscript(text) {
+  return String(text ?? "")
+    .replace(/\bslash\b/gi, " / ")
+    .replace(/(\d)\.(?!\d)/g, "$1 ")
+    .replace(/(?<!\d)\.(?!\d)/g, " ")
+    .replace(/[,:;]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 function tokenize(text) {
-  return String(text ?? "")
+  return normalizeVitalsTranscript(text)
     .toLowerCase()
     .replace(/°/g, " ")
     .replace(/\bb\.?\s*p\.?\b/g, " bp ")
-    .replace(/sp\s*o\s*2/g, " spo2 ")
+    .replace(/\bs\s*p\s*o\s*2\b/g, " spo2 ")
     .replace(/%/g, " percent ")
     .replace(/\//g, " / ")
     .replace(/[^\p{L}\p{M}\p{N}.\s/]/gu, " ")
@@ -316,6 +330,7 @@ function labelAt(tokens, index) {
   if (token === "heart" && next === "rate") return { field: "pulse", index: index + 2 };
   if (token === "respiratory" && next === "rate") return { field: "rr", index: index + 2 };
   if (token === "breathing" && next === "rate") return { field: "rr", index: index + 2 };
+  if (token === "respiration") return { field: "rr", index: index + 1 };
   if ((token === "o2" || token === "oxygen") && (next === "sat" || next === "saturation")) {
     return { field: "spo2", index: index + 2 };
   }
@@ -342,7 +357,7 @@ function labelAt(tokens, index) {
     return { field: "weight", index: index + 1 };
   }
   if (
-    token === "height" || token === "lambai" || token === "unchai" || token === "kad"
+    token === "height" || token === "ht" || token === "lambai" || token === "unchai" || token === "kad"
     || token === "உயரம்" || token === "ఎత్తు" || token === "ऊंचाई"
   ) {
     return { field: "height", index: index + 1 };
@@ -392,8 +407,10 @@ function readHeight(tokens, index, used) {
     markUsed(used, cursor, next);
     return { value: Math.round(cm * 10) / 10, index: next };
   }
-  if (unit === "cm" || unit === "centimeter" || unit === "centimeters" || feet.value >= 40) {
-    const next = unit === "cm" || unit === "centimeter" || unit === "centimeters" ? feet.index + 1 : feet.index;
+  const cmUnit = unit === "cm" || unit === "centimeter" || unit === "centimeters"
+    || unit === "centimetre" || unit === "centimetres";
+  if (cmUnit || feet.value >= 40) {
+    const next = cmUnit ? feet.index + 1 : feet.index;
     markUsed(used, cursor, next);
     return { value: feet.value, index: next };
   }

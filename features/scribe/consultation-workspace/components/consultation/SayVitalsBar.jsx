@@ -420,7 +420,7 @@ export function SayVitalsBar({
       const transcript = String(payload.transcript ?? "").trim();
       setHeard(transcript);
       heardRef.current = transcript;
-      applyExtracted(payload.vitals ?? {});
+      applyExtracted(payload.vitals ?? {}, { confirmTyped: true });
     } catch (err) {
       setError(t("transcribeFailed"));
     } finally {
@@ -529,6 +529,9 @@ export function SayVitalsBar({
   );
 
   const buttonTextClass = "h-auto min-h-10 whitespace-normal px-4 py-2 leading-6";
+  const heardAttempt = Boolean(String(heard || "").trim());
+  const missed = (key) => heardAttempt && !fieldText(draft[key]).trim();
+  const notHeard = t("notHeard");
 
   return (
     <div data-testid="say-vitals">
@@ -650,7 +653,7 @@ export function SayVitalsBar({
               ) : null}
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label={t("bp")} flag={flags.bp_systolic || flags.bp_diastolic} flagLabel={t("checkValue")}>
+                <Field label={t("bp")} flag={flags.bp_systolic || flags.bp_diastolic} flagLabel={t("checkValue")} missing={missed("bp_systolic") || missed("bp_diastolic") ? notHeard : null}>
                   <div className="flex items-center gap-1">
                     <input
                       aria-label={t("bpSystolic")}
@@ -669,7 +672,7 @@ export function SayVitalsBar({
                     />
                   </div>
                 </Field>
-                <Field label={t("pulse")} flag={flags.pulse} flagLabel={t("checkValue")}>
+                <Field label={t("pulse")} flag={flags.pulse} flagLabel={t("checkValue")} missing={missed("pulse") ? notHeard : null}>
                   <input
                     aria-label={t("pulse")}
                     inputMode="numeric"
@@ -678,7 +681,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("pulse", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("rr")} flag={flags.rr} flagLabel={t("checkValue")}>
+                <Field label={t("rr")} flag={flags.rr} flagLabel={t("checkValue")} missing={missed("rr") ? notHeard : null}>
                   <input
                     aria-label={t("rr")}
                     inputMode="numeric"
@@ -687,7 +690,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("rr", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")}>
+                <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")} missing={missed("temp") ? notHeard : null}>
                   <div className="flex items-center gap-1">
                     <input
                       aria-label={t("temperature")}
@@ -706,7 +709,7 @@ export function SayVitalsBar({
                     </button>
                   </div>
                 </Field>
-                <Field label={t("spo2")} flag={flags.spo2} flagLabel={t("checkValue")}>
+                <Field label={t("spo2")} flag={flags.spo2} flagLabel={t("checkValue")} missing={missed("spo2") ? notHeard : null}>
                   <input
                     aria-label={t("spo2")}
                     inputMode="numeric"
@@ -715,7 +718,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("spo2", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
-                <Field label={t("weight")} flag={flags.weight} flagLabel={t("checkValue")}>
+                <Field label={t("weight")} flag={flags.weight} flagLabel={t("checkValue")} missing={missed("weight") ? notHeard : null}>
                   <input
                     aria-label={t("weight")}
                     inputMode="decimal"
@@ -724,7 +727,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("weight", event.target.value.replace(/[^\d.]/g, ""))}
                   />
                 </Field>
-                <Field label={t("height")} hint={t("optional")}>
+                <Field label={t("height")} hint={missed("height") ? null : t("optional")} missing={missed("height") ? notHeard : null}>
                   <input
                     aria-label={t("height")}
                     inputMode="decimal"
@@ -733,7 +736,7 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("height", event.target.value.replace(/[^\d.]/g, ""))}
                   />
                 </Field>
-                <Field label={t("sugar")} hint={t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} className="col-span-2">
+                <Field label={t("sugar")} hint={missed("sugar") ? null : t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} missing={missed("sugar") ? notHeard : null} className="col-span-2">
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <input
@@ -806,7 +809,7 @@ function applyLoadedVitals(current, vitals) {
   return next;
 }
 
-function Field({ label, hint, flag, flagLabel, className, children }) {
+function Field({ label, hint, flag, flagLabel, missing, className, children }) {
   return (
     <label className={cn("min-w-0", className)}>
       <span className="mb-1 flex flex-wrap items-baseline gap-x-1 gap-y-0.5 break-words text-sm font-semibold leading-6 text-gray-500">
@@ -815,6 +818,7 @@ function Field({ label, hint, flag, flagLabel, className, children }) {
       </span>
       {children}
       {flag ? <span className="mt-1 block break-words text-sm font-medium leading-6 text-amber-700">{flagLabel}</span> : null}
+      {missing ? <span className="mt-1 block break-words text-sm font-medium leading-6 text-gray-700" data-testid="vitals-not-heard">{missing}</span> : null}
     </label>
   );
 }

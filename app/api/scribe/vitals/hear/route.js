@@ -80,12 +80,18 @@ export async function POST(request) {
 
   try {
     const provider = new DeepgramProvider();
+    const englishClip = language === SCRIBE_LANGUAGE.ENGLISH;
     const result = await provider.transcribe({
       audioBlobs: [audio],
       mimeType: audio.type || "audio/webm",
       language,
       sessionId: "vitals-clip",
       timeoutMs: 20000,
+      // nova-2-medical only accepts en / en-US, so English vitals clips use nova-2
+      // with en-IN and numerals. Consultation diarization is unchanged.
+      listen: englishClip
+        ? { languageCode: "en-IN", numerals: true, model: "nova-2" }
+        : undefined,
     });
     const transcript = String(result?.text ?? "").trim();
     log.info("Vitals clip transcribed", {

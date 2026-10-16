@@ -89,6 +89,7 @@ export class DeepgramProvider extends TranscriptionProvider {
       audioSizeBytes,
       timeoutMs,
       signal,
+      listen,
     } = input;
 
     if (!audioUrl && !audioBlobs?.length) {
@@ -129,6 +130,9 @@ export class DeepgramProvider extends TranscriptionProvider {
           audioBlob,
           mimeType,
           language,
+          languageCode: listen?.languageCode,
+          numerals: listen?.numerals,
+          model: listen?.model,
           timeoutMs: timeout,
           signal,
         });
@@ -169,9 +173,9 @@ export class DeepgramProvider extends TranscriptionProvider {
    *   signal?: AbortSignal;
    * }} args
    */
-  async _listenOnce({ audioUrl, audioBlob, mimeType, language, timeoutMs, signal }) {
-    const model = resolveDeepgramModel(language);
-    const deepgramLang = resolveDeepgramLanguage(language);
+  async _listenOnce({ audioUrl, audioBlob, mimeType, language, languageCode, numerals, model: modelOverride, timeoutMs, signal }) {
+    const model = modelOverride || resolveDeepgramModel(language);
+    const deepgramLang = languageCode || resolveDeepgramLanguage(language);
     const params = new URLSearchParams({
       model,
       diarize_model: "latest",
@@ -182,6 +186,7 @@ export class DeepgramProvider extends TranscriptionProvider {
       paragraphs: "false",
       language: deepgramLang,
     });
+    if (numerals) params.set("numerals", "true");
     const endpoint = `${DEEPGRAM_LISTEN_HTTP_URL}?${params}`;
 
     const controller = new AbortController();

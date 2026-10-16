@@ -291,6 +291,76 @@ test("sugar outside 30-600 mg/dL is flagged and still kept", () => {
   assert.equal(extractVitalsFromUtterance("sugar 20").sugar, 20);
 });
 
+const HEARD = "80, one eighty by 90. Pulse, 98. Temperature, 98. SpO2, 99. Weight, 68 kG. Height, one sixty eight centimeter.";
+
+test("the heard vitals sentence fills every labeled reading", () => {
+  const vitals = extractVitalsFromUtterance(HEARD);
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(vitals.pulse, 98);
+  assert.equal(vitals.temp, 98);
+  assert.equal(vitals.temp_unit, null);
+  assert.equal(vitals.spo2, 99);
+  assert.equal(vitals.weight, 68);
+  assert.equal(vitals.height, 168);
+  assert.equal(vitals.rr, null);
+  assert.equal(vitals.sugar, null);
+});
+
+test("digit vitals with labels and units", () => {
+  const vitals = extractVitalsFromUtterance("BP 180/90, pulse 98, temp 98, spo2 99, weight 68 kg, height 168 cm");
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(vitals.pulse, 98);
+  assert.equal(vitals.temp, 98);
+  assert.equal(vitals.spo2, 99);
+  assert.equal(vitals.weight, 68);
+  assert.equal(vitals.height, 168);
+});
+
+test("spoken BP uses over the same way as by", () => {
+  const over = extractVitalsFromUtterance("BP one eighty over ninety");
+  const by = extractVitalsFromUtterance("BP 180 by 90");
+  assert.equal(over.bp_systolic, 180);
+  assert.equal(over.bp_diastolic, 90);
+  assert.equal(by.bp_systolic, 180);
+  assert.equal(by.bp_diastolic, 90);
+});
+
+test("a BP pair without a BP label is still blood pressure", () => {
+  const vitals = extractVitalsFromUtterance("one eighty by 90, pulse 98");
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(vitals.pulse, 98);
+});
+
+test("temperature in celsius stays in celsius", () => {
+  const vitals = extractVitalsFromUtterance("temperature 37 C");
+  assert.equal(vitals.temp, 37);
+  assert.equal(vitals.temp_unit, "C");
+  assert.equal(vitalRangeFlags(vitals).temp, undefined);
+});
+
+test("height in feet and inches becomes centimeters", () => {
+  const vitals = extractVitalsFromUtterance("height 5 feet 6 inches");
+  assert.equal(vitals.height, 167.6);
+});
+
+test("spoken pulse spo2 and weight", () => {
+  const vitals = extractVitalsFromUtterance("pulse ninety eight, spo2 ninety nine, weight sixty eight kg");
+  assert.equal(vitals.pulse, 98);
+  assert.equal(vitals.spo2, 99);
+  assert.equal(vitals.weight, 68);
+});
+
+test("one twenty over eighty is 120/80 and a decimal temperature is kept", () => {
+  const pressure = extractVitalsFromUtterance("one twenty over eighty");
+  const temp = extractVitalsFromUtterance("temperature ninety eight point six");
+  assert.equal(pressure.bp_systolic, 120);
+  assert.equal(pressure.bp_diastolic, 80);
+  assert.equal(temp.temp, 98.6);
+});
+
 test("visit vitals are copied into the Objective vitals line", () => {
   const text = mergeVisitVitalsIntoObjective("P/A: soft, non-tender.", {
     bp_systolic: 120,

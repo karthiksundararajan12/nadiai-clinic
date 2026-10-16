@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useTranslations } from "next-intl";
-import { BrandLogo } from "@/components/brand-logo";
 import { Button } from "@/components/ui/button";
 import { FileText, Loader2, MessageCircle, Mic } from "lucide-react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -12,6 +12,19 @@ const BENEFITS = [
   { icon: Mic, label: "AI scribe with doctor approval" },
   { icon: FileText, label: "Prescriptions in one tap" },
 ];
+
+function LoginLogo({ className }) {
+  return (
+    <Image
+      src="/nadiai-header.png"
+      alt="Nadi AI"
+      width={694}
+      height={258}
+      priority
+      className={`rounded-md ${className}`}
+    />
+  );
+}
 
 function GoogleIcon() {
   return (
@@ -72,7 +85,7 @@ export default function LoginPage() {
     <div className="min-h-dvh bg-background text-foreground 2xl:text-lg">
       <div className="mx-auto flex min-h-dvh w-full flex-col lg:max-w-6xl lg:flex-row lg:px-6 lg:py-8 2xl:max-w-[1600px] 2xl:px-8 2xl:py-10">
         <aside className="hidden flex-col justify-between bg-primary px-10 py-12 text-primary-foreground lg:flex lg:w-[45%] lg:rounded-l-2xl 2xl:px-14 2xl:py-16">
-          <BrandLogo size="xl" onDark textClassName="text-primary-foreground text-2xl 2xl:text-3xl" priority />
+          <LoginLogo className="h-14 w-auto self-center" />
           <div className="max-w-md">
             <h1 className="font-display text-4xl font-bold leading-[1.15] tracking-tight text-primary-foreground 2xl:text-5xl">Run your clinic on WhatsApp.</h1>
             <ul className="mt-8 space-y-4 2xl:mt-10 2xl:space-y-5">
@@ -89,8 +102,8 @@ export default function LoginPage() {
           <p className="border-t border-primary-foreground/25 pt-6 text-sm font-medium text-primary-foreground/80 2xl:text-base">DPDP Act 2023 compliant</p>
         </aside>
         <main className="flex flex-1 flex-col justify-center px-4 py-8 pb-[max(1.5rem,env(safe-area-inset-bottom))] sm:items-center lg:w-[55%] lg:rounded-r-2xl lg:border lg:border-l-0 lg:border-border lg:bg-card lg:px-12 lg:py-10 2xl:px-16">
-          <div className="mb-8 w-full sm:max-w-md lg:hidden">
-            <BrandLogo size="lg" priority />
+          <div className="mb-8 flex w-full flex-col items-center sm:max-w-md lg:hidden">
+            <LoginLogo className="h-10 w-auto sm:h-12" />
             <h1 className="mt-4 font-display text-2xl font-bold leading-tight tracking-tight text-foreground 2xl:text-3xl">Run your clinic on WhatsApp.</h1>
           </div>
           <div className="w-full sm:max-w-md">

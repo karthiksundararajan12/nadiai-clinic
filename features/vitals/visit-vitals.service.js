@@ -20,6 +20,7 @@ const WIDE_BOUNDS = {
   weight: { min: 0, max: 500, integer: false },
   height: { min: 0, max: 300, integer: false },
   sugar: { min: 0, max: 2000, integer: false },
+  rr: { min: 0, max: 100, integer: true },
 };
 
 function parseOptional(raw, bounds, label) {
@@ -66,6 +67,7 @@ export function parseVisitVitalsInput(input = {}) {
     weight: parseOptional(input.weight, WIDE_BOUNDS.weight, "Weight"),
     height: parseOptional(input.height, WIDE_BOUNDS.height, "Height"),
     sugar: parseOptional(input.sugar, WIDE_BOUNDS.sugar, "Sugar"),
+    rr: parseOptional(input.rr, WIDE_BOUNDS.rr, "Respiratory rate"),
     sugar_unit: sugarUnit,
     sugar_type: sugarType,
     heard_text: input.heard_text ? String(input.heard_text).slice(0, 2000) : null,
@@ -88,6 +90,7 @@ export function formatVisitVitalsRow(row) {
     weight: row.weight_kg == null ? null : Number(row.weight_kg),
     height: row.height_cm == null ? null : Number(row.height_cm),
     sugar: row.sugar == null ? null : Number(row.sugar),
+    rr: row.rr == null ? null : Number(row.rr),
     sugar_unit: row.sugar_unit,
     sugar_type: row.sugar_type,
     heard_text: row.heard_text,
@@ -110,6 +113,7 @@ function toDbPatch(fields, ids) {
     weight_kg: fields.weight,
     height_cm: fields.height,
     sugar: fields.sugar,
+    rr: fields.rr,
     sugar_unit: fields.sugar == null ? null : (fields.sugar_unit ?? "mg/dL"),
     sugar_type: fields.sugar == null ? null : (fields.sugar_type || null),
     heard_text: fields.heard_text,

@@ -447,6 +447,7 @@ async function loadVisitVitals(session) {
       weight: row.weight_kg == null ? null : Number(row.weight_kg),
       height: row.height_cm == null ? null : Number(row.height_cm),
       sugar: row.sugar == null ? null : Number(row.sugar),
+      rr: row.rr == null ? null : Number(row.rr),
       sugar_unit: row.sugar_unit,
       sugar_type: row.sugar_type,
     };

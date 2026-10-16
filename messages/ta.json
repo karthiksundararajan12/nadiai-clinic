@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "continueWithGoogle": "Google மூலம் தொடரவும்",
+    "signingIn": "உள்நுழைகிறது…",
+    "signInFailed": "உள்நுழைவு தோல்வி. மீண்டும் முயற்சிக்கவும்."
+  },
   "scribe": {
     "vitals": {
       "chipEmpty": "+ உயிர் அறிகுறிகளைச் சேர்க்கவும்",
@@ -24,6 +29,7 @@
       "spo2": "SpO2",
       "weight": "எடை",
       "height": "உயரம்",
+      "rr": "சுவாச வீதம்",
       "optional": "கட்டாயமில்லை",
       "sugar": "சர்க்கரை (RBS/FBS)",
       "sugarValue": "சர்க்கரை",

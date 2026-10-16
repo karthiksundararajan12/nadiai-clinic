@@ -948,11 +948,7 @@ export function ScribeWorkflow() {
                   appointmentId={appointmentId}
                   sessionId={activeSessionId}
                   recordingLive={recordState === "recording" || recordState === "paused" || recordState === "requesting"}
-                  transcriptText={
-                    recordState === "idle" && !pipelineBusy
-                      ? displayTranscriptSegments.map((segment) => segment?.text).filter(Boolean).join("\n")
-                      : ""
-                  }
+                  transcriptText={displayTranscriptSegments.map((segment) => segment?.text).filter(Boolean).join("\n")}
                 />
               }
               sessionContext={recordPanelSessionContext}

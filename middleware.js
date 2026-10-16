@@ -22,6 +22,8 @@ const PUBLIC_SESSIONLESS_PATHS = [
   "/recover",
 ];
 
+const LOGIN_ALIASES = new Set(["/signup", "/forgot-password", "/reset-password"]);
+
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
@@ -62,6 +64,13 @@ export async function middleware(request) {
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  if (LOGIN_ALIASES.has(pathname)) {
+    const redirectUrl = request.nextUrl.clone();
+    redirectUrl.pathname = user ? "/dashboard" : "/login";
+    redirectUrl.search = "";
+    return NextResponse.redirect(redirectUrl);
+  }
 
   if (
     !user &&

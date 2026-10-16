@@ -31,7 +31,20 @@ const EMPTY_FIELDS = {
   sugar: "",
   sugar_unit: "mg/dL",
   sugar_type: "",
+  rr: "",
 };
+
+const STICKY_KEYS = [
+  "bp_systolic",
+  "bp_diastolic",
+  "pulse",
+  "temp",
+  "spo2",
+  "weight",
+  "height",
+  "sugar",
+  "rr",
+];
 
 const FIELD_DEFAULTS = {
   temp_unit: "F",
@@ -74,6 +87,7 @@ export function formatVitalsSummary(fields, t, formatNumber) {
   if (fieldText(fields.spo2).trim()) parts.push(`${t("spo2")} ${formatNumber(fields.spo2)}%`);
   if (fieldText(fields.weight).trim()) parts.push(`${t("weight")} ${formatNumber(fields.weight)} kg`);
   if (fieldText(fields.height).trim()) parts.push(`${t("height")} ${formatNumber(fields.height)} cm`);
+  if (fieldText(fields.rr).trim()) parts.push(`${t("rr")} ${formatNumber(fields.rr)}/min`);
   if (fieldText(fields.sugar).trim()) {
     const unit = fields.sugar_unit === "mmol/L" ? "mmol/L" : "mg/dL";
     const kind = fields.sugar_type ? sugarKind(fields.sugar_type) : t("sugarShort");
@@ -86,6 +100,17 @@ function formatDisplayNumber(value, locale) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fieldText(value);
   return new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(numeric);
+}
+
+function mergeFilled(target, applied) {
+  const next = { ...target };
+  for (const key of applied.filled) next[key] = applied.next[key];
+  if (applied.filled.includes("temp")) next.temp_unit = applied.next.temp_unit ?? next.temp_unit;
+  if (applied.filled.includes("sugar")) {
+    if (applied.next.sugar_unit) next.sugar_unit = applied.next.sugar_unit;
+    if (applied.next.sugar_type) next.sugar_type = applied.next.sugar_type;
+  }
+  return next;
 }
 
 function fieldsEqual(left, right) {
@@ -124,6 +149,7 @@ export function SayVitalsBar({
   const [pending, setPending] = useState(null);
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
+  const [vitalsLoadId, setVitalsLoadId] = useState(0);
 
   const savedRef = useRef(saved);
   const draftRef = useRef(draft);
@@ -140,6 +166,7 @@ export function SayVitalsBar({
   const heardSpeechRef = useRef(false);
   const loopRef = useRef(false);
   const appliedTranscriptRef = useRef("");
+  const loadReadyRef = useRef(false);
   const acceptClipRef = useRef(false);
   const mountedRef = useRef(true);
   const persistRef = useRef(async () => {});
@@ -184,7 +211,12 @@ export function SayVitalsBar({
   }, [open]);
 
   useEffect(() => {
-    if (!patientId) return undefined;
+    if (!patientId) {
+      loadReadyRef.current = false;
+      return undefined;
+    }
+    loadReadyRef.current = false;
+    appliedTranscriptRef.current = "";
     const controller = new AbortController();
     const params = new URLSearchParams();
     params.set("patientId", patientId);
@@ -200,37 +232,56 @@ export function SayVitalsBar({
           savedRef.current = next;
           return next;
         });
+        setTypedFields((current) => {
+          const next = new Set(current);
+          for (const key of STICKY_KEYS) {
+            if (vitals[key] != null && String(vitals[key]).trim() !== "") next.add(key);
+          }
+          typedRef.current = next;
+          return next;
+        });
         if (vitals.heard_text) {
           setSavedHeard((current) => current || vitals.heard_text);
           savedHeardRef.current = savedHeardRef.current || vitals.heard_text;
         }
       })
-      .catch(() => {});
+      .catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("visit vitals load failed", err);
+      })
+      .finally(() => {
+        if (controller.signal.aborted) return;
+        loadReadyRef.current = true;
+        setVitalsLoadId((current) => current + 1);
+      });
     return () => controller.abort();
   }, [patientId, appointmentId, sessionId]);
 
   useEffect(() => {
+    if (!loadReadyRef.current) return;
     const text = String(transcriptText ?? "").trim();
     if (!text || text === appliedTranscriptRef.current) return;
     appliedTranscriptRef.current = text;
-    const current = openRef.current ? draftRef.current : savedRef.current;
+    const dialogOpen = openRef.current;
     const applied = applyVitalsAutofill({
-      current,
+      current: dialogOpen ? draftRef.current : savedRef.current,
       extracted: extractVitalsFromUtterance(text),
       typedFields: typedRef.current,
       mode: "transcript",
     });
     if (!applied.filled.length) return;
-    if (openRef.current) {
+    const savedNext = dialogOpen ? mergeFilled(savedRef.current, applied) : applied.next;
+    savedRef.current = savedNext;
+    setSaved(savedNext);
+    if (dialogOpen) {
       draftRef.current = applied.next;
       setDraft(applied.next);
-      flash(applied.filled);
-      return;
     }
-    savedRef.current = applied.next;
-    setSaved(applied.next);
-    void persistRef.current(applied.next, heardRef.current || savedHeardRef.current);
-  }, [transcriptText]);
+    flash(applied.filled);
+    void persistRef.current(savedNext, heardRef.current || savedHeardRef.current).catch((err) => {
+      console.error("visit vitals persist failed", err);
+    });
+  }, [transcriptText, vitalsLoadId]);
 
   useEffect(() => {
     if (recordingLive && listening) stopListening();
@@ -342,7 +393,15 @@ export function SayVitalsBar({
     });
     draftRef.current = applied.next;
     setDraft(applied.next);
-    if (applied.filled.length) flash(applied.filled);
+    if (applied.filled.length) {
+      const savedNext = mergeFilled(savedRef.current, applied);
+      savedRef.current = savedNext;
+      setSaved(savedNext);
+      flash(applied.filled);
+      void persistRef.current(savedNext, heardRef.current).catch((err) => {
+        console.error("visit vitals persist failed", err);
+      });
+    }
     setPending(applied.skipped.length && !confirmTyped ? extracted : null);
   }
 
@@ -461,7 +520,7 @@ export function SayVitalsBar({
     }
   }
 
-  const summary = formatVitalsSummary(saved, t, formatNumber);
+  const summary = formatVitalsSummary(open ? draft : saved, t, formatNumber);
   const flags = vitalRangeFlags(draft);
   const inputClass = (key) => cn(
     "w-full min-w-0 rounded-md border bg-white px-2 py-1.5 text-sm tabular-nums text-gray-900",
@@ -617,6 +676,15 @@ export function SayVitalsBar({
                     className={inputClass("pulse")}
                     value={fieldText(draft.pulse)}
                     onChange={(event) => updateField("pulse", event.target.value.replace(/[^\d]/g, ""))}
+                  />
+                </Field>
+                <Field label={t("rr")} flag={flags.rr} flagLabel={t("checkValue")}>
+                  <input
+                    aria-label={t("rr")}
+                    inputMode="numeric"
+                    className={inputClass("rr")}
+                    value={fieldText(draft.rr)}
+                    onChange={(event) => updateField("rr", event.target.value.replace(/[^\d]/g, ""))}
                   />
                 </Field>
                 <Field label={t("temp")} flag={flags.temp} flagLabel={t("checkValue")}>

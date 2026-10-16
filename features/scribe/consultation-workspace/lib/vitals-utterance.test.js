@@ -28,6 +28,7 @@ test("English utterance extracts every spoken vital and ignores nothing extra", 
     sugar: null,
     sugar_unit: null,
     sugar_type: null,
+    rr: null,
   });
 });
 
@@ -69,6 +70,7 @@ test("spoken BP phrases without digits", () => {
       sugar: null,
       sugar_unit: null,
       sugar_type: null,
+      rr: null,
     },
   );
   assert.equal(extractVitalsFromUtterance("98.6 F").temp, 98.6);
@@ -104,6 +106,7 @@ test("noisy or unclear audio and sugar do not fabricate vitals", async () => {
     sugar: null,
     sugar_unit: null,
     sugar_type: null,
+    rr: null,
   });
   const sugar = extractVitalsFromUtterance("sugar was one forty yesterday");
   assert.equal(sugar.sugar, 140);
@@ -187,17 +190,48 @@ test("voice autofill does not overwrite a value the doctor typed unless confirme
   assert.equal(replaced.next.bp_diastolic, 80);
 });
 
-test("consultation transcript fills only fields that are still empty", () => {
-  const extracted = extractVitalsFromUtterance("BP 120 by 80, pulse 78, weight seventy kg");
-  const applied = applyVitalsAutofill({
-    current: { bp_systolic: "118", bp_diastolic: "76", pulse: "", weight: "", temp: "", spo2: "", height: "" },
+test("consultation transcript keeps a typed value and corrects an autofilled one", () => {
+  const extracted = extractVitalsFromUtterance("BP 120 over 80, pulse 78, weight seventy kg");
+  const held = applyVitalsAutofill({
+    current: { bp_systolic: "118", bp_diastolic: "76", pulse: "", weight: "", temp: "", spo2: "", height: "", rr: "" },
     extracted,
+    typedFields: ["bp_systolic", "bp_diastolic"],
     mode: "transcript",
   });
-  assert.equal(applied.next.bp_systolic, "118");
-  assert.equal(applied.next.bp_diastolic, "76");
-  assert.equal(applied.next.pulse, 78);
-  assert.equal(applied.next.weight, 70);
+  assert.equal(held.next.bp_systolic, "118");
+  assert.equal(held.next.bp_diastolic, "76");
+  assert.equal(held.next.pulse, 78);
+  assert.equal(held.next.weight, 70);
+
+  const corrected = applyVitalsAutofill({
+    current: { bp_systolic: "12", bp_diastolic: "", pulse: "", temp: "", spo2: "", weight: "", height: "", rr: "" },
+    extracted: extractVitalsFromUtterance("BP 120 over 80, pulse 78, temp 98.6, SpO2 98"),
+    mode: "transcript",
+  });
+  assert.equal(corrected.next.bp_systolic, 120);
+  assert.equal(corrected.next.bp_diastolic, 80);
+  assert.equal(corrected.next.pulse, 78);
+  assert.equal(corrected.next.temp, 98.6);
+  assert.equal(corrected.next.spo2, 98);
+});
+
+test("spoken consultation sentence and Indic number words", () => {
+  const sample = extractVitalsFromUtterance("BP 120 over 80, pulse 78, temp 98.6, SpO2 98");
+  assert.equal(sample.bp_systolic, 120);
+  assert.equal(sample.bp_diastolic, 80);
+  assert.equal(sample.pulse, 78);
+  assert.equal(sample.temp, 98.6);
+  assert.equal(sample.spo2, 98);
+  assert.equal(sample.rr, null);
+
+  const spoken = extractVitalsFromUtterance("one twenty by eighty");
+  assert.equal(spoken.bp_systolic, 120);
+  assert.equal(spoken.bp_diastolic, 80);
+  assert.equal(extractVitalsFromUtterance("sugar 140").sugar, 140);
+  assert.equal(extractVitalsFromUtterance("RR 18").rr, 18);
+  assert.equal(extractVitalsFromUtterance("நாடி எழுபத்தி எட்டு").pulse, 78);
+  assert.equal(extractVitalsFromUtterance("నాడి డెబ్భై ఎనిమిది").pulse, 78);
+  assert.equal(extractVitalsFromUtterance("नाड़ी अठहत्तर").pulse, 78);
 });
 
 test("English sugar phrases set the value and type", () => {

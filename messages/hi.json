@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "continueWithGoogle": "Google से जारी रखें",
+    "signingIn": "साइन इन हो रहा है…",
+    "signInFailed": "साइन इन नहीं हो सका। फिर कोशिश करें।"
+  },
   "scribe": {
     "vitals": {
       "chipEmpty": "+ वाइटल्स जोड़ें",
@@ -24,6 +29,7 @@
       "spo2": "SpO2",
       "weight": "वज़न",
       "height": "ऊँचाई",
+      "rr": "श्वसन दर",
       "optional": "वैकल्पिक",
       "sugar": "शुगर (RBS/FBS)",
       "sugarValue": "शुगर",

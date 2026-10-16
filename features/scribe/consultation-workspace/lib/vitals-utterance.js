@@ -20,6 +20,7 @@ export const EMPTY_VITALS = Object.freeze({
   sugar: null,
   sugar_unit: null,
   sugar_type: null,
+  rr: null,
 });
 
 const VITAL_KEYS = Object.keys(EMPTY_VITALS).filter(
@@ -33,6 +34,7 @@ export const VITAL_CHECK_RANGES = Object.freeze({
   pulse: { min: 30, max: 220 },
   spo2: { min: 50, max: 100 },
   weight: { min: 1, max: 300 },
+  rr: { min: 8, max: 40 },
 });
 
 const ONES = {
@@ -46,6 +48,26 @@ const ONES = {
   seven: 7, saat: 7,
   eight: 8, aath: 8,
   nine: 9, nau: 9,
+  "ஒன்று": 1, "ஒன்னு": 1, ondru: 1, onru: 1,
+  "இரண்டு": 2, irandu: 2,
+  "மூன்று": 3, moondru: 3,
+  "நான்கு": 4, naangu: 4,
+  "ஐந்து": 5, ainthu: 5,
+  "ஆறு": 6, aaru: 6,
+  "ஏழு": 7, ezhu: 7,
+  "எட்டு": 8, ettu: 8,
+  "ஒன்பது": 9, onbathu: 9,
+  "ఒకటి": 1, okati: 1,
+  "రెండు": 2, rendu: 2,
+  "మూడు": 3, moodu: 3,
+  "నాలుగు": 4, nalugu: 4,
+  "ఐదు": 5, aidu: 5,
+  "ఆరు": 6,
+  "ఏడు": 7, edu: 7,
+  "ఎనిమిది": 8, enimidi: 8,
+  "తొమ్మిది": 9, tommidi: 9,
+  "एक": 1, "दो": 2, "तीन": 3, "चार": 4, "पांच": 5, "पाँच": 5,
+  "छह": 6, "सात": 7, "आठ": 8, "नौ": 9,
 };
 
 const TEENS = {
@@ -59,6 +81,9 @@ const TEENS = {
   seventeen: 17, satrah: 17,
   eighteen: 18, atharah: 18, aatharah: 18,
   nineteen: 19, unnis: 19,
+  "பத்து": 10, pathu: 10,
+  "పది": 10, padi: 10,
+  "दस": 10,
 };
 
 const TENS = {
@@ -70,15 +95,35 @@ const TENS = {
   seventy: 70, sattar: 70,
   eighty: 80, assi: 80,
   ninety: 90, nabbe: 90,
+  "இருபது": 20, "இருபத்தி": 20,
+  "முப்பது": 30, "முப்பத்தி": 30,
+  "நாற்பது": 40, "நாற்பத்தி": 40,
+  "ஐம்பது": 50, "ஐம்பத்தி": 50,
+  "அறுபது": 60, "அறுபத்தி": 60,
+  "எழுபது": 70, "எழுபத்தி": 70,
+  "எண்பது": 80, "எண்பத்தி": 80,
+  "தொண்ணூறு": 90, "தொண்ணூற்றி": 90,
+  "ఇరవై": 20, iravai: 20,
+  "ముప్పై": 30, muppai: 30,
+  "నలభై": 40, nalabhai: 40,
+  "యాభై": 50, yaabhai: 50,
+  "అరవై": 60, aravai: 60,
+  "డెబ్భై": 70, debhai: 70,
+  "ఎనభై": 80, enabhai: 80,
+  "తొంభై": 90, tombai: 90,
+  "बीस": 20, "तीस": 30, "चालीस": 40, "पचास": 50,
+  "साठ": 60, "सत्तर": 70, "अस्सी": 80, "नब्बे": 90,
 };
 
 const COMPOUNDS = {
   atthattar: 78, athhattar: 78, athatar: 78,
   athaasi: 88, athasi: 88,
   anthanve: 98, athanve: 98, anthanave: 98,
+  "अठहत्तर": 78, "अट्ठासी": 88, "अट्ठानवे": 98,
 };
 
 const FILLER = new Set(["is", "was", "of", "the", "a", "an", "hai", "tha", "around", "about", "at", "reading", "and"]);
+const HUNDRED = new Set(["hundred", "sau", "सौ", "நூறு", "nooru", "వంద", "vanda", "vandha"]);
 const BP_SEPARATOR = new Set(["over", "by", "upon", "/"]);
 
 function tokenize(text) {
@@ -89,7 +134,7 @@ function tokenize(text) {
     .replace(/sp\s*o\s*2/g, " spo2 ")
     .replace(/%/g, " percent ")
     .replace(/\//g, " / ")
-    .replace(/[^a-z0-9.\s/]/g, " ")
+    .replace(/[^\p{L}\p{M}\p{N}.\s/]/gu, " ")
     .split(/\s+/)
     .filter((token) => token && token !== ".");
 }
@@ -110,7 +155,7 @@ function readAtom(token) {
   if (Object.prototype.hasOwnProperty.call(TENS, token)) {
     return { kind: "tens", value: TENS[token] };
   }
-  if (token === "hundred" || token === "sau") {
+  if (HUNDRED.has(token)) {
     return { kind: "hundred", value: 100 };
   }
   return null;
@@ -195,7 +240,10 @@ export function consumeSpokenNumber(tokens, start) {
   return { value, index };
 }
 
-const SUGAR_WORDS = new Set(["sugar", "shugar", "glucose", "cheeni"]);
+const SUGAR_WORDS = new Set([
+  "sugar", "shugar", "glucose", "cheeni",
+  "சர்க்கரை", "చక్కెర", "शक्कर", "चीनी",
+]);
 
 function sugarTypeFrom(token) {
   if (token === "random" || token === "rbs") return "random";
@@ -264,25 +312,46 @@ function labelAt(tokens, index) {
   const sugar = sugarLabel(tokens, index);
   if (sugar) return sugar;
   if (token === "blood" && next === "pressure") return { field: "bp", index: index + 2 };
+  if (token === "இரத்த" && next === "அழுத்தம்") return { field: "bp", index: index + 2 };
   if (token === "heart" && next === "rate") return { field: "pulse", index: index + 2 };
+  if (token === "respiratory" && next === "rate") return { field: "rr", index: index + 2 };
+  if (token === "breathing" && next === "rate") return { field: "rr", index: index + 2 };
   if ((token === "o2" || token === "oxygen") && (next === "sat" || next === "saturation")) {
     return { field: "spo2", index: index + 2 };
   }
-  if (token === "bp") return { field: "bp", index: index + 1 };
-  if (token === "pulse" || token === "hr" || token === "nabz" || token === "nadi") {
+  if (token === "bp" || token === "రక్తపోటు" || token === "रक्तचाप") return { field: "bp", index: index + 1 };
+  if (
+    token === "pulse" || token === "hr" || token === "nabz" || token === "nadi" || token === "naadi"
+    || token === "நாடி" || token === "నాడి" || token === "नाड़ी" || token === "नब्ज"
+  ) {
     return { field: "pulse", index: index + 1 };
   }
-  if (token === "temp" || token === "temperature" || token === "bukhar" || token === "taap" || token === "taapman") {
+  if (
+    token === "temp" || token === "temperature" || token === "bukhar" || token === "taap" || token === "taapman"
+    || token === "வெப்பநிலை" || token === "ఉష్ణోగ్రత" || token === "तापमान" || token === "बुखार"
+  ) {
     return { field: "temp", index: index + 1 };
   }
   if (token === "spo2" || token === "oxygen" || token === "saturation") {
     return { field: "spo2", index: index + 1 };
   }
-  if (token === "weight" || token === "wazan" || token === "vazan" || token === "vajan" || token === "wt") {
+  if (
+    token === "weight" || token === "wazan" || token === "vazan" || token === "vajan" || token === "wt"
+    || token === "எடை" || token === "బరువు" || token === "वजन"
+  ) {
     return { field: "weight", index: index + 1 };
   }
-  if (token === "height" || token === "lambai" || token === "unchai" || token === "kad") {
+  if (
+    token === "height" || token === "lambai" || token === "unchai" || token === "kad"
+    || token === "உயரம்" || token === "ఎత్తు" || token === "ऊंचाई"
+  ) {
     return { field: "height", index: index + 1 };
+  }
+  if (
+    token === "rr" || token === "resp" || token === "breaths" || token === "saans" || token === "shwas"
+    || token === "சுவாசம்" || token === "மூச்சு" || token === "శ్వాస" || token === "श्वास"
+  ) {
+    return { field: "rr", index: index + 1 };
   }
   return null;
 }
@@ -399,6 +468,7 @@ export function extractVitalsFromUtterance(text) {
     }
 
     if (label.field === "pulse") result.pulse = spoken.value;
+    if (label.field === "rr") result.rr = spoken.value;
     if (label.field === "spo2") result.spo2 = spoken.value;
     if (label.field === "weight") result.weight = spoken.value;
     if (label.field === "temp") {
@@ -453,7 +523,7 @@ export function extractVitalsFromUtterance(text) {
 
 function roundVitals(vitals) {
   const next = { ...vitals };
-  for (const key of ["bp_systolic", "bp_diastolic", "pulse", "spo2"]) {
+  for (const key of ["bp_systolic", "bp_diastolic", "pulse", "spo2", "rr"]) {
     if (next[key] != null) next[key] = Math.round(next[key]);
   }
   if (next.temp != null) next.temp = Math.round(next.temp * 10) / 10;
@@ -473,7 +543,7 @@ export function hasExtractedVital(vitals) {
 }
 
 function mentionsUnparsedVital(text) {
-  return /\b(bp|b\.?p\.?|blood pressure|pulse|heart rate|hr|nabz|temp|temperature|bukhar|spo2|oxygen|saturation|weight|wazan|height|lambai|sugar|shugar|rbs|fbs|ppbs)\b/i
+  return /\b(bp|b\.?p\.?|blood pressure|pulse|heart rate|hr|nabz|temp|temperature|bukhar|spo2|oxygen|saturation|weight|wazan|height|lambai|sugar|shugar|rbs|fbs|ppbs|rr|respiratory|breaths)\b/i
     .test(String(text))
     && !hasExtractedVital(extractVitalsFromUtterance(text));
 }
@@ -574,12 +644,14 @@ export function applyVitalsAutofill({
 }) {
   const typed = new Set(typedFields);
   const next = { ...current };
+  if (mode !== "voice" && mode !== "transcript") return { next, filled: [], skipped: [] };
   const filled = [];
   const skipped = [];
   for (const key of [...VITAL_KEYS, "temp_unit", "sugar_unit", "sugar_type"]) {
     if (key === "temp_unit") {
       if (extracted.temp == null || !filled.includes("temp")) continue;
-      next.temp_unit = extracted.temp_unit ?? null;
+      if (typed.has("temp_unit") && !confirmTyped) continue;
+      next.temp_unit = extracted.temp_unit ?? next.temp_unit ?? null;
       continue;
     }
     if (key === "sugar_unit" || key === "sugar_type") {
@@ -590,14 +662,11 @@ export function applyVitalsAutofill({
     if (extracted[key] == null) continue;
     const existing = current[key];
     const hasExisting = existing != null && String(existing).trim() !== "";
-    if (mode === "transcript" && hasExisting) {
+    if (hasExisting && typed.has(key) && !confirmTyped) {
       skipped.push(key);
       continue;
     }
-    if (mode === "voice" && hasExisting && typed.has(key) && !confirmTyped) {
-      skipped.push(key);
-      continue;
-    }
+    if (hasExisting && String(existing) === String(extracted[key])) continue;
     next[key] = extracted[key];
     filled.push(key);
   }
@@ -630,6 +699,7 @@ export function formatVisitVitalsPrompt(vitals) {
   if (vitals.spo2 != null) lines.push(`SpO2: ${vitals.spo2}%`);
   if (vitals.weight != null) lines.push(`Weight: ${vitals.weight} kg`);
   if (vitals.height != null) lines.push(`Height: ${vitals.height} cm`);
+  if (vitals.rr != null) lines.push(`RR: ${vitals.rr}/min`);
   if (vitals.sugar != null) lines.push(formatSugarReading(vitals));
   if (!lines.length) return "";
   return [
@@ -658,6 +728,7 @@ export function mergeVisitVitalsIntoObjective(objectiveText, visit) {
   if (visit.spo2 != null) vitals.spo2 = String(visit.spo2);
   if (visit.weight != null) vitals.weight = String(visit.weight);
   if (visit.height != null) vitals.height = String(visit.height);
+  if (visit.rr != null) vitals.rr = String(visit.rr);
   if (visit.sugar != null) {
     vitals.sugar = String(visit.sugar);
     vitals.sugarUnit = visit.sugar_unit === "mmol/L" ? "mmol/L" : "mg/dL";

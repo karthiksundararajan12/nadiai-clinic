@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "continueWithGoogle": "Continue with Google",
+    "signingIn": "Signing in…",
+    "signInFailed": "Sign-in failed. Please try again."
+  },
   "scribe": {
     "vitals": {
       "chipEmpty": "+ Add vitals",
@@ -24,6 +29,7 @@
       "spo2": "SpO2",
       "weight": "Weight",
       "height": "Height",
+      "rr": "RR",
       "optional": "optional",
       "sugar": "Sugar (RBS/FBS)",
       "sugarValue": "Sugar",

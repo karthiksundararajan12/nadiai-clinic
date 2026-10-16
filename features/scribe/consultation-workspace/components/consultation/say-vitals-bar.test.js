@@ -113,15 +113,23 @@ function renderBar(props) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
-  act(() => {
-    root.render(createElement(
-      NextIntlClientProvider,
-      { locale: "en", messages },
-      createElement(SayVitalsBar, props),
-    ));
-  });
+  let current = props;
+  function draw() {
+    act(() => {
+      root.render(createElement(
+        NextIntlClientProvider,
+        { locale: "en", messages },
+        createElement(SayVitalsBar, current),
+      ));
+    });
+  }
+  draw();
   return {
     host,
+    rerender(next) {
+      current = { ...current, ...next };
+      draw();
+    },
     async unmount() {
       await act(async () => {
         root.unmount();
@@ -380,5 +388,77 @@ test("reload shows the saved vitals summary before the modal opens", async () =>
   } finally {
     globalThis.fetch = originalFetch;
     await view.unmount();
+  }
+});
+
+test("spoken consultation vitals fill the chip, keep a manual edit, and survive reload", async () => {
+  const originalFetch = globalThis.fetch;
+  const saved = [];
+  const sample = "BP 120 over 80, pulse 78, temp 98.6, SpO2 98";
+  installFetch({ onSave: (body) => saved.push(body) });
+  const view = renderBar({ patientId: "patient-1", appointmentId: "appt-1", transcriptText: "" });
+  try {
+    await flush();
+    view.rerender({ transcriptText: sample });
+    await flush();
+
+    const chip = document.querySelector("[data-testid='vitals-summary']");
+    assert.match(chip.textContent, /BP 120\/80/);
+    assert.match(chip.textContent, /Pulse 78/);
+    assert.match(chip.textContent, /Temp 98\.6°F/);
+    assert.match(chip.textContent, /SpO2 98%/);
+    assert.equal(document.querySelector("[data-testid='vitals-modal']"), null);
+
+    await act(async () => {
+      chip.click();
+    });
+    await flush();
+    assert.equal(document.querySelector("[aria-label='BP systolic']").value, "120");
+    assert.equal(document.querySelector("[aria-label='BP diastolic']").value, "80");
+    assert.equal(document.querySelector("[aria-label='Pulse']").value, "78");
+    assert.equal(document.querySelector("[aria-label='Temperature']").value, "98.6");
+    assert.equal(document.querySelector("[aria-label='SpO2']").value, "98");
+
+    await act(async () => {
+      setInput(document.querySelector("[aria-label='Pulse']"), "90");
+    });
+    view.rerender({ transcriptText: `${sample}, pulse 78 again` });
+    await flush();
+    assert.equal(document.querySelector("[aria-label='Pulse']").value, "90");
+
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-save']").click();
+    });
+    await flush();
+    assert.match(document.querySelector("[data-testid='vitals-summary']").textContent, /Pulse 90/);
+    const last = saved.at(-1);
+    assert.equal(last.bp_systolic, 120);
+    assert.equal(String(last.pulse), "90");
+    assert.equal(last.temp, 98.6);
+    assert.equal(last.spo2, 98);
+
+    await view.unmount();
+    installFetch({
+      vitals: {
+        ...last,
+        heard_text: null,
+      },
+    });
+    const reloaded = renderBar({
+      patientId: "patient-1",
+      appointmentId: "appt-1",
+      transcriptText: sample,
+    });
+    try {
+      await flush();
+      assert.match(document.querySelector("[data-testid='vitals-summary']").textContent, /BP 120\/80/);
+      assert.match(document.querySelector("[data-testid='vitals-summary']").textContent, /Pulse 90/);
+      assert.match(document.querySelector("[data-testid='vitals-summary']").textContent, /SpO2 98%/);
+    } finally {
+      await reloaded.unmount();
+    }
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (view.host.isConnected) await view.unmount();
   }
 });

@@ -18,6 +18,7 @@ const VITAL_CLAUSE_RES = [
   /\bSpO2:?\s*\d{2,3}\s*%?/gi,
   /\b(?:Weight|Wt):?\s*\d+(?:\.\d+)?(?:\s*kg)?/gi,
   /\bHeight:\s*\d+(?:\.\d+)?\s*cm/gi,
+  /\bRR:\s*\d+(?:\s*\/\s*min)?/gi,
   /\b(?:RBS|FBS|PP|Sugar):\s*\d+(?:\.\d+)?(?:\s*(?:mg\/dL|mmol\/L))?/gi,
 ];
 
@@ -42,6 +43,7 @@ export function formatVitalsString(vitals) {
   if (vitals.spo2) parts.push(`SpO2: ${vitals.spo2}%`);
   if (vitals.weight) parts.push(`Weight: ${vitals.weight} kg`);
   if (vitals.height) parts.push(`Height: ${vitals.height} cm`);
+  if (vitals.rr) parts.push(`RR: ${vitals.rr}/min`);
   if (vitals.sugar) {
     const kind = vitals.sugarType === "fasting"
       ? "FBS"
@@ -178,7 +180,7 @@ function publicVitals(vitals) {
 function finishObjective(vitals, exam, investigations) {
   const cleanExam = isObjectiveNotDocumented(exam) ? "" : String(exam ?? "").trim();
   const cleanInv = String(investigations ?? "").trim();
-  const hasVitals = [vitals.bpSys, vitals.bpDia, vitals.hr, vitals.temp, vitals.spo2, vitals.weight, vitals.height, vitals.sugar]
+  const hasVitals = [vitals.bpSys, vitals.bpDia, vitals.hr, vitals.temp, vitals.spo2, vitals.weight, vitals.height, vitals.sugar, vitals.rr]
     .some((part) => String(part ?? "").trim());
   const isEmpty = !hasVitals && !cleanExam && !cleanInv;
   const lines = [];
@@ -215,6 +217,8 @@ function annotateMeasuredVitals(vitals, text) {
   const next = { ...vitals };
   const height = String(text).match(/\bHeight:\s*([\d.]+)\s*cm/i);
   if (height) next.height = height[1];
+  const rr = String(text).match(/\bRR:\s*(\d+)/i);
+  if (rr) next.rr = rr[1];
   if (/Temp:\s*[\d.]+\s*°\s*C\b/i.test(String(text))) next.tempUnit = "C";
   const sugar = String(text).match(/\b(RBS|FBS|PP|Sugar):\s*([\d.]+)\s*(mg\/dL|mmol\/L)/i);
   if (sugar) {

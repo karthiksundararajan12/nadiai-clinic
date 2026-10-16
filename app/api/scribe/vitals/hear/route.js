@@ -16,7 +16,7 @@ const VITALS_JSON_SCHEMA = {
   schema: {
     type: "object",
     additionalProperties: false,
-    required: ["bp_systolic", "bp_diastolic", "pulse", "temp", "temp_unit", "spo2", "weight", "height", "sugar", "sugar_unit", "sugar_type"],
+    required: ["bp_systolic", "bp_diastolic", "pulse", "temp", "temp_unit", "spo2", "weight", "height", "sugar", "sugar_unit", "sugar_type", "rr"],
     properties: {
       bp_systolic: { type: ["number", "null"] },
       bp_diastolic: { type: ["number", "null"] },
@@ -29,6 +29,7 @@ const VITALS_JSON_SCHEMA = {
       sugar: { type: ["number", "null"] },
       sugar_unit: { type: ["string", "null"], enum: ["mg/dL", "mmol/L", null] },
       sugar_type: { type: ["string", "null"], enum: ["random", "fasting", "pp", null] },
+      rr: { type: ["number", "null"] },
     },
   },
 };
@@ -43,6 +44,7 @@ async function completeWithModel(text) {
           "Extract vitals that were explicitly spoken. Return JSON only.",
           "Use null for anything not said. Never guess or convert a missing unit into a number.",
           "Sugar, RBS, FBS, and PP are the sugar field, not blood pressure. sugar_type is random, fasting, or pp only when that type was spoken. sugar_unit is mg/dL or mmol/L only when that unit was spoken.",
+          "Respiratory rate, RR, and breaths per minute are the rr field.",
           "Leave every field null when the audio is unclear.",
           "temp_unit is F or C only when the speaker said Fahrenheit/F or Celsius/C. Otherwise null.",
         ].join(" "),

@@ -1,4 +1,9 @@
 {
+  "auth": {
+    "continueWithGoogle": "Google తో కొనసాగించండి",
+    "signingIn": "సైన్ ఇన్ అవుతోంది…",
+    "signInFailed": "సైన్ ఇన్ విఫలమైంది. మళ్లీ ప్రయత్నించండి."
+  },
   "scribe": {
     "vitals": {
       "chipEmpty": "+ జీవ సూచికలను జోడించండి",
@@ -24,6 +29,7 @@
       "spo2": "SpO2",
       "weight": "బరువు",
       "height": "ఎత్తు",
+      "rr": "శ్వాస రేటు",
       "optional": "ఐచ్చికం",
       "sugar": "చక్కెర (RBS/FBS)",
       "sugarValue": "చక్కెర",

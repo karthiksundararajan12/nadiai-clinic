@@ -22,6 +22,12 @@ import {
   removeStatementFromSection,
 } from "../lib/soap-statement-evidence.js";
 import { computeSoapQuality } from "../lib/soap-quality.js";
+import { noteActionsEnabled } from "../lib/vitals-utterance.js";
+import {
+  assessTranscriptSufficiency,
+  INSUFFICIENT_TRANSCRIPT_CODE,
+  INSUFFICIENT_TRANSCRIPT_MESSAGE,
+} from "../../lib/transcript-sufficiency.js";
 import { buildProductivityMetrics } from "../lib/productivity-metrics.js";
 import { getSoapClinicalWarnings, hasBlockingSoapWarnings } from "../lib/clinical-safety.js";
 import { deriveClinicalInsights } from "../lib/clinical-insights.js";
@@ -142,6 +148,7 @@ export function ConsultationWorkspace({
 
   const soapApproved = approvalLocked || soap.readOnly || statusApproved;
 
+  const [qualityAcknowledged, setQualityAcknowledged] = useState(false);
   const canApproveSOAP = !soapApproved && resolvedSessionStatus === "SOAP_REVIEWING";
   const canRegenerateSOAP = !soapApproved && !readOnly && hasSoap;
   const canExportSOAP = hasSoap && !soap.loading;
@@ -633,6 +640,18 @@ export function ConsultationWorkspace({
       transcriptLength: transcript.segments.length,
       source: "manual",
     });
+    if (workspaceSegments.length > 0) {
+      const sufficiency = assessTranscriptSufficiency({ segments: workspaceSegments });
+      if (!sufficiency.ok) {
+        const blocked = new Error(INSUFFICIENT_TRANSCRIPT_MESSAGE);
+        blocked.code = INSUFFICIENT_TRANSCRIPT_CODE;
+        setSoapGenerationError(blocked);
+        setToolbarActionError(blocked.message);
+        setAutoPipelineRunning(false);
+        return { ok: false, error: blocked };
+      }
+    }
+
     const soapStartedAt = Date.now();
     const result = await runSoapGenerationAttempt(async () => {
       if (resolvedSessionStatus === "REVIEWING" && workspaceSegments.length > 0) {
@@ -672,13 +691,14 @@ export function ConsultationWorkspace({
     soapTurnSelection,
     transcript.generateSOAP,
     transcript.load,
-    workspaceSegments.length,
+    workspaceSegments,
   ]);
 
   useEffect(() => {
     autoPipelineAttemptedRef.current = false;
     setAutoPipelineRunning(false);
     setSoapGenerationError(null);
+    setQualityAcknowledged(false);
     setToolbarActionError(null);
     setCompletingReview(false);
   }, [sessionId]);
@@ -693,6 +713,17 @@ export function ConsultationWorkspace({
       ["REVIEW_COMPLETED", "SOAP_READY", "SOAP_REVIEW_REQUIRED"].includes(resolvedSessionStatus);
 
     if (!shouldCompleteAndGenerate && !shouldGenerateOnly) return;
+
+    if (workspaceSegments.length > 0) {
+      const sufficiency = assessTranscriptSufficiency({ segments: workspaceSegments });
+      if (!sufficiency.ok) {
+        autoPipelineAttemptedRef.current = true;
+        const blocked = new Error(INSUFFICIENT_TRANSCRIPT_MESSAGE);
+        blocked.code = INSUFFICIENT_TRANSCRIPT_CODE;
+        setSoapGenerationError(blocked);
+        return;
+      }
+    }
 
     autoPipelineAttemptedRef.current = true;
     setAutoPipelineRunning(true);
@@ -733,7 +764,7 @@ export function ConsultationWorkspace({
     waitingForTranscript,
     resolvedSessionStatus,
     transcript.loading,
-    workspaceSegments.length,
+    workspaceSegments,
     transcript.completeReview,
     transcript.generateSOAP,
     transcript.load,
@@ -790,6 +821,9 @@ export function ConsultationWorkspace({
       prescriptionApproved:
         prescription.approved || resolvedSessionStatus === "PRESCRIPTION_APPROVED",
       patientId: patient?.id ?? null,
+      transcriptInsufficient: workspaceSegments.length > 0
+        && !assessTranscriptSufficiency({ segments: workspaceSegments }).ok
+        && !hasSoap,
       alertMessages,
     });
   }, [
@@ -809,6 +843,7 @@ export function ConsultationWorkspace({
     prescriptionErrorMessage,
     statusPoll.isFailed,
     patient?.id,
+    hasSoap,
   ]);
 
   const noteGenerating =
@@ -856,7 +891,7 @@ export function ConsultationWorkspace({
       canCompleteReview={canCompleteReview}
       canGenerateSOAP={showGenerateSOAP}
       generatingSOAP={noteGenerating}
-      canApproveSOAP={canApproveSOAP}
+      canApproveSOAP={approveReady}
       soapApproved={soapApproved}
       actionError={toolbarActionError}
       saveBlocked={!patient?.id}
@@ -938,6 +973,13 @@ export function ConsultationWorkspace({
   }, [soap.regenerating]);
 
   const quality = soapApproved ? null : frozenQuality;
+  const noteActions = noteActionsEnabled({
+    patientId: patient?.id,
+    qualityLevel: quality?.level,
+    acknowledged: qualityAcknowledged,
+    edited: Boolean(soap.hasChanges || manualEditMode),
+  });
+  const approveReady = canApproveSOAP && !blockingApproval && !manualEditMode && noteActions.canApprove;
 
   const soapDisplayCandidate = resolveSoapDisplayDate({
     note: soap.note,
@@ -1025,7 +1067,7 @@ export function ConsultationWorkspace({
         onVersionsOpenChange={setVersionsOpen}
         auditOpen={auditOpen}
         onAuditOpenChange={setAuditOpen}
-        canApprove={canApproveSOAP && !blockingApproval && !manualEditMode}
+        canApprove={approveReady}
         saveBlocked={!patient?.id}
         approving={approving}
         onApprove={handleApproveSOAP}
@@ -1090,13 +1132,17 @@ export function ConsultationWorkspace({
             onRetry: soap.load,
             onSectionFocus: setActiveSoapSection,
             onRegenerate: handleRegenerateSOAP,
+            onAcknowledgeQuality: quality?.level === "low" && !qualityAcknowledged
+              ? () => setQualityAcknowledged(true)
+              : undefined,
           },
           empty: {
             generating: soapEmptyPresentation.variant === "generating",
             error:
               soapEmptyPresentation.variant === "error"
-                ? { message: soapEmptyPresentation.message }
+                ? { message: soapEmptyPresentation.message, code: soapGenerationError?.code }
                 : null,
+            onReRecord: onEndSession,
             hasTranscript,
             onRetry: soapEmptyPresentation.showRetry ? handleGenerateSOAP : undefined,
           },

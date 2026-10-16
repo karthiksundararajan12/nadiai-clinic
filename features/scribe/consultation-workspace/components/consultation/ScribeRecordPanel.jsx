@@ -40,6 +40,7 @@ export function ScribeRecordPanel({
   onManualSubmit,
   manualSubmitting = false,
   canStartRecording = true,
+  vitalsReady = true,
   patientAttached = canStartRecording,
   patientRequiredHint,
   notices = [],
@@ -101,6 +102,7 @@ export function ScribeRecordPanel({
   const exitManualMode = () => onManualModeChange?.(false);
 
   const handleStartClick = () => {
+    if (!vitalsReady) return;
     if (!canStartRecording) {
       requirePatient();
       return;
@@ -172,7 +174,7 @@ export function ScribeRecordPanel({
             className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950"
             data-testid="unassigned-patient-banner"
           >
-            No patient selected. Name and age will be picked up from the conversation, or use Add patient.
+            No patient selected. Name and age will be picked up from the conversation, or use New patient.
           </p>
         ) : null}
         <ScribeConversationChat
@@ -252,7 +254,7 @@ export function ScribeRecordPanel({
                 <button
                   type="button"
                   aria-label="Start recording"
-                  disabled={disabled || isProcessing || isRequesting}
+                  disabled={disabled || isProcessing || isRequesting || !vitalsReady}
                   onClick={handleStartClick}
                   className={cn(
                     "scribe-mic-button cursor-pointer",
@@ -323,6 +325,11 @@ export function ScribeRecordPanel({
                 <p className="scribe-text-muted text-sm font-medium">{statusMessage}</p>
               )}
             </div>
+            {!vitalsReady && isIdle && !disabled ? (
+              <p className="text-sm font-medium text-amber-800" data-testid="add-vitals-to-record">
+                Add vitals to start recording
+              </p>
+            ) : null}
 
             {isLive && pauseSupported && (
               <button

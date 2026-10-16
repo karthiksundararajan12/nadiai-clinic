@@ -851,6 +851,54 @@ export function describeVitalsUtterance(text) {
  *
  * @param {Partial<typeof EMPTY_VITALS>} vitals
  */
+const REQUIRED_RECORDING_VITALS = ["bp_systolic", "bp_diastolic", "pulse", "spo2", "temp", "weight"];
+
+/**
+ * Recording can start only after these encounter vitals are filled and BP is possible.
+ * Amber range warnings do not block. Height, sugar, and respiratory rate stay optional.
+ *
+ * @param {Record<string, unknown>} [fields]
+ */
+export function requiredVitalsComplete(fields = {}) {
+  for (const key of REQUIRED_RECORDING_VITALS) {
+    const raw = fields?.[key];
+    if (raw == null || String(raw).trim() === "") return false;
+    if (!Number.isFinite(Number(raw))) return false;
+  }
+  return !bpRelationshipError(fields);
+}
+
+/**
+ * A scribe session is created on the first Record click, and only after vitals are saved.
+ * A patient is not required. An already-selected patient is attached at upload time.
+ *
+ * @param {{ vitalsReady?: boolean, patientId?: string|null }} input
+ */
+export function draftSessionOnRecordStart({ vitalsReady = false, patientId = null } = {}) {
+  if (!vitalsReady) return false;
+  return !patientId;
+}
+
+/**
+ * Save and Approve stay off until a patient is attached.
+ * Low-confidence notes stay unapprovable until the doctor edits or acknowledges them.
+ *
+ * @param {{ patientId?: string|null, qualityLevel?: string|null, acknowledged?: boolean, edited?: boolean }} input
+ */
+export function noteActionsEnabled({
+  patientId = null,
+  qualityLevel = null,
+  acknowledged = false,
+  edited = false,
+} = {}) {
+  const attached = Boolean(patientId);
+  const lowBlocked = qualityLevel === "low" && !acknowledged && !edited;
+  return {
+    canSave: attached,
+    canApprove: attached && !lowBlocked,
+  };
+}
+
 export function bpRelationshipError(vitals = {}) {
   const systolic = Number(vitals.bp_systolic);
   const diastolic = Number(vitals.bp_diastolic);

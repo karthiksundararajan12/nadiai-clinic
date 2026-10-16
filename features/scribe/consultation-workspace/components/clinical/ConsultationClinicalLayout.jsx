@@ -190,11 +190,6 @@ export function ConsultationClinicalLayout({
             <div className="h-6 w-px shrink-0 bg-gray-200" aria-hidden />
           )}
 
-          {saveBlocked && (canApprove || canGeneratePrescription) ? (
-            <p className="max-w-[14rem] text-right text-xs font-semibold text-amber-800" data-testid="attach-patient-to-save">
-              Attach a patient to save this note
-            </p>
-          ) : null}
           {canApprove && (
             <button
               type="button"

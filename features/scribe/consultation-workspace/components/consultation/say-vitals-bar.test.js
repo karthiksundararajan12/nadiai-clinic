@@ -227,17 +227,17 @@ test("vitals modal opens from Add vitals and closes back to that button", async 
   }
 });
 
-test("Add vitals stays disabled until a patient is selected", async () => {
+test("Add vitals opens before a patient is attached", async () => {
   const originalFetch = globalThis.fetch;
   installFetch();
   const view = renderBar({ patientId: null });
   try {
     const trigger = document.querySelector("[data-testid='vitals-summary']");
-    assert.equal(trigger.disabled, true);
+    assert.equal(trigger.disabled, false);
     await act(async () => {
       trigger.click();
     });
-    assert.equal(document.querySelector("[data-testid='vitals-modal']"), null);
+    assert.ok(document.querySelector("[data-testid='vitals-modal']"));
   } finally {
     globalThis.fetch = originalFetch;
     await view.unmount();
@@ -303,6 +303,8 @@ test("Save vitals writes the visit and updates the summary chip", async () => {
       setInput(document.querySelector("[aria-label='BP diastolic']"), "80");
       setInput(document.querySelector("[aria-label='Pulse']"), "78");
       setInput(document.querySelector("[aria-label='SpO2']"), "98");
+      setInput(document.querySelector("[aria-label='Temperature']"), "98.6");
+      setInput(document.querySelector("[aria-label='Weight']"), "70");
     });
     await act(async () => {
       document.querySelector("[data-testid='vitals-save']").click();
@@ -316,7 +318,7 @@ test("Save vitals writes the visit and updates the summary chip", async () => {
     assert.equal(document.querySelector("[data-testid='vitals-modal']"), null);
     assert.match(
       document.querySelector("[data-testid='vitals-summary']").textContent,
-      /BP 120\/80 · Pulse 78 · SpO2 98%/,
+      /BP 120\/80 · Pulse 78 · Temp 98\.6°F · SpO2 98% · Weight 70 kg/,
     );
   } finally {
     globalThis.fetch = originalFetch;
@@ -390,7 +392,7 @@ test("reload shows the saved vitals summary before the modal opens", async () =>
 test("spoken consultation vitals fill the chip, keep a manual edit, and survive reload", async () => {
   const originalFetch = globalThis.fetch;
   const saved = [];
-  const sample = "BP 120 over 80, pulse 78, temp 98.6, SpO2 98";
+  const sample = "BP 120 over 80, pulse 78, temp 98.6, SpO2 98, weight 70 kg";
   installFetch({ onSave: (body) => saved.push(body) });
   const view = renderBar({ patientId: "patient-1", appointmentId: "appt-1", transcriptText: "" });
   try {

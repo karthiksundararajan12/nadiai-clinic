@@ -11,6 +11,7 @@ import {
   SESSION_STATUS,
 } from "../constants.js";
 import {
+  InsufficientTranscriptError,
   InvalidStateTransitionError,
   SOAPGenerationError,
   SOAPNotReadyError,
@@ -40,6 +41,7 @@ import { buildStatementEvidenceMappings } from "../consultation-workspace/lib/so
 import { prepareSoapNotePayload } from "../consultation-workspace/lib/vitals-objective.js";
 import { mergeVisitVitalsIntoObjective } from "../consultation-workspace/lib/vitals-utterance.js";
 import { VisitVitalsRepository } from "../../vitals/visit-vitals.repository.js";
+import { assessTranscriptSufficiency } from "../lib/transcript-sufficiency.js";
 
 export class SOAPGenerationService {
   /**
@@ -101,6 +103,11 @@ export class SOAPGenerationService {
     }
 
     const storedTurns = context.segments ?? [];
+    const sufficiency = assessTranscriptSufficiency({
+      segments: storedTurns,
+      text: transcriptVersion.full_text ?? transcriptVersion.text ?? "",
+    });
+    if (!sufficiency.ok) throw new InsufficientTranscriptError(sufficiency);
     const classifications = await this._classifier.classify(storedTurns);
     const soapTurns = storedTurns.length > 0
       ? selectTurnsForSoap({

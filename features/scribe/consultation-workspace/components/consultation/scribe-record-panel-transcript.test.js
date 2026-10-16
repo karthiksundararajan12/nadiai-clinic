@@ -370,6 +370,38 @@ test("unapproved open session still offers New Session instead of a dead end", a
   }
 });
 
+test("the microphone stays disabled until vitals are saved", async () => {
+  const starts = [];
+  const view = render(ScribeRecordPanel, {
+    recordState: "idle",
+    canStartRecording: true,
+    vitalsReady: false,
+    patientAttached: false,
+    onStart() {
+      starts.push(true);
+    },
+    children: createElement("p", null, "Search a patient"),
+  });
+  try {
+    const mic = view.host.querySelector("button[aria-label='Start recording']");
+    assert.equal(mic.disabled, true);
+    assert.equal(
+      view.host.querySelector("[data-testid='add-vitals-to-record']")?.textContent,
+      "Add vitals to start recording",
+    );
+    assert.match(
+      view.host.querySelector("[data-testid='unassigned-patient-banner']").textContent,
+      /or use New patient/,
+    );
+    await act(async () => {
+      mic.click();
+    });
+    assert.deepEqual(starts, []);
+  } finally {
+    await view.unmount();
+  }
+});
+
 test("recorder status strip shows mic state but never live transcript text", async () => {
   const view = render(LiveTranscriptPanel, {
     micState: "recording",

@@ -4,9 +4,12 @@ import {
   applyVitalsAutofill,
   bpRelationshipError,
   describeVitalsUtterance,
+  draftSessionOnRecordStart,
   extractVitals,
   extractVitalsFromUtterance,
   mergeVisitVitalsIntoObjective,
+  noteActionsEnabled,
+  requiredVitalsComplete,
   vitalRangeFlags,
 } from "./vitals-utterance.js";
 
@@ -503,4 +506,45 @@ test("the first in-range candidate wins for pulse, respiration, temperature, and
   assert.equal(extractVitalsFromUtterance("RR 2, 18").rr, 18);
   assert.equal(extractVitalsFromUtterance("temperature 2, 98").temp, 98);
   assert.equal(extractVitalsFromUtterance("height 2, 168 centimeter").height, 168);
+});
+
+const COMPLETE_VITALS = {
+  bp_systolic: 120,
+  bp_diastolic: 80,
+  pulse: 78,
+  spo2: 98,
+  temp: 98.6,
+  weight: 70,
+};
+
+test("recording stays blocked until BP, pulse, SpO2, temperature, and weight are valid", () => {
+  assert.equal(requiredVitalsComplete(null), false);
+  assert.equal(requiredVitalsComplete({ ...COMPLETE_VITALS, weight: "" }), false);
+  assert.equal(requiredVitalsComplete({ ...COMPLETE_VITALS, bp_systolic: 80, bp_diastolic: 120 }), false);
+  assert.equal(requiredVitalsComplete(COMPLETE_VITALS), true);
+});
+
+test("a scribe session is created only on the first record click after vitals, and only without a patient", () => {
+  assert.equal(draftSessionOnRecordStart({ vitalsReady: false, patientId: null }), false);
+  assert.equal(draftSessionOnRecordStart({ vitalsReady: true, patientId: "patient-1" }), false);
+  assert.equal(draftSessionOnRecordStart({ vitalsReady: true, patientId: null }), true);
+});
+
+test("save and approve turn on as soon as a patient is attached, unless the note is low confidence", () => {
+  assert.deepEqual(noteActionsEnabled({ patientId: null, qualityLevel: "high" }), {
+    canSave: false,
+    canApprove: false,
+  });
+  assert.deepEqual(noteActionsEnabled({ patientId: "patient-1", qualityLevel: "high" }), {
+    canSave: true,
+    canApprove: true,
+  });
+  assert.deepEqual(noteActionsEnabled({ patientId: "patient-1", qualityLevel: "low" }), {
+    canSave: true,
+    canApprove: false,
+  });
+  assert.deepEqual(
+    noteActionsEnabled({ patientId: "patient-1", qualityLevel: "low", acknowledged: true }),
+    { canSave: true, canApprove: true },
+  );
 });

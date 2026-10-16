@@ -18,6 +18,7 @@ import {
   bpRelationshipError,
   describeVitalsUtterance,
   extractVitalsFromUtterance,
+  requiredVitalsComplete,
   vitalRangeFlags,
 } from "../../lib/vitals-utterance.js";
 
@@ -142,6 +143,7 @@ export function SayVitalsBar({
   sessionId = null,
   recordingLive = false,
   transcriptText = "",
+  onEncounterVitalsChange,
 }) {
   const t = useTranslations("scribe.vitals");
   const locale = useLocale();
@@ -239,11 +241,10 @@ export function SayVitalsBar({
       .then((payload) => {
         const vitals = payload?.vitals;
         if (!vitals) return;
-        setSaved((current) => {
-          const next = applyLoadedVitals(current, vitals);
-          savedRef.current = next;
-          return next;
-        });
+        const loaded = applyLoadedVitals(savedRef.current, vitals);
+        savedRef.current = loaded;
+        setSaved(loaded);
+        onEncounterVitalsChange?.(loaded);
         setTypedFields((current) => {
           const next = new Set(current);
           for (const key of STICKY_KEYS) {
@@ -267,7 +268,7 @@ export function SayVitalsBar({
         setVitalsLoadId((current) => current + 1);
       });
     return () => controller.abort();
-  }, [patientId, appointmentId, sessionId]);
+  }, [patientId, appointmentId, sessionId, onEncounterVitalsChange]);
 
   useEffect(() => {
     if (!loadReadyRef.current) return;
@@ -443,6 +444,15 @@ export function SayVitalsBar({
   }
 
   function updateField(key, value) {
+    const required = ["bp_systolic", "bp_diastolic", "pulse", "spo2", "temp", "weight"];
+    if (
+      recordingLive
+      && required.includes(key)
+      && String(value ?? "").trim() === ""
+      && String(savedRef.current?.[key] ?? "").trim() !== ""
+    ) {
+      return;
+    }
     if (key === "bp_systolic" || key === "bp_diastolic") setBpConfirmed(false);
     setDismissedNotes((current) => {
       const next = new Set(current);
@@ -482,7 +492,6 @@ export function SayVitalsBar({
   persistRef.current = persist;
 
   function openModal() {
-    if (!patientId) return;
     const next = cloneFields(savedRef.current);
     draftRef.current = next;
     setDraft(next);
@@ -522,12 +531,17 @@ export function SayVitalsBar({
   }
 
   async function saveAndClose() {
+    if (!requiredVitalsComplete(draftRef.current) || (bpRelationshipError(draftRef.current) && !bpConfirmed)) {
+      setError("Add BP, pulse, SpO2, temperature, and weight. Systolic must be higher than diastolic.");
+      return;
+    }
     setSaving(true);
     try {
       await persist(draftRef.current, heardRef.current);
       const next = cloneFields(draftRef.current);
       savedRef.current = next;
       setSaved(next);
+      onEncounterVitalsChange?.(next);
       savedHeardRef.current = heardRef.current;
       setSavedHeard(heardRef.current);
       setPending(null);
@@ -581,15 +595,13 @@ export function SayVitalsBar({
         ref={triggerRef}
         type="button"
         data-testid="vitals-summary"
-        disabled={!patientId}
         aria-label={summary ? t("chipEdit", { summary }) : t("chipAdd")}
         onClick={openModal}
         className={cn(
-          "flex w-full max-w-full items-start gap-2 rounded-2xl border px-3 py-2 text-left text-sm font-semibold leading-6",
+          "flex w-full max-w-full cursor-pointer items-start gap-2 rounded-2xl border px-3 py-2 text-left text-sm font-semibold leading-6",
           summary
             ? "border-[color:var(--scribe-card-border)] bg-white text-gray-800 hover:bg-gray-50"
             : "border-dashed border-gray-300 bg-white text-gray-700 hover:bg-gray-50",
-          !patientId && "cursor-not-allowed opacity-50",
         )}
       >
         <Heartbeat size={16} weight="fill" aria-hidden className="mt-1 shrink-0 text-primary" />

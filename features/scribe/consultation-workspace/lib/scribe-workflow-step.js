@@ -60,6 +60,7 @@ export function resolveScribeWorkflowStepIndex({
   sessionStatus = null,
   pipelineBusy = false,
   prescriptionApproved = false,
+  holdOnRecord = false,
 } = {}) {
   if (
     recordState === "recording" ||
@@ -70,6 +71,15 @@ export function resolveScribeWorkflowStepIndex({
   }
 
   const status = sessionStatus ?? "";
+  if (
+    holdOnRecord
+    && !pipelineBusy
+    && recordState !== "processing"
+    && !prescriptionApproved
+    && !PRESCRIPTION_STATUSES.has(status)
+  ) {
+    return 0;
+  }
   if (prescriptionApproved || status === SESSION_STATUS.PRESCRIPTION_APPROVED) {
     return SCRIBE_WORKFLOW_STEPS.length;
   }

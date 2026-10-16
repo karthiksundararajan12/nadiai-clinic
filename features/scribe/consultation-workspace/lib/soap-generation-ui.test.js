@@ -5,6 +5,7 @@ import {
   canManualGenerateSOAP,
   canShowCompleteReview,
   canShowGenerateSOAPButton,
+  formatSoapGenerationError,
   resolveSoapEmptyPresentation,
   runSoapGenerationAttempt,
 } from "./soap-generation-ui.js";
@@ -19,6 +20,20 @@ test("resolveSoapEmptyPresentation shows error (not idle) when transcript exists
   assert.equal(result.variant, "error");
   assert.equal(result.message, SOAP_GENERATION_FAILURE_MESSAGE);
   assert.equal(result.showRetry, true);
+});
+
+test("a short transcript asks the doctor to record again instead of retrying SOAP", () => {
+  const error = new Error("Not enough conversation captured. Record again.");
+  error.code = "insufficient_transcript";
+  const result = resolveSoapEmptyPresentation({
+    hasTranscript: true,
+    generating: false,
+    error,
+  });
+  assert.equal(result.message, "Not enough conversation captured. Record again.");
+  assert.equal(result.showRetry, false);
+  assert.equal(result.showReRecord, true);
+  assert.equal(formatSoapGenerationError(error), "Not enough conversation captured. Record again.");
 });
 
 test("resolveSoapEmptyPresentation shows idle when there is no transcript", () => {

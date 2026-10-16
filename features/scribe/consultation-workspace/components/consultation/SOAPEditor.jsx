@@ -20,6 +20,7 @@ export function SOAPEditor({
   generating,
   regenerating,
   quality,
+  onAcknowledgeQuality,
   statementEvidence = [],
   activeStatementId,
   activeSection,
@@ -51,7 +52,7 @@ export function SOAPEditor({
   return (
     <div className="space-y-5" data-testid="soap-review-workspace">
       {quality && !readOnly && !generating && !regenerating && (
-        <SOAPQualityIndicator quality={quality} />
+        <SOAPQualityIndicator quality={quality} onAcknowledge={onAcknowledgeQuality} />
       )}
       {CORE_SOAP_SECTIONS.map(([key, label]) => (
         <SOAPSection
@@ -89,6 +90,7 @@ export function SOAPEditorEmpty({
   generating,
   error,
   onRetry,
+  onReRecord,
   hasTranscript = false,
   idleMessage = "Start a recording to generate a SOAP note.",
   pendingMessage = "SOAP note will appear here after generation.",
@@ -101,7 +103,17 @@ export function SOAPEditorEmpty({
       {error ? (
         <>
           <p className="text-sm text-red-600" data-testid="soap-generation-error">{error.message}</p>
-          {onRetry && (
+          {error.code === "insufficient_transcript" && onReRecord ? (
+            <button
+              type="button"
+              className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold"
+              data-testid="soap-rerecord"
+              onClick={onReRecord}
+            >
+              Re-record
+            </button>
+          ) : null}
+          {onRetry && error.code !== "insufficient_transcript" && (
             <button
               type="button"
               className="cursor-pointer rounded-lg border border-gray-200 px-3 py-1.5 text-sm"

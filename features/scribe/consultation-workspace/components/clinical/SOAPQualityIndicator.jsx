@@ -8,7 +8,7 @@ const STYLES = {
   low: { dot: "bg-rose-500", bg: "bg-rose-50 border-rose-200", text: "text-rose-800", desc: "text-rose-700/80" },
 };
 
-export function SOAPQualityIndicator({ quality }) {
+export function SOAPQualityIndicator({ quality, onAcknowledge }) {
   if (!quality) return null;
   const style = STYLES[quality.level] ?? STYLES.review;
 
@@ -23,6 +23,16 @@ export function SOAPQualityIndicator({ quality }) {
       <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">SOAP Quality</span>
       <span className={cn("text-sm font-semibold", style.text)}>{quality.label}</span>
       <span className={cn("text-xs", style.desc)}>{quality.description}</span>
+      {quality.level === "low" && onAcknowledge ? (
+        <button
+          type="button"
+          className="cursor-pointer rounded-md border border-rose-300 bg-white px-2 py-1 text-xs font-semibold text-rose-800"
+          data-testid="acknowledge-low-confidence"
+          onClick={onAcknowledge}
+        >
+          Acknowledge flagged sections
+        </button>
+      ) : null}
     </div>
   );
 }

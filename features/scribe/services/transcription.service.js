@@ -29,6 +29,7 @@ import {
   SessionNotFoundError,
   SessionValidationError,
   StorageError,
+  EmptyTranscriptionError,
   TranscriptionNotReadyError,
   TranscriptionProviderError,
   TranscriptionRetryExhaustedError,
@@ -574,6 +575,7 @@ export class TranscriptionService {
 
       // ── Core transcription call ──────────────────────────────────────────
       const result = await this._transcribeSessionAudio(session);
+      assertCapturedTranscript(result);
       await this._persistSuccessfulTranscription(session, job, ctx, result, startedAt);
       return { jobId: job.id, sessionId: session.id, status: JOB_STATUS.COMPLETED };
     } catch (err) {
@@ -1023,8 +1025,16 @@ function canRefineSpeakers(status) {
   return REFINE_SPEAKER_STATUSES.has(status ?? "");
 }
 
-function isRetryable(err) {
+export function assertCapturedTranscript(result) {
+  const text = String(result?.text ?? "").trim();
+  const segments = Array.isArray(result?.segments) ? result.segments : [];
+  const hasSegmentText = segments.some((segment) => String(segment?.text ?? "").trim());
+  if (!text && !hasSegmentText) throw new EmptyTranscriptionError();
+}
+
+export function isRetryable(err) {
   if (err?.code === "TRANSCRIPTION_NOT_READY") return false;
+  if (err?.code === "EMPTY_TRANSCRIPTION") return false;
   if (err?.code === "VALIDATION_ERROR") return false;
   if (err?.code === "SESSION_NOT_FOUND") return false;
 

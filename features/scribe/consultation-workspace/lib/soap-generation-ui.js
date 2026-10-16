@@ -26,10 +26,12 @@ export function resolveSoapEmptyPresentation({ hasTranscript, generating, error 
   }
 
   if (error && hasTranscript) {
+    const insufficient = error.code === "insufficient_transcript";
     return {
       variant: "error",
       message: formatSoapGenerationError(error),
-      showRetry: true,
+      showRetry: !insufficient,
+      showReRecord: insufficient,
     };
   }
 
@@ -52,6 +54,9 @@ export function resolveSoapEmptyPresentation({ hasTranscript, generating, error 
  * @param {Error | null | undefined} error
  */
 export function formatSoapGenerationError(error) {
+  if (error?.code === "insufficient_transcript") {
+    return "Not enough conversation captured. Record again.";
+  }
   if (!error?.message) return SOAP_GENERATION_FAILURE_MESSAGE;
   return error.message.includes("transcript is saved")
     ? error.message

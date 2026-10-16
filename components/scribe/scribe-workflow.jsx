@@ -8,7 +8,6 @@ import { Header, HeaderToolbarButton } from "@/components/layout/header";
 import { LanguageToggle } from "@/components/scribe/language-toggle";
 import { Toast } from "@/components/ui/toast";
 import { uploadCompletedRecording } from "@/features/scribe/upload/audio-upload.client.js";
-import { completeLiveTranscription } from "@/features/scribe/upload/live-transcription.client.js";
 import { submitManualTranscript } from "@/features/scribe/upload/manual-transcript.client.js";
 import { useRecording } from "@/features/scribe/recording/use-recording.js";
 import { useLiveTranscription } from "@/features/scribe/recording/use-live-transcription.js";
@@ -33,16 +32,15 @@ import {
   RECORD_PANEL_CONTEXT,
   resolveRecordPanelContext,
 } from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
-import { hasDistinctClinicalSpeakers } from "@/features/scribe/lib/speaker-diarization.js";
 import { resolveScribeWorkflowStepIndex } from "@/features/scribe/consultation-workspace/lib/scribe-workflow-step.js";
 import { asDraftConsultation, orderUnassignedFirst } from "@/features/scribe/consultation-workspace/lib/patient-extraction.js";
+import { draftSessionOnRecordStart, requiredVitalsComplete } from "@/features/scribe/consultation-workspace/lib/vitals-utterance.js";
 import { DetectedPatientCard } from "@/features/scribe/consultation-workspace/components/consultation/DetectedPatientCard.jsx";
 import { usePatientCapture } from "@/features/scribe/consultation-workspace/hooks/use-patient-capture.js";
 import { attachPatientToSession } from "@/features/scribe/consultation-workspace/services/patient.client.js";
 import { resolveDisplayTranscriptSegments } from "@/features/scribe/consultation-workspace/lib/conversation-chat-view.js";
 import { logScribeTiming } from "@/features/scribe/consultation-workspace/lib/scribe-client-log.js";
 import {
-  BATCH_DIARIZATION_TIMEOUT_MS,
   TRANSCRIPTION_BUDGET_MS,
   createPipelineTimer,
 } from "@/features/scribe/lib/transcription-budget.js";
@@ -127,6 +125,8 @@ export function ScribeWorkflow() {
   const draftSessionIdRef = useRef(null);
   const [draftSessionId, setDraftSessionId] = useState(null);
   const [createOpenToken, setCreateOpenToken] = useState(0);
+  const [encounterVitals, setEncounterVitals] = useState(null);
+  const vitalsReady = requiredVitalsComplete(encounterVitals);
   const appointmentPrefillAttemptedRef = useRef(false);
   const soapTurnSelectionRef = useRef({
     deleted_segment_ids: [],
@@ -248,48 +248,6 @@ export function ScribeWorkflow() {
     if (sessionsOpen) void loadConsultations(true);
   }, [sessionsOpen, loadConsultations]);
 
-  const refineSpeakersInBackground = useCallback(async (sessionId) => {
-    const startedAt = Date.now();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), BATCH_DIARIZATION_TIMEOUT_MS);
-    logScribeTiming("batch Deepgram start", {
-      sessionId,
-      mode: "refine",
-      timeoutMs: BATCH_DIARIZATION_TIMEOUT_MS,
-    });
-    try {
-      const payload = await runTranscriptionPipeline(
-        sessionId,
-        controller.signal,
-        { refineSpeakers: true },
-      );
-      const refined = payload?.segments ?? payload?.result?.segments ?? [];
-      const skipped = payload?.result?.status === "refine_skipped";
-      logScribeTiming("batch Deepgram end", {
-        sessionId,
-        mode: "refine",
-        durationMs: Date.now() - startedAt,
-        segmentCount: Array.isArray(refined) ? refined.length : 0,
-        status: payload?.result?.status ?? payload?.session?.status,
-        skipped,
-      });
-      if (!skipped && Array.isArray(refined) && refined.length) {
-        setOptimisticSegments(refined);
-        setTranscriptRefreshNonce((n) => n + 1);
-      }
-    } catch (err) {
-      logScribeTiming("batch Deepgram end", {
-        sessionId,
-        mode: "refine",
-        durationMs: Date.now() - startedAt,
-        error: err instanceof Error ? err.message : String(err),
-        keptLiveTranscript: true,
-      });
-    } finally {
-      clearTimeout(timeout);
-    }
-  }, []);
-
   const runTranscription = useCallback(async (sessionId) => {
     setPipelineBusy(true);
     setPipelineMessage("Transcribing…");
@@ -301,6 +259,16 @@ export function ScribeWorkflow() {
 
     try {
       const payload = await runTranscriptionPipeline(sessionId, controller.signal);
+      const jobStatus = payload?.result?.status;
+      if (jobStatus === "failed" || payload?.session?.status === "TRANSCRIPTION_FAILED") {
+        const failed = new Error(
+          payload?.result?.error
+            || payload?.session?.error_message
+            || "No speech was captured from this recording. Tap Retry, or record again.",
+        );
+        failed.code = "EMPTY_TRANSCRIPTION";
+        throw failed;
+      }
       const batchSegments = payload?.segments ?? payload?.result?.segments ?? [];
       if (Array.isArray(batchSegments) && batchSegments.length) {
         setOptimisticSegments(batchSegments);
@@ -340,11 +308,13 @@ export function ScribeWorkflow() {
       });
       const message =
         err instanceof Error && err.name === "AbortError"
-          ? "Transcription timed out. Open Sessions and tap Transcribe to retry."
+          ? "Transcription timed out. Tap Retry."
           : err instanceof Error
             ? err.message
             : "Transcription failed";
       const wrapped = new Error(message);
+      wrapped.code = err?.code;
+      setOptimisticSegments([]);
       setListError(wrapped);
       setUploadError(wrapped);
     } finally {
@@ -417,65 +387,12 @@ export function ScribeWorkflow() {
         duration_seconds: audioDurationSeconds,
       }).catch(() => {});
 
-      const liveSegments = (liveResult?.segments ?? []).filter(
-        (seg) => !seg.is_interim && String(seg.text ?? "").trim(),
-      );
-      const hasLiveText = Boolean(liveResult?.text && liveSegments.length);
-      const distinctSpeakers = hasDistinctClinicalSpeakers(liveSegments);
-      logScribeTiming("hasDistinctClinicalSpeakers", {
+      logScribeTiming("live preview ignored for final transcript", {
         sessionId,
-        result: distinctSpeakers,
-        segmentCount: liveSegments.length,
-        transcriptChars: String(liveResult?.text ?? "").length,
+        liveChars: String(liveResult?.text ?? "").length,
       });
-
-      // Show live text immediately. Batch (v2) diarization runs in the
-      // background when the live v1 stream collapsed to one speaker — do not
-      // block the Conversation panel or SOAP on it.
-      if (hasLiveText) {
-        setOptimisticSegments(liveSegments);
-        timer?.mark("UI shown", {
-          sessionId,
-          transcriptLength: liveSegments.length,
-          source: "live",
-        });
-        logScribeTiming("UI shown", timer?.getMarks().at(-1) ?? { source: "live" });
-        setPipelineMessage("Saving transcript…");
-        try {
-          const saveStartedAt = Date.now();
-          await completeLiveTranscription(sessionId, liveResult);
-          timer?.mark("transcript saved", {
-            sessionId,
-            durationMs: Date.now() - saveStartedAt,
-            segmentCount: liveSegments.length,
-          });
-          logScribeTiming("transcript saved", timer?.getMarks().at(-1) ?? { sessionId });
-          try {
-            timer?.assertBudget();
-          } catch (budgetErr) {
-            logScribeTiming("transcription budget exceeded", {
-              sessionId,
-              error: budgetErr instanceof Error ? budgetErr.message : String(budgetErr),
-              marks: timer?.getMarks(),
-            });
-          }
-          await loadConsultations(true);
-          setViewFromHistory(false);
-          setActiveSessionId(sessionId);
-          setSessionsOpen(false);
-          setPipelineBusy(false);
-          setPipelineMessage(null);
-          if (!distinctSpeakers) {
-            void refineSpeakersInBackground(sessionId);
-          }
-          return;
-        } catch (liveErr) {
-          setPipelineMessage("Live transcript save failed — transcribing recording…");
-        }
-      } else {
-        setPipelineMessage("Transcribing…");
-      }
-
+      setOptimisticSegments([]);
+      setPipelineMessage("Transcribing…");
       void runTranscription(sessionId);
     } catch (err) {
       const wrapped = err instanceof Error ? err : new Error(String(err));
@@ -485,7 +402,7 @@ export function ScribeWorkflow() {
       setPipelineBusy(false);
       setPipelineMessage(null);
     }
-  }, [appointmentId, language, loadConsultations, refineSpeakersInBackground, runTranscription, selectedPatient?.id]);
+  }, [appointmentId, language, runTranscription, selectedPatient?.id]);
 
   const handleStopRecording = useCallback(async () => {
     try {
@@ -768,8 +685,13 @@ export function ScribeWorkflow() {
         id: "upload-error",
         message: uploadError.message,
         onDismiss: () => setUploadError(null),
-        actionLabel: blocked ? "Clear stuck session" : null,
-        onAction: blocked ? releaseStuckSession : null,
+        actionLabel: blocked ? "Clear stuck session" : "Retry",
+        onAction: blocked
+          ? releaseStuckSession
+          : () => {
+              const sessionId = draftSessionIdRef.current || lastRecordedSessionId;
+              if (sessionId) void runTranscription(sessionId);
+            },
       });
     }
     if (panelNotice) {
@@ -794,7 +716,7 @@ export function ScribeWorkflow() {
       });
     }
     return items;
-  }, [dismissedAlerts, panelNotice, releaseStuckSession, uploadError, workspaceState.alertMessages]);
+  }, [dismissedAlerts, lastRecordedSessionId, panelNotice, releaseStuckSession, runTranscription, uploadError, workspaceState.alertMessages]);
 
   const languageToggle = (
     <LanguageToggle
@@ -874,6 +796,23 @@ export function ScribeWorkflow() {
     />
   ) : null;
 
+  function applyConfirmedPatient(chip) {
+    if (!chip) return;
+    setSelectedPatient(chip);
+    if (!chip.id || !requiredVitalsComplete(encounterVitals)) return;
+    const sessionId = activeSessionId ?? draftSessionIdRef.current;
+    void fetch("/api/scribe/visit-vitals", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        patientId: chip.id,
+        appointmentId,
+        sessionId,
+        ...encounterVitals,
+      }),
+    }).catch(() => {});
+  }
+
   return (
     <div
       className={cn(
@@ -919,18 +858,15 @@ export function ScribeWorkflow() {
         draft={capture.draft}
         onChange={capture.setDraft}
         onConfirm={async () => {
-          const chip = await capture.confirm();
-          if (chip) setSelectedPatient(chip);
+          applyConfirmedPatient(await capture.confirm());
         }}
         onDismiss={capture.dismiss}
         existingPrompt={capture.existingPrompt}
         onUseExisting={async () => {
-          const chip = await capture.useExisting();
-          if (chip) setSelectedPatient(chip);
+          applyConfirmedPatient(await capture.useExisting());
         }}
         onCreateNew={async () => {
-          const chip = await capture.createNew();
-          if (chip) setSelectedPatient(chip);
+          applyConfirmedPatient(await capture.createNew());
         }}
         busy={capture.busy}
         error={capture.error}
@@ -948,6 +884,7 @@ export function ScribeWorkflow() {
               sessionStatus: workspaceState.status,
               pipelineBusy,
               prescriptionApproved: workspaceState.prescriptionApproved,
+              holdOnRecord: Boolean(workspaceState.transcriptInsufficient),
             })}
             liveRecording={recordState === "recording" || recordState === "paused"}
           />
@@ -973,8 +910,9 @@ export function ScribeWorkflow() {
               canStartNewSession={Boolean(activeSessionId) && !pipelineBusy}
               languageToggle={languageToggle}
               onStart={() => {
+                if (!vitalsReady) return;
                 live.reset();
-                if (!selectedPatient) {
+                if (draftSessionOnRecordStart({ vitalsReady, patientId: selectedPatient?.id })) {
                   void fetch("/api/scribe/sessions", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
@@ -1003,6 +941,7 @@ export function ScribeWorkflow() {
               onManualSubmit={handleManualTranscriptSubmit}
               manualSubmitting={manualSubmitting}
               canStartRecording
+              vitalsReady={vitalsReady}
               patientAttached={Boolean(selectedPatient) || Boolean(workspaceState.patientId)}
               patientRequiredHint="Select a patient to begin"
               notices={scribeNotices}
@@ -1014,6 +953,7 @@ export function ScribeWorkflow() {
                   sessionId={activeSessionId}
                   recordingLive={recordState === "recording" || recordState === "paused" || recordState === "requesting"}
                   transcriptText={displayTranscriptSegments.map((segment) => segment?.text).filter(Boolean).join("\n")}
+                  onEncounterVitalsChange={setEncounterVitals}
                 />
               }
               sessionContext={recordPanelSessionContext}
@@ -1032,6 +972,18 @@ export function ScribeWorkflow() {
                   const sessionId = activeSessionId ?? draftSessionIdRef.current;
                   if (sessionId && next?.id) {
                     void attachPatientToSession(sessionId, next.id).catch(() => {});
+                  }
+                  if (next?.id && requiredVitalsComplete(encounterVitals)) {
+                    void fetch("/api/scribe/visit-vitals", {
+                      method: "PUT",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({
+                        patientId: next.id,
+                        appointmentId: next.appointment_id ?? appointmentId,
+                        sessionId,
+                        ...encounterVitals,
+                      }),
+                    }).catch(() => {});
                   }
                 }}
                 onClear={() => {

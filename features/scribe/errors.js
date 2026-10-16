@@ -233,6 +233,28 @@ export class SOAPNotReadyError extends ScribeError {
   }
 }
 
+export class InsufficientTranscriptError extends ScribeError {
+  /** @param {unknown} [details] */
+  constructor(details = null) {
+    super(
+      "Not enough conversation captured. Record again.",
+      "insufficient_transcript",
+      422,
+      details,
+    );
+  }
+}
+
+export class EmptyTranscriptionError extends ScribeError {
+  constructor() {
+    super(
+      "No speech was captured from this recording. Tap Retry, or record again.",
+      "EMPTY_TRANSCRIPTION",
+      422,
+    );
+  }
+}
+
 export class QuotaExceededError extends ScribeError {
   /** @param {string} message */
   constructor(message) {

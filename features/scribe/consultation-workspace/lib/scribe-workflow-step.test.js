@@ -46,6 +46,17 @@ test("processing and transcription statuses map to Transcribe", () => {
   );
 });
 
+test("an insufficient transcript stays on Record instead of advancing to Note", () => {
+  assert.equal(
+    resolveScribeWorkflowStepIndex({
+      recordState: "idle",
+      sessionStatus: "TRANSCRIBED",
+      holdOnRecord: true,
+    }),
+    0,
+  );
+});
+
 test("transcript and SOAP review stay on Note", () => {
   assert.equal(
     resolveScribeWorkflowStepIndex({ sessionStatus: "TRANSCRIBED" }),

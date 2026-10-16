@@ -124,6 +124,11 @@ const COMPOUNDS = {
 };
 
 const FILLER = new Set(["is", "was", "of", "the", "a", "an", "hai", "tha", "around", "about", "at", "reading", "and"]);
+/** Words that mean "a number follows" but are not the reading. They still raise a verify hint. */
+const SUGAR_AMBIGUOUS = new Set(["yes", "is", "of", "about", "at", "around", "its"]);
+const SUGAR_VERIFY_MIN = 40;
+const SUGAR_VERIFY_MAX = 600;
+const RANGE_PICK_FIELDS = new Set(["pulse", "rr", "temp", "spo2", "weight", "height"]);
 const HUNDRED = new Set(["hundred", "sau", "सौ", "நூறு", "nooru", "వంద", "vanda", "vandha"]);
 const BP_SEPARATOR = new Set(["over", "by", "upon", "slash", "/"]);
 const WEIGHT_UNITS = new Set(["kg", "kgs", "kilo", "kilos", "kilogram", "kilograms", "gauges", "gaze"]);
@@ -271,6 +276,7 @@ export function mergeSplitDigitTokens(text) {
 function rewriteForParse(text) {
   const normalized = normalizeVitalsTranscript(text)
     .toLowerCase()
+    .replace(/\bit['’]s\b/g, " its ")
     .replace(/°/g, " ")
     .replace(/\bb\.?\s*p\.?\b/g, " bp ")
     .replace(/\bbee\s+pee\b/g, " bp ")
@@ -517,8 +523,71 @@ function labelAt(tokens, index) {
 
 function skipFiller(tokens, index) {
   let cursor = index;
-  while (FILLER.has(tokens[cursor])) cursor += 1;
+  while (FILLER.has(tokens[cursor]) || SUGAR_AMBIGUOUS.has(tokens[cursor])) cursor += 1;
   return cursor;
+}
+
+function nextLabelIndex(tokens, start) {
+  for (let index = start; index < tokens.length; index += 1) {
+    if (labelAt(tokens, index)) return index;
+  }
+  return tokens.length;
+}
+
+function isClauseNoise(token) {
+  return FILLER.has(token)
+    || SUGAR_AMBIGUOUS.has(token)
+    || WEIGHT_UNITS.has(token)
+    || HEIGHT_UNITS.has(token)
+    || token === "percent"
+    || token === "f"
+    || token === "c"
+    || token === "fahrenheit"
+    || token === "celsius"
+    || token === "centigrade";
+}
+
+/**
+ * Spoken labels sometimes leave a stray digit in the same clause
+ * ("SpO2 2, 99"). Keep the first number that sits in the field's range.
+ * If none do, keep the first number so the doctor can check it.
+ */
+function pickClauseNumber(tokens, start, field) {
+  const end = nextLabelIndex(tokens, start);
+  const found = [];
+  for (let index = start; index < end;) {
+    if (isClauseNoise(tokens[index])) {
+      index += 1;
+      continue;
+    }
+    const spoken = consumeSpokenNumber(tokens, index);
+    if (!spoken || spoken.index > end) {
+      index += 1;
+      continue;
+    }
+    found.push({ value: spoken.value, index: spoken.index });
+    index = spoken.index;
+  }
+  if (!found.length) return null;
+  return found.find((item) => splitValuePlausible(item.value, field)) ?? found[0];
+}
+
+function startsWithFeet(tokens, start) {
+  const end = nextLabelIndex(tokens, start);
+  let index = skipFiller(tokens, start);
+  if (index >= end) return false;
+  const spoken = consumeSpokenNumber(tokens, index);
+  if (!spoken || spoken.index > end) return false;
+  const unit = tokens[spoken.index];
+  return unit === "feet" || unit === "foot" || unit === "ft";
+}
+
+function clauseHasAmbiguousSugar(tokens, start) {
+  const end = nextLabelIndex(tokens, start);
+  for (let index = start; index < end; index += 1) {
+    if (SUGAR_AMBIGUOUS.has(tokens[index])) return true;
+  }
+  return false;
 }
 
 function markUsed(used, from, to) {
@@ -589,6 +658,12 @@ function consumeWeightUnit(tokens, index, used) {
   return index + 1;
 }
 
+function consumeHeightUnit(tokens, index, used) {
+  if (!HEIGHT_UNITS.has(tokens[index])) return index;
+  markUsed(used, index, index + 1);
+  return index + 1;
+}
+
 /**
  * @param {string[]} tokens
  */
@@ -596,6 +671,7 @@ function parseVitalsTokens(tokens) {
   const result = { ...EMPTY_VITALS };
   const used = new Set();
   const labelOnly = new Set();
+  let sugarAmbiguous = false;
 
   for (let index = 0; index < tokens.length; index += 1) {
     if (used.has(index)) continue;
@@ -607,7 +683,7 @@ function parseVitalsTokens(tokens) {
       index = (skipped ? skipped.index : label.index) - 1;
       continue;
     }
-    if (label.field === "height") {
+    if (label.field === "height" && startsWithFeet(tokens, label.index)) {
       const height = readHeight(tokens, label.index, used);
       if (height) {
         result.height = height.value;
@@ -616,6 +692,55 @@ function parseVitalsTokens(tokens) {
       } else {
         noteLabelWithoutValue(labelOnly, "height");
       }
+      continue;
+    }
+    if (label.field === "sugar") {
+      const clauseEnd = nextLabelIndex(tokens, label.index);
+      const cursor = skipFiller(tokens, label.index);
+      const spoken = cursor < clauseEnd ? consumeSpokenNumber(tokens, cursor) : null;
+      if (!spoken || spoken.index > clauseEnd) {
+        noteLabelWithoutValue(labelOnly, "sugar");
+        continue;
+      }
+      result.sugar = spoken.value;
+      result.sugar_type = label.sugarType ?? null;
+      const unit = readSugarUnit(tokens, spoken.index);
+      result.sugar_unit = unit ? unit.unit : null;
+      const valueEnd = unit ? unit.index : spoken.index;
+      markUsed(used, index, valueEnd);
+      if (clauseHasAmbiguousSugar(tokens, label.index)) sugarAmbiguous = true;
+      index = valueEnd - 1;
+      continue;
+    }
+    if (RANGE_PICK_FIELDS.has(label.field)) {
+      const picked = pickClauseNumber(tokens, label.index, label.field);
+      if (!picked) {
+        noteLabelWithoutValue(labelOnly, label.field);
+        continue;
+      }
+      let valueEnd = picked.index;
+      markUsed(used, index, valueEnd);
+      if (label.field === "pulse") result.pulse = picked.value;
+      if (label.field === "rr") result.rr = picked.value;
+      if (label.field === "spo2") result.spo2 = picked.value;
+      if (label.field === "weight") {
+        result.weight = picked.value;
+        valueEnd = consumeWeightUnit(tokens, picked.index, used);
+      }
+      if (label.field === "height") {
+        result.height = picked.value;
+        valueEnd = consumeHeightUnit(tokens, picked.index, used);
+      }
+      if (label.field === "temp") {
+        result.temp = picked.value;
+        const unit = readUnit(tokens, picked.index);
+        result.temp_unit = unit ? unit.unit : null;
+        if (unit) {
+          markUsed(used, picked.index, unit.index);
+          valueEnd = unit.index;
+        }
+      }
+      index = valueEnd - 1;
       continue;
     }
     const cursor = skipFiller(tokens, label.index);
@@ -643,26 +768,6 @@ function parseVitalsTokens(tokens) {
       continue;
     }
 
-    if (label.field === "pulse") result.pulse = spoken.value;
-    if (label.field === "rr") result.rr = spoken.value;
-    if (label.field === "spo2") result.spo2 = spoken.value;
-    if (label.field === "weight") {
-      result.weight = spoken.value;
-      consumeWeightUnit(tokens, spoken.index, used);
-    }
-    if (label.field === "temp") {
-      result.temp = spoken.value;
-      const unit = readUnit(tokens, spoken.index);
-      result.temp_unit = unit ? unit.unit : null;
-      if (unit) markUsed(used, spoken.index, unit.index);
-    }
-    if (label.field === "sugar") {
-      result.sugar = spoken.value;
-      result.sugar_type = label.sugarType ?? null;
-      const unit = readSugarUnit(tokens, spoken.index);
-      result.sugar_unit = unit ? unit.unit : null;
-      if (unit) markUsed(used, spoken.index, unit.index);
-    }
     index = spoken.index - 1;
   }
 
@@ -702,7 +807,17 @@ function parseVitalsTokens(tokens) {
     if (field === "bp") return vitals.bp_systolic == null && vitals.bp_diastolic == null;
     return vitals[field] == null;
   });
-  return { vitals, labelsWithoutValue };
+  const sugarOutOfRange = vitals.sugar != null
+    && (vitals.sugar < SUGAR_VERIFY_MIN || vitals.sugar > SUGAR_VERIFY_MAX);
+  const verifyHints = [];
+  if (vitals.sugar != null && (sugarAmbiguous || sugarOutOfRange)) {
+    verifyHints.push({
+      field: "sugar",
+      value: vitals.sugar,
+      message: `Heard '${vitals.sugar}', please verify`,
+    });
+  }
+  return { vitals, labelsWithoutValue, verifyHints };
 }
 
 /**
@@ -726,6 +841,7 @@ export function describeVitalsUtterance(text) {
     vitals: parsed.vitals,
     corrections: prepared.corrections,
     labelsWithoutValue: parsed.labelsWithoutValue,
+    verifyHints: parsed.verifyHints,
   };
 }
 

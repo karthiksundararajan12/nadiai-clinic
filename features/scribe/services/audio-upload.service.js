@@ -69,14 +69,30 @@ export class AudioUploadService {
     if (!parsed.success) throw new SessionValidationError(parsed.error);
     const input = parsed.data;
 
-    const session = await this._sessionService.createSession(
-      {
-        patient_id: input.patient_id,
-        appointment_id: input.appointment_id,
-        language: input.language,
-      },
-      ctx,
-    );
+    let session;
+    if (input.session_id) {
+      session = await this._sessionService.getSession(input.session_id, ctx);
+      if (session.status !== SESSION_STATUS.CREATED) {
+        throw new InvalidStateTransitionError(session.status, SESSION_STATUS.RECORDING);
+      }
+      const patch = {};
+      if (input.patient_id && session.patient_id !== input.patient_id) patch.patient_id = input.patient_id;
+      if (input.appointment_id && session.appointment_id !== input.appointment_id) {
+        patch.appointment_id = input.appointment_id;
+      }
+      if (Object.keys(patch).length) {
+        session = await this._repo.update(session.id, ctx.doctorId, patch);
+      }
+    } else {
+      session = await this._sessionService.createSession(
+        {
+          patient_id: input.patient_id,
+          appointment_id: input.appointment_id,
+          language: input.language,
+        },
+        ctx,
+      );
+    }
 
     const recording = await this._sessionService.transitionState(
       session.id,

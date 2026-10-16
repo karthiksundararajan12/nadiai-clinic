@@ -26,7 +26,11 @@ function optionLabel(patient) {
 
 function personMeta(patient) {
   const gender = patient.gender || null;
-  const age = patient.age != null && patient.age !== "" ? `${patient.age}y` : null;
+  const age = patient.age == null || patient.age === ""
+    ? null
+    : patient.age_unit === "months"
+      ? `${patient.age} mo`
+      : `${patient.age}y`;
   return [gender, age].filter(Boolean).join(", ");
 }
 
@@ -109,6 +113,7 @@ export function PatientSelector({
   lockSelection = false,
   languageToggle = null,
   compact = false,
+  createOpenToken = 0,
 }) {
   const [options, setOptions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -132,6 +137,12 @@ export function PatientSelector({
   useEffect(() => {
     void loadEligible();
   }, [loadEligible]);
+
+  const [seenCreateToken, setSeenCreateToken] = useState(createOpenToken);
+  if (createOpenToken !== seenCreateToken) {
+    setSeenCreateToken(createOpenToken);
+    if (createOpenToken > 0) setShowCreate(true);
+  }
 
   const selectValue = useMemo(() => {
     if (!patient?.appointment_id) return "";

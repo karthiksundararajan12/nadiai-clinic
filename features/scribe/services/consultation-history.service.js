@@ -4,6 +4,7 @@
 
 import { SessionNotFoundError } from "../errors.js";
 import { HISTORY_CONSULTATION_STATUSES, ACTIVE_CONSULTATION_STATUSES } from "../constants.js";
+import { assignmentStatus, orderUnassignedFirst } from "../consultation-workspace/lib/patient-extraction.js";
 
 export class ConsultationHistoryService {
   /**
@@ -44,7 +45,7 @@ export class ConsultationHistoryService {
       (result.data ?? []).map((session) => this._enrichSession(session, ctx)),
     );
 
-    return { ...result, data: enriched };
+    return { ...result, data: orderUnassignedFirst(enriched) };
   }
 
   /** @param {string} sessionId @param {import("../models/session.model.js").RequestContext} ctx */
@@ -70,7 +71,8 @@ export class ConsultationHistoryService {
 
     return {
       ...session,
-      patient_name: patient?.name ?? "—",
+      patient_name: patient?.name ?? (session.patient_id ? "—" : "Unassigned"),
+      assignment_status: assignmentStatus(session),
       doctor_name: doctor?.full_name ?? "—",
       transcript_status: transcriptStatusLabel(session.status),
       soap_status: soapNote?.status ?? "not_generated",

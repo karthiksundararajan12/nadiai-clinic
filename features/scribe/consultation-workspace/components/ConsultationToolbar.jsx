@@ -17,6 +17,7 @@ export function ConsultationToolbar({
   canApproveSOAP,
   soapApproved,
   actionError = null,
+  saveBlocked = false,
   onSave,
   onCompleteReview,
   onGenerateSOAP,
@@ -52,11 +53,16 @@ export function ConsultationToolbar({
           </p>
         )}
         <div className="flex flex-wrap items-center gap-2.5">
+          {saveBlocked ? (
+            <p className="max-w-[14rem] text-right text-xs font-semibold text-amber-800" data-testid="attach-patient-to-save">
+              Attach a patient to save this note
+            </p>
+          ) : null}
           <Button
             variant="outline"
             size="sm"
             onClick={onSave}
-            disabled={busy || !hasChanges || soapApproved}
+            disabled={busy || !hasChanges || soapApproved || saveBlocked}
             data-testid="scribe-toolbar-save"
           >
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}

@@ -63,6 +63,14 @@ function fieldText(value) {
   return value == null ? "" : String(value);
 }
 
+function sugarVerifyForDraft(notes, draft, dismissed) {
+  if (dismissed.has("sugar")) return null;
+  const hint = (notes.verifyHints ?? []).find((item) => item.field === "sugar");
+  if (!hint) return null;
+  if (fieldText(draft.sugar).trim() !== String(hint.value)) return null;
+  return hint;
+}
+
 function cloneFields(fields) {
   return { ...EMPTY_FIELDS, ...fields };
 }
@@ -535,12 +543,15 @@ export function SayVitalsBar({
   const summary = formatVitalsSummary(open ? draft : saved, t, formatNumber);
   const flags = vitalRangeFlags(draft);
   const bpBad = bpRelationshipError(draft);
-  const notes = heard ? describeVitalsUtterance(heard) : { corrections: [], labelsWithoutValue: [] };
+  const notes = heard
+    ? describeVitalsUtterance(heard)
+    : { corrections: [], labelsWithoutValue: [], verifyHints: [] };
+  const sugarVerify = sugarVerifyForDraft(notes, draft, dismissedNotes);
   const inputClass = (key) => cn(
     "w-full min-w-0 rounded-md border bg-white px-2 py-1.5 text-sm tabular-nums text-gray-900",
     bpBad && (key === "bp_systolic" || key === "bp_diastolic")
       ? "border-red-500 ring-2 ring-red-200"
-      : flags[key] ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200",
+      : (flags[key] || (key === "sugar" && sugarVerify)) ? "border-amber-400 ring-2 ring-amber-200" : "border-gray-200",
     highlighted.has(key) && "bg-primary/10 ring-2 ring-primary/30",
   );
   const correctionHint = (...fields) => {
@@ -776,7 +787,15 @@ export function SayVitalsBar({
                     onChange={(event) => updateField("height", event.target.value.replace(/[^\d.]/g, ""))}
                   />
                 </Field>
-                <Field label={t("sugar")} hint={missed("sugar") ? null : t("optional")} flag={flags.sugar} flagLabel={t("checkValue")} missing={missingHint("sugar")} note={correctionHint("sugar")} className="col-span-2">
+                <Field
+                  label={t("sugar")}
+                  hint={missed("sugar") ? null : t("optional")}
+                  flag={Boolean(flags.sugar) || Boolean(sugarVerify)}
+                  flagLabel={sugarVerify ? t("heardVerify", { value: sugarVerify.value }) : t("checkValue")}
+                  missing={missingHint("sugar")}
+                  note={correctionHint("sugar")}
+                  className="col-span-2"
+                >
                   <div className="flex flex-col gap-2">
                     <div className="flex items-center gap-2">
                       <input

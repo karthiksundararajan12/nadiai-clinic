@@ -48,6 +48,7 @@ export async function uploadCompletedRecording(options) {
     audioDurationSeconds,
     patientId,
     appointmentId,
+    sessionId: existingSessionId,
     language = "english",
     maxRetries = 1,
     onProgress,
@@ -67,6 +68,7 @@ export async function uploadCompletedRecording(options) {
   onProgress?.(progressEvent("starting", 0, 0, uploadChunks.length));
 
   const manifest = {
+    session_id: existingSessionId ?? null,
     patient_id: patientId ?? null,
     appointment_id: appointmentId ?? null,
     language,

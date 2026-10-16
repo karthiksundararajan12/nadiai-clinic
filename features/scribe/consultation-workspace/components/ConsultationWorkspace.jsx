@@ -330,6 +330,7 @@ export function ConsultationWorkspace({
   }, []);
 
   const handleApproveSOAP = useCallback(async () => {
+    if (!patient?.id) return;
     setApproving(true);
     setApprovalLocked(true);
     try {
@@ -345,7 +346,7 @@ export function ConsultationWorkspace({
     } finally {
       setApproving(false);
     }
-  }, [onApproved, soap, statusPoll]);
+  }, [onApproved, patient?.id, soap, statusPoll]);
 
   const prescriptionReady = PRESCRIPTION_READY_STATUSES.has(resolvedSessionStatus);
   const prescriptionGenerating =
@@ -358,13 +359,14 @@ export function ConsultationWorkspace({
     resolvedSessionStatus !== "PRESCRIPTION_APPROVED";
 
   const handleGeneratePrescription = useCallback(async () => {
+    if (!patient?.id) return;
     try {
       await prescription.generate();
       await statusPoll.refresh?.();
     } catch {
       // Error state shown in prescription panel
     }
-  }, [prescription, statusPoll]);
+  }, [patient?.id, prescription, statusPoll]);
 
   const handlePrescriptionRetry = useCallback(async () => {
     try {
@@ -463,6 +465,7 @@ export function ConsultationWorkspace({
   }, [soap]);
 
   const handleSaveDraft = useCallback(async () => {
+    if (!patient?.id) return;
     setToolbarActionError(null);
     try {
       if (transcript.hasChanges) await transcript.manualSave();
@@ -472,7 +475,7 @@ export function ConsultationWorkspace({
       setToolbarActionError(message);
       throw err;
     }
-  }, [transcript, soap]);
+  }, [patient?.id, transcript, soap]);
 
   const handleCompleteReview = useCallback(async () => {
     setToolbarActionError(null);
@@ -523,6 +526,7 @@ export function ConsultationWorkspace({
   }, [soap]);
 
   const handleSaveManualEdits = useCallback(async () => {
+    if (!patient?.id) return;
     try {
       const result = await soap.saveDoctorEdits({
         subjective: soap.draft.subjective ?? "",
@@ -537,7 +541,7 @@ export function ConsultationWorkspace({
     } catch (err) {
       window.alert(err instanceof Error ? err.message : "Failed to save SOAP edits");
     }
-  }, [soap]);
+  }, [patient?.id, soap]);
 
   const handleSubmitFeedback = useCallback(async ({ feedback_reasons, other_reason }) => {
     if (!feedbackAction) {
@@ -785,6 +789,7 @@ export function ConsultationWorkspace({
       clinicalById,
       prescriptionApproved:
         prescription.approved || resolvedSessionStatus === "PRESCRIPTION_APPROVED",
+      patientId: patient?.id ?? null,
       alertMessages,
     });
   }, [
@@ -803,6 +808,7 @@ export function ConsultationWorkspace({
     prescription.approved,
     prescriptionErrorMessage,
     statusPoll.isFailed,
+    patient?.id,
   ]);
 
   const noteGenerating =
@@ -853,6 +859,7 @@ export function ConsultationWorkspace({
       canApproveSOAP={canApproveSOAP}
       soapApproved={soapApproved}
       actionError={toolbarActionError}
+      saveBlocked={!patient?.id}
       onSave={handleSaveDraft}
       onCompleteReview={handleCompleteReview}
       onGenerateSOAP={handleGenerateSOAP}
@@ -1019,6 +1026,7 @@ export function ConsultationWorkspace({
         auditOpen={auditOpen}
         onAuditOpenChange={setAuditOpen}
         canApprove={canApproveSOAP && !blockingApproval && !manualEditMode}
+        saveBlocked={!patient?.id}
         approving={approving}
         onApprove={handleApproveSOAP}
         onExport={handleExportSOAP}

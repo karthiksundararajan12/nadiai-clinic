@@ -82,6 +82,7 @@ export function ConsultationClinicalLayout({
   canGeneratePrescription,
   generatingPrescription,
   onGeneratePrescription,
+  saveBlocked = false,
   prescriptionReady,
   onViewPrescription,
   patient,
@@ -189,12 +190,17 @@ export function ConsultationClinicalLayout({
             <div className="h-6 w-px shrink-0 bg-gray-200" aria-hidden />
           )}
 
+          {saveBlocked && (canApprove || canGeneratePrescription) ? (
+            <p className="max-w-[14rem] text-right text-xs font-semibold text-amber-800" data-testid="attach-patient-to-save">
+              Attach a patient to save this note
+            </p>
+          ) : null}
           {canApprove && (
             <button
               type="button"
               className="flex cursor-pointer items-center gap-1.5 rounded-lg bg-primary px-3.5 py-2 text-sm font-semibold text-white shadow-sm shadow-primary/20 transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={onApprove}
-              disabled={approving}
+              disabled={approving || saveBlocked}
               data-testid="soap-approve"
             >
               {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
@@ -295,7 +301,7 @@ export function ConsultationClinicalLayout({
                 "transition-all duration-200 hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60",
               )}
               onClick={onGeneratePrescription}
-              disabled={generatingPrescription}
+              disabled={generatingPrescription || saveBlocked}
               data-testid="generate-prescription"
             >
               {generatingPrescription ? (

@@ -418,10 +418,17 @@ export class PatientsService {
   async create(clinicId, input, now = new Date()) {
     const dateOfBirth = parseDateOfBirth(input.dateOfBirth);
     const fullName = parseFullName(input.name);
-    const contactPhone = parseContactPhone(input.phone);
+    const rawPhone = String(input.phone ?? "").trim();
+    const contactPhone = rawPhone
+      ? parseContactPhone(rawPhone)
+      : input.allowMissingPhone === true
+        ? null
+        : parseContactPhone(rawPhone);
     const consentGiven = input.consentGiven === true;
 
-    const existing = await this._patients.findByContact(clinicId, contactPhone);
+    const existing = contactPhone
+      ? await this._patients.findByContact(clinicId, contactPhone)
+      : [];
     if (existing.length > 0) {
       const sameName = existing.find((patient) => patientNamesMatch(patient.full_name, fullName));
       const allowFamilyMember = input.allowFamilyMember === true && !sameName;

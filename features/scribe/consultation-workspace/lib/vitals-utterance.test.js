@@ -455,3 +455,52 @@ test("weight units include gauges and a spaced k g", () => {
   assert.equal(extractVitalsFromUtterance("weight 72 k g").weight, 72);
   assert.equal(extractVitalsFromUtterance("weight 70 kilograms").weight, 70);
 });
+
+const STRAY_SPO2 = "BP, 1 80 by 90. Pulse, 98. Temperature, 98. SpO2 2, 99. Weight, 68 kgs. Height, 1 68 centimeter. Blood sugar, yes, 48.";
+
+test("a stray SpO2 2 and a sugar filler still fill the heard readings", () => {
+  const described = describeVitalsUtterance(STRAY_SPO2);
+  const vitals = described.vitals;
+  assert.equal(vitals.bp_systolic, 180);
+  assert.equal(vitals.bp_diastolic, 90);
+  assert.equal(vitals.pulse, 98);
+  assert.equal(vitals.temp, 98);
+  assert.equal(vitals.spo2, 99);
+  assert.equal(vitals.weight, 68);
+  assert.equal(vitals.height, 168);
+  assert.equal(vitals.sugar, 48);
+  assert.equal(vitals.rr, null);
+  assert.equal(described.labelsWithoutValue.includes("rr"), false);
+  assert.deepEqual(described.verifyHints, [
+    { field: "sugar", value: 48, message: "Heard '48', please verify" },
+  ]);
+  assert.equal(vitalRangeFlags(vitals).sugar, undefined);
+  assert.equal(bpRelationshipError(vitals), false);
+});
+
+test("SpO2 keeps the first saturation inside 50-100", () => {
+  assert.equal(extractVitalsFromUtterance("SpO2 2, 99").spo2, 99);
+  assert.equal(extractVitalsFromUtterance("SpO2 is 98").spo2, 98);
+  assert.equal(extractVitalsFromUtterance("oxygen 9 7").spo2, 97);
+
+  const only = extractVitalsFromUtterance("SpO2 2");
+  assert.equal(only.spo2, 2);
+  assert.equal(vitalRangeFlags(only).spo2, true);
+});
+
+test("sugar outside 40-600 is kept with a verify hint", () => {
+  const described = describeVitalsUtterance("sugar 20");
+  assert.equal(described.vitals.sugar, 20);
+  assert.deepEqual(described.verifyHints, [
+    { field: "sugar", value: 20, message: "Heard '20', please verify" },
+  ]);
+  assert.deepEqual(describeVitalsUtterance("sugar 140").verifyHints, []);
+  assert.deepEqual(describeVitalsUtterance("sugar was one forty yesterday").verifyHints, []);
+});
+
+test("the first in-range candidate wins for pulse, respiration, temperature, and height", () => {
+  assert.equal(extractVitalsFromUtterance("pulse 2, 98").pulse, 98);
+  assert.equal(extractVitalsFromUtterance("RR 2, 18").rr, 18);
+  assert.equal(extractVitalsFromUtterance("temperature 2, 98").temp, 98);
+  assert.equal(extractVitalsFromUtterance("height 2, 168 centimeter").height, 168);
+});

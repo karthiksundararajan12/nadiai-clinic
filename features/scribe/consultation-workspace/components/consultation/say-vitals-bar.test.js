@@ -93,6 +93,7 @@ const { createRoot } = await import("react-dom/client");
 const { act, createElement } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const { SayVitalsBar } = await import("./SayVitalsBar.jsx");
+const { extractVitalsFromUtterance } = await import("../../lib/vitals-utterance.js");
 const messages = JSON.parse(readFileSync(join(ROOT, "messages/en.json"), "utf8"));
 
 const SAVED_VITALS = {
@@ -543,6 +544,56 @@ test("systolic lower than diastolic shows a red error and disables Save", async 
       setInput(document.querySelector("[aria-label='BP systolic']"), "180");
     });
     assert.equal(document.querySelector("[data-testid='vitals-bp-error']"), null);
+    assert.equal(save.disabled, false);
+  } finally {
+    globalThis.fetch = originalFetch;
+    await view.unmount();
+  }
+});
+
+test("a stray SpO2 digit fills 99 and sugar stays with an amber verify hint", async () => {
+  const originalFetch = globalThis.fetch;
+  const transcript = "BP, 1 80 by 90. Pulse, 98. Temperature, 98. SpO2 2, 99. Weight, 68 kgs. Height, 1 68 centimeter. Blood sugar, yes, 48.";
+  installFetch({
+    hear: {
+      transcript,
+      vitals: extractVitalsFromUtterance(transcript),
+    },
+  });
+  navigator.mediaDevices = {
+    async getUserMedia() {
+      return { getTracks() { return [{ stop() {} }]; } };
+    },
+  };
+  const view = renderBar({ patientId: "patient-1" });
+  try {
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-summary']").click();
+    });
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-mic']").click();
+    });
+    await flush();
+    await act(async () => {
+      document.querySelector("[data-testid='vitals-stop']").click();
+    });
+    await flush();
+
+    assert.equal(document.querySelector("[aria-label='BP systolic']").value, "180");
+    assert.equal(document.querySelector("[aria-label='BP diastolic']").value, "90");
+    assert.equal(document.querySelector("[aria-label='Pulse']").value, "98");
+    assert.equal(document.querySelector("[aria-label='Temperature']").value, "98");
+    assert.equal(document.querySelector("[aria-label='SpO2']").value, "99");
+    assert.equal(document.querySelector("[aria-label='Weight']").value, "68");
+    assert.equal(document.querySelector("[aria-label='Height']").value, "168");
+    assert.equal(document.querySelector("[aria-label='Sugar']").value, "48");
+    assert.equal(document.querySelector("[aria-label='RR']").value, "");
+    assert.match(document.body.textContent, /Heard '48', please verify/);
+    assert.match(document.body.textContent, /Not heard, please enter/);
+    assert.equal(document.body.textContent.includes("Check this value"), false);
+    const save = document.querySelector("[data-testid='vitals-save']");
     assert.equal(save.disabled, false);
   } finally {
     globalThis.fetch = originalFetch;

@@ -35,6 +35,10 @@ import {
 } from "@/features/scribe/consultation-workspace/lib/record-panel-session-context.js";
 import { hasDistinctClinicalSpeakers } from "@/features/scribe/lib/speaker-diarization.js";
 import { resolveScribeWorkflowStepIndex } from "@/features/scribe/consultation-workspace/lib/scribe-workflow-step.js";
+import { asDraftConsultation, orderUnassignedFirst } from "@/features/scribe/consultation-workspace/lib/patient-extraction.js";
+import { DetectedPatientCard } from "@/features/scribe/consultation-workspace/components/consultation/DetectedPatientCard.jsx";
+import { usePatientCapture } from "@/features/scribe/consultation-workspace/hooks/use-patient-capture.js";
+import { attachPatientToSession } from "@/features/scribe/consultation-workspace/services/patient.client.js";
 import { resolveDisplayTranscriptSegments } from "@/features/scribe/consultation-workspace/lib/conversation-chat-view.js";
 import { logScribeTiming } from "@/features/scribe/consultation-workspace/lib/scribe-client-log.js";
 import {
@@ -120,6 +124,9 @@ export function ScribeWorkflow() {
   const pipelineTimerRef = useRef(null);
 
   const mountedRef = useRef(true);
+  const draftSessionIdRef = useRef(null);
+  const [draftSessionId, setDraftSessionId] = useState(null);
+  const [createOpenToken, setCreateOpenToken] = useState(0);
   const appointmentPrefillAttemptedRef = useRef(false);
   const soapTurnSelectionRef = useRef({
     deleted_segment_ids: [],
@@ -220,8 +227,8 @@ export function ScribeWorkflow() {
         fetchConsultations("history"),
       ]);
       if (mountedRef.current) {
-        setActiveSessions(active);
-        setHistorySessions(history);
+        setActiveSessions(orderUnassignedFirst(active));
+        setHistorySessions(orderUnassignedFirst(history));
       }
     } catch (err) {
       if (mountedRef.current) setListError(err);
@@ -381,6 +388,7 @@ export function ScribeWorkflow() {
         language,
         patientId: selectedPatient?.id,
         appointmentId,
+        sessionId: draftSessionIdRef.current,
         maxRetries: 1,
         onProgress: (event) => {
           if (event.phase === "uploading") {
@@ -569,6 +577,17 @@ export function ScribeWorkflow() {
       }),
     [workspaceState.segments, optimisticSegments, live.segments],
   );
+  const liveTranscriptText = useMemo(
+    () => displayTranscriptSegments.map((segment) => segment?.text).filter(Boolean).join("\n"),
+    [displayTranscriptSegments],
+  );
+  const capture = usePatientCapture({
+    enabled: isRecordingLive && !selectedPatient,
+    speechMs: Math.round((recording.duration || 0) * 1000),
+    transcript: liveTranscriptText,
+    patientId: selectedPatient?.id ?? null,
+    sessionId: draftSessionId,
+  });
 
   useEffect(() => {
     const timer = pipelineTimerRef.current;
@@ -713,10 +732,10 @@ export function ScribeWorkflow() {
           approval_status: "approved",
           soap_status: "approved",
         };
-        setHistorySessions((prev) => [
+        setHistorySessions((prev) => orderUnassignedFirst([
           row,
           ...prev.filter((s) => s.id !== approvedId),
-        ]);
+        ]));
       }
     }
 
@@ -803,6 +822,12 @@ export function ScribeWorkflow() {
       onTranscribe={runTranscription}
       onDelete={deleteSession}
       canDelete={(status) => ACTIVE_CONSULTATION_STATUSES.includes(status)}
+      onAttach={(sessionId) => {
+        capture.dismiss();
+        openSession(sessionId, false);
+        setSessionsOpen(false);
+        setCreateOpenToken((token) => token + 1);
+      }}
     />
   );
 
@@ -889,6 +914,27 @@ export function ScribeWorkflow() {
           {appointmentPrefillError.message}
         </p>
       )}
+      <DetectedPatientCard
+        detected={capture.detected}
+        draft={capture.draft}
+        onChange={capture.setDraft}
+        onConfirm={async () => {
+          const chip = await capture.confirm();
+          if (chip) setSelectedPatient(chip);
+        }}
+        onDismiss={capture.dismiss}
+        existingPrompt={capture.existingPrompt}
+        onUseExisting={async () => {
+          const chip = await capture.useExisting();
+          if (chip) setSelectedPatient(chip);
+        }}
+        onCreateNew={async () => {
+          const chip = await capture.createNew();
+          if (chip) setSelectedPatient(chip);
+        }}
+        busy={capture.busy}
+        error={capture.error}
+      />
       <div
         className={cn(
           "flex min-h-0 w-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto px-4 py-3 lg:gap-4 lg:overflow-hidden lg:px-6 lg:py-4",
@@ -928,6 +974,24 @@ export function ScribeWorkflow() {
               languageToggle={languageToggle}
               onStart={() => {
                 live.reset();
+                if (!selectedPatient) {
+                  void fetch("/api/scribe/sessions", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ patient_id: null, language }),
+                  })
+                    .then(async (res) => {
+                      const payload = await res.json().catch(() => ({}));
+                      if (!res.ok || !payload?.id) return;
+                      const draft = asDraftConsultation(payload);
+                      draftSessionIdRef.current = draft.id;
+                      setDraftSessionId(draft.id);
+                    })
+                    .catch(() => {});
+                } else {
+                  draftSessionIdRef.current = null;
+                  setDraftSessionId(null);
+                }
                 void recording.startRecording();
               }}
               onPause={recording.pauseRecording}
@@ -938,7 +1002,9 @@ export function ScribeWorkflow() {
               onManualModeChange={setManualInputMode}
               onManualSubmit={handleManualTranscriptSubmit}
               manualSubmitting={manualSubmitting}
-              canStartRecording={Boolean(selectedPatient)}
+              canStartRecording
+              patientAttached={Boolean(selectedPatient) || Boolean(workspaceState.patientId)}
+              onAddPatient={() => setCreateOpenToken((token) => token + 1)}
               patientRequiredHint="Select a patient to begin"
               notices={scribeNotices}
               vitalsSlot={
@@ -959,10 +1025,15 @@ export function ScribeWorkflow() {
               <PatientSelector
                 compact
                 patient={selectedPatient}
-                lockSelection={isRecordingLive}
+                lockSelection={isRecordingLive && Boolean(selectedPatient)}
+                createOpenToken={createOpenToken}
                 onSelect={(next) => {
                   setSelectedPatient(next);
                   setAppointmentId(next?.appointment_id ?? null);
+                  const sessionId = activeSessionId ?? draftSessionIdRef.current;
+                  if (sessionId && next?.id) {
+                    void attachPatientToSession(sessionId, next.id).catch(() => {});
+                  }
                 }}
                 onClear={() => {
                   setSelectedPatient(null);

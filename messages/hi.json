@@ -41,6 +41,7 @@
       "pp": "PP",
       "sugarShort": "शुगर",
       "checkValue": "यह मान जाँचें",
+      "heardVerify": "''{value}'' सुना, कृपया जाँचें",
       "notHeard": "सुनाई नहीं दिया, कृपया भरें",
       "heardNoValue": "''{label}'' सुना, मान नहीं मिला, कृपया भरें",
       "autoCorrected": "''{from}'' से अपने आप सुधारा",

@@ -166,6 +166,7 @@ export const UploadChunkManifestSchema = z.object({
 });
 
 export const StartAudioUploadSchema = z.object({
+  session_id:             uuidOptional,
   patient_id:             uuidOptional,
   appointment_id:         uuidOptional,
   language:               languageEnum.default(SCRIBE_LANGUAGE.ENGLISH),

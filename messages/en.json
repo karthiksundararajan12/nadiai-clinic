@@ -41,6 +41,7 @@
       "pp": "PP",
       "sugarShort": "Sugar",
       "checkValue": "Check this value",
+      "heardVerify": "Heard ''{value}'', please verify",
       "notHeard": "Not heard, please enter",
       "heardNoValue": "Heard ''{label}'' but no value, please enter",
       "autoCorrected": "auto-corrected from ''{from}''",

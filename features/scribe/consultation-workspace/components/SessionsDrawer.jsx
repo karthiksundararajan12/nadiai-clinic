@@ -23,6 +23,7 @@ export function SessionsDrawer({
   onTranscribe,
   onDelete,
   canDelete,
+  onAttach,
 }) {
   if (!open) return null;
 
@@ -80,6 +81,7 @@ export function SessionsDrawer({
                 onTranscribe={onTranscribe}
                 onDelete={onDelete}
                 canDelete={canDelete}
+                onAttach={onAttach}
               />
               <SessionGroup
                 title="History"
@@ -88,6 +90,7 @@ export function SessionsDrawer({
                 busySessionId={busySessionId}
                 deletingSessionId={deletingSessionId}
                 onOpen={onOpen}
+                onAttach={onAttach}
                 readOnly
               />
             </>
@@ -109,6 +112,7 @@ function SessionGroup({
   onTranscribe,
   onDelete,
   canDelete,
+  onAttach,
   readOnly,
 }) {
   return (
@@ -129,6 +133,7 @@ function SessionGroup({
               onOpen={() => onOpen(session.id, Boolean(readOnly))}
               onTranscribe={onTranscribe ? () => onTranscribe(session.id) : undefined}
               onDelete={onDelete && canDelete?.(session.status) ? () => onDelete(session.id) : undefined}
+              onAttach={onAttach}
             />
           ))}
         </ul>
@@ -153,7 +158,7 @@ function SessionStatusChip({ session }) {
   );
 }
 
-function SessionRow({ session, transcribing, deleting, isLatest, onOpen, onTranscribe, onDelete, readOnly }) {
+function SessionRow({ session, transcribing, deleting, isLatest, onOpen, onTranscribe, onDelete, onAttach, readOnly }) {
   const sessionLabel = formatSessionLabel(session.created_at);
 
   const needsTranscribe = ["UPLOADED", "TRANSCRIPTION_FAILED"].includes(session.status);
@@ -182,12 +187,26 @@ function SessionRow({ session, transcribing, deleting, isLatest, onOpen, onTrans
           <div className="flex flex-wrap items-center gap-2">
             <p className="text-[13px] font-semibold text-slate-900">{sessionLabel}</p>
             {isLatest && <Badge className="h-5 text-[10px]">Latest</Badge>}
+            {!session.patient_id && <Badge className="h-5 bg-amber-100 text-[10px] text-amber-900">Unassigned</Badge>}
           </div>
           <div className="mt-1.5">
             <SessionStatusChip session={session} />
           </div>
         </div>
         <div className="flex shrink-0 gap-1">
+          {!session.patient_id && onAttach && (
+            <Button
+              size="sm"
+              variant="outline"
+              data-testid="attach-patient"
+              onClick={(event) => {
+                event.stopPropagation();
+                onAttach(session.id);
+              }}
+            >
+              Attach patient
+            </Button>
+          )}
           {(needsTranscribe || canRetry) && onTranscribe && (
             <Button
               size="sm"

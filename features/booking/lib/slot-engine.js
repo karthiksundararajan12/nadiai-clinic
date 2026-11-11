@@ -22,6 +22,7 @@ import {
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const WORKING_HOURS_PATTERN = /^([01]\d|2[0-3]):([0-5]\d)$/;
 const WEEKDAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const WEEKDAY_FULL_LABELS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const MONTH_LABELS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 /**
@@ -150,6 +151,28 @@ export function formatSlotDateTimeParts(date) {
 export function formatSlotLabel(date) {
   const { date: slotDate, time: slotTime } = formatSlotDateTimeParts(date);
   return `${slotDate}, ${slotTime}`;
+}
+
+/**
+ * Confirmation-message date/time in IST: weekday, D Mon YYYY + h:mm A.
+ *
+ * @param {Date} date
+ * @returns {{ date: string; time: string }} e.g. `{ date: "Monday, 6 Jul 2026", time: "9:00 AM" }`
+ */
+export function formatConfirmationDateTimeParts(date) {
+  const ist = new Date(date.getTime() + IST_OFFSET_MS);
+  const weekday = WEEKDAY_FULL_LABELS[ist.getUTCDay()];
+  const day = ist.getUTCDate();
+  const month = MONTH_LABELS[ist.getUTCMonth()];
+  const year = ist.getUTCFullYear();
+  let hours = ist.getUTCHours();
+  const minutes = String(ist.getUTCMinutes()).padStart(2, "0");
+  const meridiem = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12 || 12;
+  return {
+    date: `${weekday}, ${day} ${month} ${year}`,
+    time: `${hours}:${minutes} ${meridiem}`,
+  };
 }
 
 /** @param {Date} slotStart @returns {string} */

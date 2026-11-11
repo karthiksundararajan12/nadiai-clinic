@@ -17,6 +17,7 @@ import { BaseRepository } from "./base.repository.js";
  * @property {string|null} working_hours_end
  * @property {number|null} consultation_duration
  * @property {number|null} consultation_fee
+ * @property {string|null} clinic_address
  */
 
 export class DoctorProfileRepository extends BaseRepository {
@@ -61,7 +62,7 @@ export class DoctorProfileRepository extends BaseRepository {
       () =>
         this._db
           .from(this._table)
-          .select("id, full_name, working_hours_start, working_hours_end, consultation_duration, consultation_fee")
+          .select("id, full_name, working_hours_start, working_hours_end, consultation_duration, consultation_fee, clinic_address")
           .eq("clinic_id", clinicId)
           .order("created_at", { ascending: true })
           .limit(1)

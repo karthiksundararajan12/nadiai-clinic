@@ -5,6 +5,7 @@ import {
   generateCandidateSlots,
   formatSlotLabel,
   formatSlotDateTimeParts,
+  formatConfirmationDateTimeParts,
   slotRowId,
   parseSlotRowId,
 } from "../lib/slot-engine.js";
@@ -173,6 +174,13 @@ test("formatSlotLabel: formats an AM slot in IST, under Meta's 24-char row title
 test("formatSlotDateTimeParts: splits IST date and time for confirmed-fallback copy", () => {
   const parts = formatSlotDateTimeParts(new Date("2026-07-06T03:30:00.000Z"));
   assert.deepEqual(parts, { date: "Mon 6 Jul", time: "9:00 AM" });
+});
+
+test("formatConfirmationDateTimeParts: weekday, D Mon YYYY and h:mm A in IST", () => {
+  const morning = formatConfirmationDateTimeParts(new Date("2026-07-06T03:30:00.000Z"));
+  assert.deepEqual(morning, { date: "Monday, 6 Jul 2026", time: "9:00 AM" });
+  const noon = formatConfirmationDateTimeParts(new Date("2026-07-06T06:30:00.000Z"));
+  assert.deepEqual(noon, { date: "Monday, 6 Jul 2026", time: "12:00 PM" });
 });
 
 test("formatSlotLabel: formats a PM slot correctly (noon boundary)", () => {

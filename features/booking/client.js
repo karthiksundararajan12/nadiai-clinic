@@ -131,6 +131,11 @@ export {
   parseSlotRowId,
 } from "./lib/slot-engine.js";
 export { resolveConsultationFee, toWholeRupees } from "./lib/consultation-fee.js";
+export {
+  titleCaseName,
+  resolveConfirmationFeeRupees,
+  buildSlotConfirmationMessage,
+} from "./lib/confirmation-message.js";
 export { isBlockingAppointmentRow } from "./lib/appointment-availability.js";
 export { reminderReplyId, parseReminderReplyId } from "./lib/reminder-reply.js";
 export {

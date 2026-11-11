@@ -501,29 +501,44 @@ export const SLOT_SELECTION_COPY = Object.freeze({
     "Your slot on {slotLabel} is reserved for {patientName}. " +
     "To confirm, please complete payment of ₹{amount}: {paymentLink}\n" +
     "This reservation expires in {holdMinutes} minutes if payment isn't completed.",
+  /**
+   * Slot-selection confirmation is assembled by
+   * lib/confirmation-message.js (free-form text, not a Meta template).
+   * These strings are the patient-facing skeleton for tests/docs — the
+   * service fills names, date/time, fee from the doctor record, and
+   * omits the address line when both clinic.address and
+   * doctor_profiles.clinic_address are empty.
+   */
   CONFIRMED:
-    "You're confirmed! {patientName} is booked with {clinicName} on {slotLabel}. See you then!",
+    "✅ Appointment confirmed\n\n" +
+    "Patient: {patientName}\n" +
+    "Doctor: {doctorName}, {clinicName}\n" +
+    "Date: {date}\n" +
+    "Time: {time}\n" +
+    "Fee: ₹{fee} (pay at the clinic)",
   /**
    * Pay-at-clinic confirmation — must not say payment was received.
-   * Placeholders: {patientName}, {clinicName}, {slotLabel}, {fee}.
-   *
    * {fee} is the doctor's real consultation_fee in whole rupees (see
-   * lib/consultation-fee.js), rendered without paise — the amount is
-   * stored numeric(10,2) and would otherwise read "₹799.00". This is the
-   * only place a pay-at-clinic patient is told the price, since removing
-   * the Pay Online / Pay at Clinic prompt also removed the ₹{amount} it
-   * used to carry.
+   * lib/consultation-fee.js), never a hardcoded amount.
    */
   PAY_AT_CLINIC_CONFIRMED:
-    "You're confirmed! {patientName} is booked with {clinicName} on {slotLabel}. " +
-    "Consultation fee: ₹{fee} — please pay at the clinic during your visit. See you then!",
+    "✅ Appointment confirmed\n\n" +
+    "Patient: {patientName}\n" +
+    "Doctor: {doctorName}, {clinicName}\n" +
+    "Date: {date}\n" +
+    "Time: {time}\n" +
+    "Fee: ₹{fee} (pay at the clinic)",
   /**
-   * Same confirmation for the case where no usable fee could be resolved.
-   * Quoting "₹" with nothing after it is worse than omitting the amount.
+   * Same confirmation when no usable fee could be resolved from the
+   * doctor record or stamped appointment amount. Quoting "₹" with
+   * nothing after it is worse than omitting the amount.
    */
   PAY_AT_CLINIC_CONFIRMED_WITHOUT_FEE:
-    "You're confirmed! {patientName} is booked with {clinicName} on {slotLabel}. " +
-    "Please pay at the clinic during your visit. See you then!",
+    "✅ Appointment confirmed\n\n" +
+    "Patient: {patientName}\n" +
+    "Doctor: {doctorName}, {clinicName}\n" +
+    "Date: {date}\n" +
+    "Time: {time}",
 });
 
 /**

@@ -546,10 +546,37 @@ test("AWAITING_SELECTION: choosing a free slot with no doctor fee books directly
   assert.equal(appointmentRepo.createCalls[0].payment_status, "not_required");
   assert.equal(appointmentRepo.createCalls[0].payment_amount, null);
   assert.equal(wa.calls[0].type, "text");
-  assert.match(wa.calls[0].body, /confirmed/i);
-  assert.match(wa.calls[0].body, /Asha Kapoor/);
+  assert.match(wa.calls[0].body, /✅ Appointment confirmed/);
+  assert.match(wa.calls[0].body, /Patient: Asha Kapoor/);
+  assert.match(wa.calls[0].body, /Doctor: Dr\. Test, Test Clinic/);
+  assert.match(wa.calls[0].body, /Date: Monday, 6 Jul 2026/);
+  assert.match(wa.calls[0].body, /Time: 9:00 AM/);
+  assert.match(wa.calls[0].body, /Fee: ₹0 \(pay at the clinic\)/);
+  assert.equal(wa.calls[0].body.includes("📍"), false);
+  assert.equal(wa.calls[0].body.includes("—"), false);
+  assert.equal(wa.calls[0].body.includes("RESCHEDULE"), false);
   assert.equal(wa.calls[0].body.includes("Buttons:"), false);
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
+});
+
+test("AWAITING_SELECTION: confirmation title-cases the patient and uses doctor clinic_address when clinic.address is empty", async () => {
+  const row = rowAwaitingSelection({ selectedPatientName: "asha kapoor" });
+  const { service, repo, wa } = makeService({
+    row,
+    doctor: { ...DOCTOR_FREE, clinic_address: "42 Brigade Road" },
+  });
+
+  const result = await service.handleReply({
+    clinic: { ...CLINIC, address: "" },
+    message: buildMessage({ type: "list_reply", replyId: slotRowId(new Date(SLOT_A.slotStart)) }),
+    row: repo.row,
+  });
+
+  assert.equal(result.action, "TRANSITIONED_TO_CONFIRMED");
+  assert.equal(wa.calls[0].type, "text");
+  assert.match(wa.calls[0].body, /Patient: Asha Kapoor/);
+  assert.match(wa.calls[0].body, /📍 42 Brigade Road/);
+  assert.equal(wa.calls[0].body.includes("—"), false);
 });
 
 test("AWAITING_SELECTION: choosing a paid slot confirms immediately as pay-at-clinic (no payment-method buttons, no Razorpay)", async () => {
@@ -574,11 +601,8 @@ test("AWAITING_SELECTION: choosing a paid slot confirms immediately as pay-at-cl
   assert.equal(razorpay.calls.length, 0);
 
   assert.equal(wa.calls[0].type, "text");
-  assert.match(wa.calls[0].body, /confirmed/i);
-  assert.match(wa.calls[0].body, /pay at the clinic/i);
-  // Removing the payment-method prompt removed the only place the patient
-  // was told the price — it has to be in this message now.
-  assert.match(wa.calls[0].body, /Consultation fee: ₹750\b/);
+  assert.match(wa.calls[0].body, /✅ Appointment confirmed/);
+  assert.match(wa.calls[0].body, /Fee: ₹750 \(pay at the clinic\)/);
   assert.equal(wa.calls[0].body.includes("750.00"), false, "whole rupees, not numeric(10,2)");
   assert.equal(wa.calls[0].body.includes("{fee}"), false);
   assert.equal(/payment received/i.test(wa.calls[0].body), false);
@@ -678,11 +702,8 @@ test("PAYMENT_PENDING (dormant): Pay at Clinic confirms without Razorpay and doe
   assert.equal(razorpay.calls.length, 0);
   assert.equal(appointmentRepo.confirmPayAtClinicCalls.length, 1);
   assert.equal(wa.calls[0].type, "text");
-  assert.match(wa.calls[0].body, /confirmed/i);
-  assert.match(wa.calls[0].body, /pay at the clinic/i);
-  // Dormant path: the fee comes from context.feeRupees / payment_amount
-  // rather than a freshly resolved doctor fee, and must still be quoted.
-  assert.match(wa.calls[0].body, /Consultation fee: ₹750\b/);
+  assert.match(wa.calls[0].body, /✅ Appointment confirmed/);
+  assert.match(wa.calls[0].body, /Fee: ₹750 \(pay at the clinic\)/);
   assert.equal(/payment received/i.test(wa.calls[0].body), false);
   assert.equal(wa.calls[0].body.includes("Buttons:"), false);
   assert.equal(wa.calls[0].body.toLowerCase().includes("quick-reply"), false);
@@ -704,13 +725,14 @@ test("pay-at-clinic confirmation quotes a numeric(10,2) fee as whole rupees", as
   });
 
   assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
-  assert.match(wa.calls[0].body, /Consultation fee: ₹799 —/);
+  assert.match(wa.calls[0].body, /Fee: ₹799 \(pay at the clinic\)/);
   assert.equal(wa.calls[0].body.includes("799.00"), false);
+  assert.equal(wa.calls[0].body.includes("—"), false);
 });
 
 test("pay-at-clinic confirmation omits the amount entirely rather than quoting a bare ₹", async () => {
-  // No feeRupees in context and no payment_amount on the row: quoting
-  // "₹" with nothing after it would be worse than saying nothing.
+  // Doctor fee unset, and no stamped payment amount: quoting a bare "₹"
+  // is worse than leaving the amount off.
   const appointmentId = "appt-1";
   const row = buildRow({
     current_state: CONVERSATION_STATE.PAYMENT_PENDING,
@@ -720,7 +742,10 @@ test("pay-at-clinic confirmation omits the amount entirely rather than quoting a
       selectedPatientName: "Asha Kapoor",
     },
   });
-  const { service, repo, wa, appointmentRepo } = makeService({ row, doctor: DOCTOR_PAID });
+  const { service, repo, wa, appointmentRepo } = makeService({
+    row,
+    doctor: { ...DOCTOR_PAID, consultation_fee: null },
+  });
 
   await appointmentRepo.createIfAvailable({
     clinic_id: CLINIC.id,
@@ -746,7 +771,7 @@ test("pay-at-clinic confirmation omits the amount entirely rather than quoting a
   });
 
   assert.equal(result.action, "PAY_AT_CLINIC_CONFIRMED");
-  assert.match(wa.calls[0].body, /pay at the clinic/i);
+  assert.match(wa.calls[0].body, /✅ Appointment confirmed/);
   assert.equal(wa.calls[0].body.includes("₹"), false);
   assert.equal(wa.calls[0].body.includes("null"), false);
   assert.equal(wa.calls[0].body.includes("NaN"), false);

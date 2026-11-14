@@ -845,12 +845,6 @@ export function describeVitalsUtterance(text) {
   };
 }
 
-/**
- * Systolic must be higher than diastolic by at least 10 mmHg.
- * The numbers are still returned; the visit UI blocks save.
- *
- * @param {Partial<typeof EMPTY_VITALS>} vitals
- */
 const REQUIRED_RECORDING_VITALS = ["bp_systolic", "bp_diastolic", "pulse", "spo2", "temp", "weight"];
 
 /**
@@ -899,12 +893,18 @@ export function noteActionsEnabled({
   };
 }
 
+/**
+ * Error when both BP numbers are present and systolic is not above diastolic.
+ * The numbers are still returned; the visit UI blocks save.
+ *
+ * @param {Partial<typeof EMPTY_VITALS>} vitals
+ */
 export function bpRelationshipError(vitals = {}) {
   const systolic = Number(vitals.bp_systolic);
   const diastolic = Number(vitals.bp_diastolic);
   if (!Number.isFinite(systolic) || !Number.isFinite(diastolic)) return false;
   if (String(vitals.bp_systolic).trim() === "" || String(vitals.bp_diastolic).trim() === "") return false;
-  return !(systolic > diastolic && systolic - diastolic >= 10);
+  return systolic <= diastolic;
 }
 
 function roundVitals(vitals) {

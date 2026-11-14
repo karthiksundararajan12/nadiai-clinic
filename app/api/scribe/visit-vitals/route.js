@@ -21,6 +21,7 @@ function errorResponse(error) {
   if (error instanceof VisitVitalsRequestError) {
     return NextResponse.json({ error: error.message }, { status: error.statusCode });
   }
+  console.error(error?.message, error?.code, error?.details, error?.hint, error?.cause);
   log.error("Visit vitals API failed", {
     error: error instanceof Error ? error.message : String(error),
   });

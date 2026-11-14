@@ -444,6 +444,7 @@ export function SayVitalsBar({
   }
 
   function updateField(key, value) {
+    setError("");
     const required = ["bp_systolic", "bp_diastolic", "pulse", "spo2", "temp", "weight"];
     if (
       recordingLive
@@ -486,7 +487,7 @@ export function SayVitalsBar({
       }),
     });
     const payload = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(t("saveFailed"));
+    if (!res.ok) throw new Error(`visit-vitals ${res.status}: ${payload?.error ?? payload?.message ?? "unknown"}`);
     return payload;
   }
   persistRef.current = persist;
@@ -547,7 +548,8 @@ export function SayVitalsBar({
       setPending(null);
       setOpen(false);
       setToast({ message: t("saveSuccess"), variant: "default" });
-    } catch {
+    } catch (err) {
+      console.error(err);
       setToast({ message: t("saveFailed"), variant: "error" });
     } finally {
       setSaving(false);

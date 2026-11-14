@@ -118,7 +118,7 @@ function SessionGroup({
   return (
     <div>
       <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">{title}</h3>
-      {sessions.length === 0 ? (
+      {(Array.isArray(sessions) ? sessions : []).length === 0 ? (
         <p className="text-[13px] text-slate-500">{empty}</p>
       ) : (
         <ul className="space-y-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranscriptReview } from "../../transcript-review/hooks/use-transcript-review.js";
 import { useSOAPReview } from "../../soap-review/hooks/use-soap-review.js";
 import { SOAP_AVAILABLE_STATUSES } from "../lib/soap-availability.js";
@@ -53,7 +53,7 @@ const PRESCRIPTION_READY_STATUSES = new Set([
   "COMPLETED",
 ]);
 
-export function ConsultationWorkspace({
+function ConsultationWorkspaceBody({
   sessionId,
   onApproved,
   onEndSession,
@@ -880,28 +880,6 @@ export function ConsultationWorkspace({
     hasGenerationError: Boolean(soapGenerationError),
   });
 
-  const workspaceToolbar = !waitingForTranscript && !soapApproved ? (
-    <ConsultationToolbar
-      sessionStatus={resolvedSessionStatus}
-      transcriptDirty={transcript.hasChanges}
-      soapDirty={soap.hasChanges}
-      saving={transcript.saving || soap.saving}
-      completingReview={completingReview}
-      autosaveStatus={transcript.autosaveStatus ?? soap.autosaveStatus ?? "idle"}
-      canCompleteReview={canCompleteReview}
-      canGenerateSOAP={showGenerateSOAP}
-      generatingSOAP={noteGenerating}
-      canApproveSOAP={approveReady}
-      soapApproved={soapApproved}
-      actionError={toolbarActionError}
-      saveBlocked={!patient?.id}
-      onSave={handleSaveDraft}
-      onCompleteReview={handleCompleteReview}
-      onGenerateSOAP={handleGenerateSOAP}
-      onRejectSOAP={handleOpenSoapReview}
-    />
-  ) : null;
-
   const saveStatus = transcript.saving || soap.saving
     ? "saving"
     : transcript.autosaveStatus === "error" || soap.autosaveStatus === "error"
@@ -980,6 +958,28 @@ export function ConsultationWorkspace({
     edited: Boolean(soap.hasChanges || manualEditMode),
   });
   const approveReady = canApproveSOAP && !blockingApproval && !manualEditMode && noteActions.canApprove;
+
+  const workspaceToolbar = !waitingForTranscript && !soapApproved ? (
+    <ConsultationToolbar
+      sessionStatus={resolvedSessionStatus}
+      transcriptDirty={transcript.hasChanges}
+      soapDirty={soap.hasChanges}
+      saving={transcript.saving || soap.saving}
+      completingReview={completingReview}
+      autosaveStatus={transcript.autosaveStatus ?? soap.autosaveStatus ?? "idle"}
+      canCompleteReview={canCompleteReview}
+      canGenerateSOAP={showGenerateSOAP}
+      generatingSOAP={noteGenerating}
+      canApproveSOAP={approveReady}
+      soapApproved={soapApproved}
+      actionError={toolbarActionError}
+      saveBlocked={!patient?.id}
+      onSave={handleSaveDraft}
+      onCompleteReview={handleCompleteReview}
+      onGenerateSOAP={handleGenerateSOAP}
+      onRejectSOAP={handleOpenSoapReview}
+    />
+  ) : null;
 
   const soapDisplayCandidate = resolveSoapDisplayDate({
     note: soap.note,
@@ -1150,5 +1150,50 @@ export function ConsultationWorkspace({
       />
       </div>
     </div>
+  );
+}
+
+class SessionLoadBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidUpdate(prevProps) {
+    if (prevProps.sessionId !== this.props.sessionId && this.state.error) {
+      this.setState({ error: null });
+    }
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+    return (
+      <div
+        className="flex h-full min-h-[12rem] flex-col items-center justify-center gap-3 p-6 text-center"
+        role="alert"
+        data-testid="session-load-error"
+      >
+        <p className="text-sm font-medium text-slate-800">Couldn&apos;t load this session</p>
+        <button
+          type="button"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-sm font-semibold text-slate-900"
+          onClick={() => this.setState({ error: null })}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+}
+
+export function ConsultationWorkspace(props) {
+  return (
+    <SessionLoadBoundary sessionId={props.sessionId}>
+      <ConsultationWorkspaceBody {...props} />
+    </SessionLoadBoundary>
   );
 }
